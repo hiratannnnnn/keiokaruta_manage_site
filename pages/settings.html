@@ -1,0 +1,44 @@
+<!-- ========== 設定 ========== -->
+<div id="page-settings" class="page">
+  <div class="list-page">
+    <div class="page-title">設定</div>
+    <div class="panel" style="max-width:640px;margin-bottom:16px;">
+      <div class="panel-header">役職者苗字</div>
+      <div class="panel-body">
+        <p style="font-size:0.85rem;color:#666;margin-bottom:12px;">
+          各役職の担当者の苗字を登録します。案内メール作成の差出人名に自動反映されます。
+        </p>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;align-items:center;max-width:320px;">
+          <label style="font-size:0.9rem;">会長</label>
+          <input type="text" id="rn-会長" class="fc-text-input" placeholder="苗字">
+          <label style="font-size:0.9rem;">副会長</label>
+          <input type="text" id="rn-副会長" class="fc-text-input" placeholder="苗字">
+          <label style="font-size:0.9rem;">申込係</label>
+          <input type="text" id="rn-申込係" class="fc-text-input" placeholder="苗字">
+          <label style="font-size:0.9rem;">振込係</label>
+          <input type="text" id="rn-振込係" class="fc-text-input" placeholder="苗字">
+          <label style="font-size:0.9rem;">案内係</label>
+          <input type="text" id="rn-案内係" class="fc-text-input" placeholder="苗字">
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:12px;">
+          <button class="login-submit-btn" style="width:auto;padding:8px 24px;" onclick="saveRoleNamesSettings()">保存</button>
+          <span id="rn-status" style="font-size:0.85rem;"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="max-width:640px;">
+      <div class="panel-header">権限設定</div>
+      <div class="panel-body">
+        <p style="font-size:0.85rem;color:#666;margin-bottom:12px;">
+          各操作を許可する役職にチェックを入れ、「保存」を押してください。
+        </p>
+        <div id="perm-table-wrap" class="table-wrap" style="flex:none;"></div>
+        <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
+          <button id="perm-save-btn" class="login-submit-btn" style="width:auto;padding:8px 24px;" onclick="savePermSettings()" disabled>保存</button>
+          <span id="perm-save-status" style="font-size:0.85rem;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

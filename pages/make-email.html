@@ -1,0 +1,240 @@
+<!-- ========== 案内作成 ========== -->
+<div id="page-make-email" class="page">
+  <div class="list-page">
+    <div class="page-title">案内作成</div>
+
+    <!-- ===== 種類選択画面 ===== -->
+    <div id="me-type-select">
+      <div class="me-type-label">作成する案内の種類を選んでください</div>
+      <div class="me-type-grid">
+        <button class="me-type-btn" onclick="meSelectType(0)">案内メール</button>
+        <button class="me-type-btn" onclick="meSelectType(1)">振込案内</button>
+        <button class="me-type-btn" onclick="meSelectType(2)">Free</button>
+        <button class="me-type-btn" onclick="meSelectType(3)">読手講習会など</button>
+      </div>
+    </div>
+
+    <!-- ===== フォームエリア（種類選択後に表示） ===== -->
+    <div id="me-form-area" style="display:none;">
+      <div class="me-form-header">
+        <span id="me-selected-type-label" class="me-selected-type-label"></span>
+        <button class="me-back-btn" onclick="meBackToTypeSelect()">← 種類を変更</button>
+      </div>
+      <div class="fc-layout">
+
+        <!-- 左: 設定 -->
+        <div class="panel">
+          <div class="panel-header">案内情報入力</div>
+          <div class="panel-body" style="gap:14px;">
+
+            <!-- ===== タブ0・1 共通（大会案内系） ===== -->
+            <div id="me-tournament-section">
+
+            <!-- 大会選択（単独起動時のみ表示） -->
+            <div id="me-selector-row" class="fc-field-row">
+              <label class="fc-label">大会を選択</label>
+              <select id="me-tournament-select" class="me-select" onchange="meSelectTournament()">
+                <option value="">-- 大会を選択 --</option>
+              </select>
+            </div>
+
+            <!-- 大会名 -->
+            <div class="fc-field-row">
+              <label class="fc-label">大会名 <span class="fc-required-mark">*</span></label>
+              <input type="text" id="me-title" class="fc-text-input" oninput="meRenderPreview()">
+            </div>
+
+            <!-- 級 -->
+            <div class="fc-field-row">
+              <label class="fc-label">級 <span class="fc-required-mark">*</span></label>
+              <div class="fc-grade-group">
+                <button type="button" class="me-grade-btn" data-grade="A" onclick="meToggleGrade(this)">A</button>
+                <button type="button" class="me-grade-btn" data-grade="B" onclick="meToggleGrade(this)">B</button>
+                <button type="button" class="me-grade-btn" data-grade="C" onclick="meToggleGrade(this)">C</button>
+                <button type="button" class="me-grade-btn" data-grade="D" onclick="meToggleGrade(this)">D</button>
+                <button type="button" class="me-grade-btn" data-grade="E" onclick="meToggleGrade(this)">E</button>
+              </div>
+            </div>
+
+            <!-- 日時（タブ0のみ） -->
+            <div class="me-tab0-only">
+              <div class="fc-section-label">日時</div>
+              <div class="fc-field-row" style="margin-bottom:8px;">
+                <label class="fc-label">一括入力</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="date" id="me-date-bulk" class="fc-date-input" onchange="meBulkDateChange(this.value)">
+                  <select id="me-time-bulk" class="fc-date-input me-time-select" onchange="meBulkTimeChange(this.value)"></select>
+                </div>
+              </div>
+              <table style="width:100%;border-collapse:collapse;">
+                <tbody id="me-date-tbody">
+                  <tr id="me-date-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="date" id="me-date-A" class="fc-date-input" onchange="meRenderPreview()"></td><td><select id="me-time-A" class="me-time-select" onchange="meRenderPreview()"></select></td></tr>
+                  <tr id="me-date-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="date" id="me-date-B" class="fc-date-input" onchange="meRenderPreview()"></td><td><select id="me-time-B" class="me-time-select" onchange="meRenderPreview()"></select></td></tr>
+                  <tr id="me-date-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="date" id="me-date-C" class="fc-date-input" onchange="meRenderPreview()"></td><td><select id="me-time-C" class="me-time-select" onchange="meRenderPreview()"></select></td></tr>
+                  <tr id="me-date-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="date" id="me-date-D" class="fc-date-input" onchange="meRenderPreview()"></td><td><select id="me-time-D" class="me-time-select" onchange="meRenderPreview()"></select></td></tr>
+                  <tr id="me-date-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="date" id="me-date-E" class="fc-date-input" onchange="meRenderPreview()"></td><td><select id="me-time-E" class="me-time-select" onchange="meRenderPreview()"></select></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 場所（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">場所</label>
+              <textarea id="me-venue" class="fc-text-input me-venue-textarea" rows="3" oninput="meRenderPreview()"></textarea>
+            </div>
+
+            <!-- 定員（タブ0のみ） -->
+            <div class="me-tab0-only">
+              <div class="fc-section-label">定員（省略可）</div>
+              <table style="width:100%;border-collapse:collapse;"><tbody>
+                <tr id="me-cap-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="number" id="me-cap-A" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-cap-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="number" id="me-cap-B" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-cap-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="number" id="me-cap-C" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-cap-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="number" id="me-cap-D" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-cap-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="number" id="me-cap-E" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+              </tbody></table>
+            </div>
+
+            <!-- 抽選確定予定日（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">抽選確定予定日</label>
+              <input type="text" id="me-lottery" class="fc-text-input" placeholder="未定" oninput="meRenderPreview()">
+            </div>
+
+            <!-- 参加資格（タブ0のみ・折りたたみ） -->
+            <details class="me-tab0-only">
+              <summary class="fc-section-label" style="cursor:pointer;user-select:none;">参加資格（省略可）</summary>
+              <table style="width:100%;border-collapse:collapse;margin-top:6px;"><tbody>
+                <tr id="me-elig-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="text" id="me-elig-A" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-elig-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="text" id="me-elig-B" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-elig-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="text" id="me-elig-C" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-elig-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="text" id="me-elig-D" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-elig-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="text" id="me-elig-E" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+              </tbody></table>
+            </details>
+
+            <!-- 参加費（折りたたみ） -->
+            <details>
+              <summary class="fc-section-label" style="cursor:pointer;user-select:none;">参加費</summary>
+              <table style="width:100%;border-collapse:collapse;margin-top:6px;"><tbody>
+                <tr id="me-fee-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="number" id="me-fee-A" class="me-num-input" value="2500" oninput="meRenderPreview()"></td><td class="me-unit">円</td></tr>
+                <tr id="me-fee-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="number" id="me-fee-B" class="me-num-input" value="2500" oninput="meRenderPreview()"></td><td class="me-unit">円</td></tr>
+                <tr id="me-fee-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="number" id="me-fee-C" class="me-num-input" value="2000" oninput="meRenderPreview()"></td><td class="me-unit">円</td></tr>
+                <tr id="me-fee-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="number" id="me-fee-D" class="me-num-input" value="2000" oninput="meRenderPreview()"></td><td class="me-unit">円</td></tr>
+                <tr id="me-fee-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="number" id="me-fee-E" class="me-num-input" value="1500" oninput="meRenderPreview()"></td><td class="me-unit">円</td></tr>
+              </tbody></table>
+            </details>
+
+            <!-- 日程（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">申込開始日</label>
+              <input type="date" id="me-apply-start" class="fc-date-input" onchange="meRenderPreview()">
+            </div>
+            <!-- 参加表明締切（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">参加表明締切（会内）</label>
+              <input type="date" id="me-apply-kaInai" class="fc-date-input" onchange="meRenderPreview()">
+              <span id="me-apply-real-ref" class="me-ref-date"></span>
+            </div>
+
+            <!-- 振込締切（タブ1のみ） -->
+            <div class="fc-field-row me-tab1-only">
+              <label class="fc-label">振込会内期限</label>
+              <input type="date" id="me-pay-kaInai" class="fc-date-input" onchange="meRenderPreview()">
+            </div>
+            <div class="fc-field-row me-tab1-only">
+              <label class="fc-label">振込本期限</label>
+              <input type="date" id="me-pay-real" class="fc-date-input" onchange="meRenderPreview()">
+            </div>
+
+            <!-- 口座情報（タブ1のみ・折りたたみ） -->
+            <details class="me-tab1-only me-bank-details">
+              <summary>口座情報</summary>
+              <div class="me-bank-fields">
+                <div class="fc-field-row">
+                  <label class="fc-label">振込先</label>
+                  <input type="text" id="me-bank-number" class="fc-text-input" value="10370-81464621（ゆうちょ）" oninput="meRenderPreview()">
+                </div>
+                <div class="fc-field-row">
+                  <label class="fc-label">支店名</label>
+                  <input type="text" id="me-bank-branch" class="fc-text-input" value="〇三八　(ゼロサンハチ)" oninput="meRenderPreview()">
+                </div>
+                <div class="fc-field-row">
+                  <label class="fc-label">口座番号</label>
+                  <input type="text" id="me-bank-account" class="fc-text-input" value="8146462" oninput="meRenderPreview()">
+                </div>
+                <div class="fc-field-row">
+                  <label class="fc-label">名義</label>
+                  <input type="text" id="me-bank-name" class="fc-text-input" value="ケイオウカルタカイ" oninput="meRenderPreview()">
+                </div>
+              </div>
+            </details>
+
+            <!-- 公認大会出場回数（タブ0のみ） -->
+            <label class="fc-check-row me-tab0-only">
+              <input type="checkbox" id="me-include-kounin" checked onchange="meRenderPreview()">
+              公認大会出場回数を案内文に含める
+            </label>
+
+            <!-- フォームURL（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">フォームURL</label>
+              <input type="text" id="me-form-url" class="fc-text-input" oninput="meRenderPreview()">
+            </div>
+
+            <!-- オープンチャット（タブ0のみ） -->
+            <div class="fc-field-row me-tab0-only">
+              <label class="fc-label">オープンチャット</label>
+              <input type="text" id="me-openchat" class="fc-text-input" placeholder="URL（省略可）" oninput="meRenderPreview()">
+            </div>
+
+            </div><!-- /me-tournament-section -->
+
+            <!-- ===== 読手講習会など ===== -->
+            <div id="me-workshop-section" style="display:none;">
+              <div class="fc-field-row">
+                <label class="fc-label">件名（大会名等）<span class="fc-required-mark">*</span></label>
+                <input type="text" id="me-subject" class="fc-text-input" placeholder="例: 【地域制限有】ワシントンかるた大会E級" oninput="meRenderPreview()">
+              </div>
+              <div class="fc-field-row" style="margin-top:8px;">
+                <label class="fc-label">日時</label>
+                <input type="date" id="me-workshop-date" class="fc-date-input" onchange="meRenderPreview()">
+              </div>
+              <div class="fc-field-row" style="margin-top:8px;">
+                <label class="fc-label">申込締切</label>
+                <input type="date" id="me-workshop-deadline" class="fc-date-input" onchange="meRenderPreview()">
+              </div>
+            </div><!-- /me-workshop-section -->
+
+            <!-- 差出人名（全タイプ共通） -->
+            <div class="fc-field-row">
+              <label class="fc-label">差出人名（末尾）</label>
+              <input type="text" id="me-sender" class="fc-text-input" oninput="meRenderPreview()">
+            </div>
+
+            <!-- 下書き作成 -->
+            <div style="margin-top:4px;">
+              <button class="me-draft-btn" onclick="meCreateDraft()">下書き作成</button>
+              <span id="me-draft-status" class="me-draft-status"></span>
+              <div id="me-reminder-prompt" style="display:none;margin-top:10px;padding:10px 12px;background:#f0f7ff;border:1px solid #bcd;border-radius:6px;">
+                <div style="font-size:0.85rem;color:#2c3e50;margin-bottom:6px;">✅ 下書きを作成しました。続けてリマインダーを設定してください。</div>
+                <button class="me-draft-btn" style="font-size:0.82rem;padding:5px 14px;" onclick="meGoToReminder()">リマインダーを設定する →</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 右: 出力 -->
+        <div class="me-output-col">
+          <div class="me-output-header">
+            <button class="me-copy-btn" onclick="meCopyText()">コピー</button>
+          </div>
+          <textarea id="me-output" class="me-output" readonly></textarea>
+        </div>
+
+      </div>
+    </div><!-- /me-form-area -->
+
+  </div>
+</div>

@@ -1,0 +1,493 @@
+<script>
+// ------------------------------------------------------------
+// 案内作成ページ
+// ------------------------------------------------------------
+const ME_GRADES     = ['A', 'B', 'C', 'D', 'E'];
+const ME_CANCEL_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSetaBuRgvqP4xRd5D2UYUERRJRvtjuaTl_y_L0wvFvCqF7kAA/viewform';
+const ME_WEEKDAYS   = ['日', '月', '火', '水', '木', '金', '土'];
+
+let _meActiveTab = 0;
+const ME_TYPE_LABELS = ['案内メール', '振込案内', 'Free', '読手講習会など'];
+
+function meFormatDateJP(str) {
+  if (!str) return '';
+  // YYYY-MM-DD を UTC 解釈させずに直接パース
+  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const [, y, m, d] = iso.map(Number);
+    const weekday = new Date(y, m - 1, d).getDay();
+    return `${y}年${m}月${d}日（${ME_WEEKDAYS[weekday]}）`;
+  }
+  const d = new Date(str);
+  if (isNaN(d)) return str;
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${ME_WEEKDAYS[d.getDay()]}）`;
+}
+
+function meFormatTime(str) {
+  if (!str) return '';
+  const [h, m] = str.split(':');
+  const hNum = parseInt(h, 10);
+  const mNum = parseInt(m, 10);
+  return mNum === 0 ? `${hNum}時` : `${hNum}時${String(mNum).padStart(2, '0')}分`;
+}
+
+function meGetActiveGrades() {
+  return ME_GRADES.filter(g =>
+    document.querySelector(`.me-grade-btn[data-grade="${g}"]`)?.classList.contains('active')
+  );
+}
+
+function meBulkDateChange(value) {
+  meGetActiveGrades().forEach(g => {
+    const el = document.getElementById('me-date-' + g);
+    if (el) el.value = value;
+  });
+  meRenderPreview();
+}
+
+function meInitTimeSelects() {
+  const opts = ['<option value="">--</option>'];
+  for (let h = 8; h <= 11; h++) {
+    for (let m = 0; m < 60; m += 5) {
+      const val   = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const label = m === 0 ? `${h}時` : `${h}時${String(m).padStart(2, '0')}分`;
+      opts.push(`<option value="${val}">${label}</option>`);
+    }
+  }
+  const html = opts.join('');
+  ['me-time-bulk', ...ME_GRADES.map(g => 'me-time-' + g)].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+
+function meBulkTimeChange(value) {
+  meGetActiveGrades().forEach(g => {
+    const el = document.getElementById('me-time-' + g);
+    if (el) el.value = value;
+  });
+  meRenderPreview();
+}
+
+function meToggleGrade(btn) {
+  btn.classList.toggle('active');
+  meUpdateGradeRowVisibility();
+  meRenderPreview();
+}
+
+function meUpdateGradeRowVisibility() {
+  const active = meGetActiveGrades();
+  ME_GRADES.forEach(g => {
+    const vis = active.includes(g);
+    ['date', 'cap', 'elig', 'fee'].forEach(t => {
+      const row = document.getElementById(`me-${t}-row-${g}`);
+      if (row) row.style.display = vis ? '' : 'none';
+    });
+  });
+}
+
+function mePopulateTournamentSelect() {
+  const sel = document.getElementById('me-tournament-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">-- 大会を選択 --</option>' +
+    allTournaments.map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('');
+}
+
+function meSelectTournament() {
+  const name = document.getElementById('me-tournament-select').value;
+  if (!name) return;
+  const t = allTournaments.find(x => x.name === name);
+  if (!t) return;
+
+  // 大会名と級を分離（末尾の "XXXX級" を抽出）
+  const m = name.match(/([A-E]+)級$/);
+  document.getElementById('me-title').value = m ? name.slice(0, -m[0].length) : name;
+  const gradeStr = m ? m[1] : '';
+  ME_GRADES.forEach(g => {
+    document.querySelector(`.me-grade-btn[data-grade="${g}"]`)
+      ?.classList.toggle('active', gradeStr.includes(g));
+  });
+
+  const toDate = s => s ? s.replace(/\//g, '-') : '';
+  if (t.applyStart)    document.getElementById('me-apply-start').value = toDate(t.applyStart);
+  if (t.payDeadline)   document.getElementById('me-pay-real').value   = toDate(t.payDeadline);
+  const applyRealRef = document.getElementById('me-apply-real-ref');
+  if (applyRealRef) applyRealRef.textContent = t.applyDeadline ? '本期限：' + meFormatDateJP(toDate(t.applyDeadline)) : '';
+  if (t.applyDeadline) {
+    const d = new Date(toDate(t.applyDeadline));
+    d.setDate(d.getDate() - 6);
+    document.getElementById('me-apply-kaInai').value = d.toISOString().slice(0, 10);
+  }
+  if (t.lottery && t.lottery !== '未定') {
+    document.getElementById('me-lottery').value = meFormatDateJP(toDate(t.lottery));
+  }
+
+  meApplyFeeDefaults(document.getElementById('me-title').value);
+  meUpdateGradeRowVisibility();
+  meRenderPreview();
+
+  // フォームURL自動取得
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.formUrl) {
+        document.getElementById('me-form-url').value = r.formUrl;
+        meRenderPreview();
+      }
+    })
+    .getFormUrl(name);
+}
+
+// data: フォーム作成から渡されるオブジェクト。null なら単独起動（ドロップダウン表示）
+function initMakeEmail(data) {
+  // 全入力をリセット
+  ME_GRADES.forEach(g => {
+    document.querySelector(`.me-grade-btn[data-grade="${g}"]`)?.classList.remove('active');
+  });
+  ['me-title', 'me-venue', 'me-lottery', 'me-form-url', 'me-openchat'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  // 案内係の苗字を差出人に自動入力
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      const el = document.getElementById('me-sender');
+      if (el) el.value = r['案内係'] || '';
+    })
+    .getRoleNames();
+  ['me-apply-start', 'me-apply-kaInai', 'me-pay-kaInai', 'me-pay-real', 'me-date-bulk'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('me-time-bulk').value = '';
+  ME_GRADES.forEach(g => {
+    const el = document.getElementById('me-time-' + g);
+    if (el) el.value = '';
+  });
+  document.getElementById('me-include-kounin').checked = true;
+  meApplyFeeDefaults('');
+
+  const selectorRow = document.getElementById('me-selector-row');
+
+  if (!data) {
+    // 種類選択画面を表示し、フォームエリアは隠す
+    document.getElementById('me-type-select').style.display = '';
+    document.getElementById('me-form-area').style.display   = 'none';
+    selectorRow.style.display = '';
+    mePopulateTournamentSelect();
+    return;
+  }
+
+  // フォーム作成から遷移：案内メール（タイプ0）で直接開く
+  makeEmailLoaded = true;
+  selectorRow.style.display = 'none';
+
+  document.getElementById('me-title').value = data.title || '';
+
+  const gradeStr = (data.grades || '').replace('級', '');
+  ME_GRADES.forEach(g => {
+    document.querySelector(`.me-grade-btn[data-grade="${g}"]`)
+      ?.classList.toggle('active', gradeStr.includes(g));
+  });
+
+  if (data.applyStart)    document.getElementById('me-apply-start').value    = data.applyStart.slice(0, 10);
+  if (data.payDeadline) document.getElementById('me-pay-real').value = data.payDeadline.slice(0, 10);
+  const applyRealRef = document.getElementById('me-apply-real-ref');
+  if (applyRealRef) applyRealRef.textContent = data.applyDeadline ? '本期限：' + meFormatDateJP(data.applyDeadline.slice(0, 10)) : '';
+  if (data.applyDeadline) {
+    const d = new Date(data.applyDeadline.slice(0, 10));
+    d.setDate(d.getDate() - 6);
+    document.getElementById('me-apply-kaInai').value = d.toISOString().slice(0, 10);
+  }
+  if (data.lottery)       document.getElementById('me-lottery').value        = meFormatDateJP(data.lottery.slice(0, 10));
+  if (data.formUrl)       document.getElementById('me-form-url').value       = data.formUrl;
+
+  if (data.questionsData) {
+    document.getElementById('me-include-kounin').checked =
+      !!(data.questionsData[6] && data.questionsData[6][1] === 1);
+  }
+
+  meApplyFeeDefaults(data.title);
+
+  meUpdateGradeRowVisibility();
+  meSelectType(0);
+}
+
+function meSelectType(idx) {
+  document.getElementById('me-type-select').style.display  = 'none';
+  document.getElementById('me-form-area').style.display    = '';
+  document.getElementById('me-draft-status').textContent   = '';
+  document.getElementById('me-selected-type-label').textContent = ME_TYPE_LABELS[idx];
+  meSwitchTab(idx);
+}
+
+function meBackToTypeSelect() {
+  document.getElementById('me-form-area').style.display   = 'none';
+  document.getElementById('me-type-select').style.display = '';
+}
+
+function meApplyFeeDefaults(title) {
+  const isFengYu = (title || '').includes('鳳玉');
+  const fees = {
+    A: isFengYu ? 3500 : 2500,
+    B: isFengYu ? 3500 : 2500,
+    C: isFengYu ? 3000 : 2000,
+    D: isFengYu ? 3000 : 2000,
+    E: isFengYu ? 2500 : 1500,
+  };
+  ME_GRADES.forEach(g => {
+    const el = document.getElementById('me-fee-' + g);
+    if (el) el.value = fees[g];
+  });
+}
+
+function meSwitchTab(idx) {
+  _meActiveTab = idx;
+  document.getElementById('me-tournament-section').style.display = idx <= 1 ? '' : 'none';
+  document.getElementById('me-workshop-section').style.display   = idx === 3 ? '' : 'none';
+  document.querySelectorAll('.me-tab0-only').forEach(el => {
+    el.style.display = idx === 0 ? '' : 'none';
+  });
+  document.querySelectorAll('.me-tab1-only').forEach(el => {
+    el.style.display = idx === 1 ? '' : 'none';
+  });
+  meRenderPreview();
+}
+
+function meCreateDraft() {
+  const body     = document.getElementById('me-output').value;
+  const title    = document.getElementById('me-title')?.value?.trim() || '';
+  const active   = meGetActiveGrades();
+  const grades   = active.join('') + (active.length ? '級' : '');
+  const subject4 = document.getElementById('me-subject')?.value?.trim() || '';
+
+  const fnNames = ['createDraft1', 'createDraft2', 'createDraft3', 'createDraft4'];
+  const payloads = [
+    JSON.stringify({ title, grades, body }),
+    JSON.stringify({ title, grades, body }),
+    JSON.stringify({ body }),
+    JSON.stringify({ subject: subject4, body }),
+  ];
+
+  const statusEl = document.getElementById('me-draft-status');
+  statusEl.textContent = '作成中...';
+  statusEl.className = 'me-draft-status';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.error) {
+        statusEl.textContent = 'エラー: ' + r.error;
+        statusEl.className = 'me-draft-status error';
+      } else {
+        statusEl.textContent = '';
+        if (_meActiveTab === 0) {
+          showCompletionModal(
+            '✅ 下書きを作成しました',
+            '<p>案内メールの下書きをGmailに保存しました。</p>' +
+            '<p class="completion-next-label">次のステップ</p>' +
+            '<ul class="completion-next-list">' +
+            '<li>リマインダーを設定すると、申込締切前に自動でリマインドメールを送ることができます</li>' +
+            '</ul>',
+            [
+              { label: '閉じる', action: null },
+              { label: 'リマインダーを設定する →', action: meGoToReminder, primary: true },
+            ]
+          );
+        } else if (_meActiveTab === 1) {
+          const threadTitle = title + grades + '　出場者確定のお知らせ';
+          showCompletionModal(
+            '✅ 下書きを作成しました',
+            '<p>振込案内メールの下書きをGmailに保存しました。</p>' +
+            '<p class="completion-next-label">次のステップ</p>' +
+            '<ul class="completion-next-list">' +
+            '<li>メール管理シートに「振込確認」として登録すると、自動リマインダーを設定できます</li>' +
+            '</ul>',
+            [
+              { label: '閉じる', action: null },
+              { label: '振込確認をメール管理に登録する →', action: () => meGoToPaymentConfirm(title, grades, threadTitle), primary: true },
+            ]
+          );
+        } else {
+          showCompletionModal(
+            '✅ 下書きを作成しました',
+            '<p>下書きをGmailに保存しました。</p>',
+            [{ label: '閉じる', action: null }]
+          );
+        }
+      }
+    })
+    .withFailureHandler(e => {
+      statusEl.textContent = 'エラー: ' + e.message;
+      statusEl.className = 'me-draft-status error';
+    })
+    [fnNames[_meActiveTab]](payloads[_meActiveTab]);
+}
+
+function meGoToReminder() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-page="mail-management"]').classList.add('active');
+  document.getElementById('page-mail-management').classList.add('active');
+  initMailManagement();
+}
+
+function meGoToPaymentConfirm(title, grades, threadTitle) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-page="mail-management"]').classList.add('active');
+  document.getElementById('page-mail-management').classList.add('active');
+  initMailManagement();
+  mmShowAddModalPrefilled(title, grades, '振込確認', threadTitle);
+}
+
+function meCopyText() {
+  const ta = document.getElementById('me-output');
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(ta.value);
+  } else {
+    ta.select();
+    document.execCommand('copy');
+  }
+}
+
+function meRenderPreview() {
+  const builders = [
+    meBuildAnnouncementText,
+    meBuildConfirmedText,
+    meBuildFreeText,
+    meBuildWorkshopText,
+  ];
+  const ta = document.getElementById('me-output');
+  ta.value = builders[_meActiveTab]();
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function meBuildFreeText() {
+  const sender = document.getElementById('me-sender')?.value?.trim() || '';
+  return (
+    'こんにちは。\n\n' +
+    '大会係の' + sender + 'です。\n\n' +
+    '以下転送です。よろしくお願いします。'
+  );
+}
+
+function meBuildWorkshopText() {
+  const subject  = document.getElementById('me-subject')?.value?.trim() || '';
+  const dateVal  = document.getElementById('me-workshop-date')?.value || '';
+  const deadVal  = document.getElementById('me-workshop-deadline')?.value || '';
+  const sender   = document.getElementById('me-sender')?.value?.trim() || '';
+
+  const dateStr = dateVal ? meFormatDateJP(dateVal) : '';
+  const deadStr = deadVal ? meFormatDateJP(deadVal) : '';
+
+  return (
+    '件名：' + subject + '　案内\n\n' +
+    '---\n' +
+    '案内係です。\n\n' +
+    subject + ' の案内です。詳細は添付のファイルをご参照ください。\n\n' +
+    (dateStr ? '日時は' + dateStr + 'です。\n\n' : '') +
+    'keiokaruta@gmail.com まで、' +
+    (deadStr ? deadStr + 'までに' : '') +
+    'ご連絡ください。\n\n' +
+    sender
+  );
+}
+
+function meBuildAnnouncementText() {
+  const title      = document.getElementById('me-title')?.value?.trim() || '';
+  const active     = meGetActiveGrades();
+  const gradesStr  = active.join('') + (active.length ? '級' : '');
+  const venue      = document.getElementById('me-venue')?.value?.trim() || '';
+  const lottery    = document.getElementById('me-lottery')?.value?.trim() || '未定';
+  const applyStart = document.getElementById('me-apply-start')?.value || '';
+  const applyDead  = document.getElementById('me-apply-kaInai')?.value || '';
+  const formUrl    = document.getElementById('me-form-url')?.value?.trim() || '';
+  const sender     = document.getElementById('me-sender')?.value?.trim() || '';
+  const incKounin  = document.getElementById('me-include-kounin')?.checked ?? true;
+
+  const datesLines = active.map(g => {
+    const v = document.getElementById('me-date-' + g)?.value || '';
+    const t = document.getElementById('me-time-' + g)?.value || '';
+    const timeStr = t ? meFormatTime(t) + ' 受付締切' : '';
+    return `${g}級：${v ? meFormatDateJP(v) : '（未定）'}${timeStr ? '\u3000' + timeStr : ''}`;
+  }).join('\n');
+
+  const capLines = active
+    .map(g => { const v = document.getElementById('me-cap-' + g)?.value?.trim(); return v ? `${g}級：${v}名` : ''; })
+    .filter(Boolean).join('\n');
+
+  const eligLines = active
+    .map(g => { const v = document.getElementById('me-elig-' + g)?.value?.trim(); return v ? `${g}級：${v}` : ''; })
+    .filter(Boolean).join('\n');
+
+  const feeLines = active
+    .map(g => { const v = document.getElementById('me-fee-' + g)?.value?.trim(); return v ? `${g}級：${v}円` : ''; })
+    .filter(Boolean).join('\n');
+
+  let text =
+    'こんにちは。\n\n大会案内係です。\n\n' +
+    `以下は、${title}${gradesStr}の案内です。\n\n\n` +
+    `・${title}${gradesStr}\n\n` +
+    `日時：\n${datesLines}\n\n` +
+    `場所：\n${venue}\n\n` +
+    `定員：\n${capLines || ''}` +
+    (capLines ? '\n申し込み状況に応じて抽選が行われます。' : '') +
+    `\n\n抽選確定予定日：${lottery}\n\n` +
+    `参加資格：\n${eligLines}\n\n` +
+    `参加費：\n${feeLines}\n\n` +
+    `参加表明締切日：${meFormatDateJP(applyDead)}\n`;
+
+  if (incKounin && applyStart) {
+    text +=
+      `\n公認大会の出場回数は、申込開始日である${meFormatDateJP(applyStart)}までの年度内の回数を記載してください。\n` +
+      '※ただし、申込開始日時点で抽選に通っている大会も含めます。';
+  }
+
+  text +=
+    '\n参加を希望される方は、締切日までに、以下のリンクからフォームにご回答ください。\n' +
+    `${formUrl}\n\nキャンセル用フォーム：\n${ME_CANCEL_URL}\n\n` +
+    `以上です。よろしくお願いいたします。\n\n${sender}`;
+
+  return text;
+}
+
+function meBuildConfirmedText() {
+  const title       = document.getElementById('me-title')?.value?.trim() || '';
+  const active      = meGetActiveGrades();
+  const gradesStr   = active.join('') + (active.length ? '級' : '');
+  const payDead     = document.getElementById('me-pay-kaInai')?.value ||
+                      document.getElementById('me-pay-real')?.value || '';
+  const sender      = document.getElementById('me-sender')?.value?.trim() || '';
+  const bankNumber  = document.getElementById('me-bank-number')?.value?.trim()  || '10370-81464621（ゆうちょ）';
+  const bankBranch  = document.getElementById('me-bank-branch')?.value?.trim()  || '〇三八\u3000(ゼロサンハチ)';
+  const bankAccount = document.getElementById('me-bank-account')?.value?.trim() || '8146462';
+  const bankName    = document.getElementById('me-bank-name')?.value?.trim()    || 'ケイオウカルタカイ';
+
+  const feeLines = active
+    .map(g => { const v = document.getElementById('me-fee-' + g)?.value?.trim(); return v ? `${g}級：${v}円` : ''; })
+    .filter(Boolean).join('\n');
+
+  return (
+    'こんばんは。\n\n大会案内係です。\n\n' +
+    `${title}${gradesStr}の出場者が確定いたしましたので、ご報告いたします。\n詳細は添付ファイルをご確認ください。\n\n` +
+    '参加が確定した方は、以下の口座まで\n\n' +
+    `参加費：\n${feeLines}\n\n` +
+    'の振り込みをお願いいたします。\n' +
+    'その際は、振込名義人に大会名を含めていただけると大変助かります。\n' +
+    '例: 「ケイオウ\u3000タロウ\u3000〇〇〇〇Ａ」（表示文字数の関係から、ご氏名を前にお願いします。）\n' +
+    'お早めの振り込みにご協力をお願いいたします。\n\n' +
+    `振込先\u3000\u3000：${bankNumber}\n` +
+    `支店名\u3000\u3000：${bankBranch}\n` +
+    `口座番号：${bankAccount}\n` +
+    `名義\u3000\u3000\u3000：${bankName}\n` +
+    `振込期限：${meFormatDateJP(payDead)}\n\n` +
+    'なお、出場をキャンセルする場合は以下のリンクからフォームを提出してください。\n' +
+    `${ME_CANCEL_URL}\n\n` +
+    `以上となります。よろしくお願いいたします。\n\n${sender}`
+  );
+}
+meInitTimeSelects();
+</script>

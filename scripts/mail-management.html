@@ -1,0 +1,323 @@
+<script>
+// ============================================================
+// メール管理ページ
+// ============================================================
+
+let _mmCurrentRowNum = null;
+let _mmShowAll = false;
+let _mmAllData = [];
+
+// ---- 初期化 ----
+function initMailManagement() {
+  loadMailManagement();
+}
+
+// ---- データ読み込み ----
+function loadMailManagement() {
+  setStatus('mail-management', 'loading', '');
+  google.script.run
+    .withSuccessHandler(mmOnLoaded)
+    .withFailureHandler(e => setStatus('mail-management', 'error', e.message))
+    .getMailManagement();
+}
+
+function mmOnLoaded(json) {
+  const data = JSON.parse(json);
+  if (data.error) { setStatus('mail-management', 'error', data.error); return; }
+
+  _mmAllData = data;
+  mmRenderTable();
+}
+
+function mmToggleShowAll() {
+  _mmShowAll = !_mmShowAll;
+  const btn = document.getElementById('mm-show-all-btn');
+  btn.textContent = _mmShowAll ? '未送信のみ表示' : '全ての行を表示';
+  btn.classList.toggle('mm-toggle-btn-active', _mmShowAll);
+  mmRenderTable();
+}
+
+function mmRenderTable() {
+  const rows = _mmShowAll ? _mmAllData : _mmAllData.filter(row => !row.sent || !row.sent.includes('済'));
+
+  if (rows.length === 0) {
+    setStatus('mail-management', 'info', '送信予定のメールはありません');
+    return;
+  }
+
+  const statusEl = document.getElementById('mail-management-status');
+  const tableEl  = document.getElementById('mail-management-table');
+  statusEl.style.display = 'none';
+  tableEl.style.display  = '';
+
+  const tbody = document.getElementById('mm-tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+
+    const isSent       = row.sent && row.sent.includes('済');
+    const isReminderSet = row.reminderSet && row.reminderSet.includes('済');
+
+    tr.innerHTML = `
+      <td>${escHtml(row.tournamentName)}</td>
+      <td>${escHtml(row.grades)}</td>
+      <td class="mm-datetime">${escHtml(row.sendDateTime) || '未設定'}</td>
+      <td><span class="mm-badge mm-badge-${row.mailType === 'リマインダー' ? 'reminder' : 'payment'}">${escHtml(row.mailType)}</span></td>
+      <td class="mm-truncate">${escHtml(row.threadTitle)}</td>
+      <td class="mm-truncate">${row.formLink ? `<a href="${escHtml(row.formLink)}" target="_blank">リンク</a>` : ''}</td>
+      <td class="mm-center">${isReminderSet ? '<span class="mm-check">済</span>' : '<span class="mm-pending">—</span>'}</td>
+      <td class="mm-center">${isSent ? '<span class="mm-check">済</span>' : '<span class="mm-pending">—</span>'}</td>
+      <td class="mm-center">
+        <button class="mm-set-btn" onclick="mmOpenPreviewModal(${row.rowNum}, '${row.sendDateTime}', '${row.mailType}')">${isReminderSet || isSent ? '再設定' : '設定'}</button>
+        <button class="mm-del-btn" onclick="mmDeleteRow(${row.rowNum})">削除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---- プレビューモーダル ----
+function mmOpenPreviewModal(rowNum, currentDatetime, mailType) {
+  _mmCurrentRowNum = rowNum;
+  const isPayment = mailType === '振込確認';
+
+  document.getElementById('mm-preview-body').value = '';
+  document.getElementById('mm-preview-meta').textContent = '';
+  document.getElementById('mm-include-not-paid').checked = false;
+  let iso = (currentDatetime || '').replace(' ', 'T').slice(0, 16);
+  if (!iso || new Date(iso) <= new Date()) {
+    const defaultHour   = isPayment ? 7  : 8;
+    const defaultMinute = isPayment ? 50 : 0;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(defaultHour, defaultMinute, 0, 0);
+    const pad = n => String(n).padStart(2, '0');
+    iso = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T${pad(defaultHour)}:${pad(defaultMinute)}`;
+  }
+  document.getElementById('mm-preview-datetime').value = iso;
+
+  // 振込確認はプレビュー不要
+  document.getElementById('mm-preview-section').style.display = isPayment ? 'none' : '';
+document.getElementById('mm-preview-modal').style.display = 'flex';
+
+  if (!isPayment) mmRefreshPreview();
+}
+
+function mmRefreshPreview() {
+  const includeNotPaid = document.getElementById('mm-include-not-paid').checked;
+  const datetimeVal    = document.getElementById('mm-preview-datetime').value;
+  const sendDateTime   = datetimeVal ? datetimeVal.replace('T', ' ') + ':00' : null;
+  document.getElementById('mm-preview-body').value = '読み込み中...';
+  google.script.run
+    .withSuccessHandler(mmOnPreviewLoaded)
+    .withFailureHandler(e => {
+      document.getElementById('mm-preview-body').value = 'エラー: ' + e.message;
+    })
+    .getReminderPreview(JSON.stringify({ rowNum: _mmCurrentRowNum, includeNotPaid, sendDateTime }));
+}
+
+function mmOnPreviewLoaded(json) {
+  const data = JSON.parse(json);
+  if (data.error) {
+    document.getElementById('mm-preview-body').value = 'エラー: ' + data.error;
+    return;
+  }
+  const meta = `送信予定: ${data.sendDateFormatted}　種別: ${data.mailType}　対象: ${data.tournamentName}${data.grades}`;
+  document.getElementById('mm-preview-meta').textContent = meta;
+  document.getElementById('mm-preview-body').value = data.body;
+}
+
+function mmClosePreviewModal(e) {
+  if (e && e.target !== document.getElementById('mm-preview-modal')) return;
+  document.getElementById('mm-preview-modal').style.display = 'none';
+  _mmCurrentRowNum = null;
+}
+
+function mmConfirmSetTrigger() {
+  if (!_mmCurrentRowNum) return;
+  const includeNotPaid = document.getElementById('mm-include-not-paid').checked;
+  const datetimeVal = document.getElementById('mm-preview-datetime').value;
+  if (!datetimeVal) { alert('送信予定日時を入力してください'); return; }
+  const sendDateTime = datetimeVal.replace('T', ' ') + ':00';
+
+  const btn = document.querySelector('#mm-preview-modal .mm-btn-primary');
+  btn.disabled = true;
+  btn.textContent = '設定中...';
+
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      btn.disabled = false;
+      btn.textContent = 'リマインダーを設定する';
+      if (data.error) { alert('エラー: ' + data.error); return; }
+      document.getElementById('mm-preview-modal').style.display = 'none';
+      _mmCurrentRowNum = null;
+      loadMailManagement();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      btn.textContent = 'リマインダーを設定する';
+      alert('エラー: ' + e.message);
+    })
+    .setReminderTrigger(JSON.stringify({ rowNum: _mmCurrentRowNum, includeNotPaid, sendDateTime }));
+}
+
+// ---- 削除確認モーダル ----
+let _mmConfirmAction = null;
+
+function mmShowConfirm(message, onConfirm, okLabel) {
+  _mmConfirmAction = onConfirm;
+  document.getElementById('mm-confirm-message').textContent = message;
+  document.getElementById('mm-confirm-ok-btn').textContent = okLabel || '削除';
+  document.getElementById('mm-confirm-modal').style.display = 'flex';
+}
+
+function mmCloseConfirmModal(e) {
+  if (e && e.target !== document.getElementById('mm-confirm-modal')) return;
+  document.getElementById('mm-confirm-modal').style.display = 'none';
+  _mmConfirmAction = null;
+}
+
+function mmExecuteConfirm() {
+  document.getElementById('mm-confirm-modal').style.display = 'none';
+  if (_mmConfirmAction) { _mmConfirmAction(); _mmConfirmAction = null; }
+}
+
+// ---- 行削除 ----
+function mmDeleteRow(rowNum) {
+  mmShowConfirm('この行を削除しますか？', () => {
+    google.script.run
+      .withSuccessHandler(json => {
+        const data = JSON.parse(json);
+        if (data.error) { mmShowConfirm('エラー: ' + data.error, null, 'OK'); return; }
+        loadMailManagement();
+      })
+      .withFailureHandler(e => mmShowConfirm('エラー: ' + e.message, null, 'OK'))
+      .deleteMailManagementRow(rowNum);
+  });
+}
+
+// ---- 行追加モーダル ----
+function mmShowAddModal() {
+  mmShowAddModalPrefilled('', '', 'リマインダー', '');
+}
+
+function mmPopulateAddTournamentSelect(selectedFullName) {
+  const sel = document.getElementById('mm-add-tournament-select');
+  sel.innerHTML = '<option value="">-- 大会を選択 --</option>' +
+    (allTournaments || []).map(t =>
+      `<option value="${escHtml(t.name)}"${t.name === selectedFullName ? ' selected' : ''}>${escHtml(t.name)}</option>`
+    ).join('');
+}
+
+function mmOnAddTournamentChange() {
+  const fullName = document.getElementById('mm-add-tournament-select').value;
+  const m = fullName.match(/([A-E]+級)$/);
+  const grades = m ? m[1] : '';
+  const title  = grades ? fullName.slice(0, -grades.length) : fullName;
+  document.getElementById('mm-add-tournament').value = title;
+  document.getElementById('mm-add-grades').value     = grades;
+  mmUpdateAddModalExtras(title, grades);
+}
+
+function mmOnAddTypeChange() {
+  const fullName = document.getElementById('mm-add-tournament-select').value;
+  const m = fullName.match(/([A-E]+級)$/);
+  const grades = m ? m[1] : '';
+  const title  = grades ? fullName.slice(0, -grades.length) : fullName;
+
+  // 種別に応じて時刻を更新（日付はそのまま）
+  const type = document.getElementById('mm-add-type').value;
+  const defaultHour   = type === '振込確認' ? 7  : 8;
+  const defaultMinute = type === '振込確認' ? 50 : 0;
+  const pad = n => String(n).padStart(2, '0');
+  const current = document.getElementById('mm-add-datetime').value;
+  const datePart = current ? current.slice(0, 11) : (() => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T`;
+  })();
+  document.getElementById('mm-add-datetime').value = datePart + `${pad(defaultHour)}:${pad(defaultMinute)}`;
+
+  mmUpdateAddModalExtras(title, grades);
+}
+
+function mmUpdateAddModalExtras(title, grades) {
+  const type = document.getElementById('mm-add-type').value;
+  const isPayment = type === '振込確認';
+
+  // 振込確認は件名・フォームリンク欄を非表示・空欄
+  document.getElementById('mm-add-thread-row').style.display   = isPayment ? 'none' : '';
+  document.getElementById('mm-add-formlink-row').style.display = isPayment ? 'none' : '';
+  document.getElementById('mm-add-thread').value   = '';
+  document.getElementById('mm-add-formlink').value = '';
+
+  if (!isPayment && title) {
+    // リマインダー：件名を自動入力
+    document.getElementById('mm-add-thread').value = title + grades + '\u3000案内';
+    // フォームURLを取得
+    google.script.run
+      .withSuccessHandler(res => {
+        const r = JSON.parse(res);
+        if (r.formUrl) document.getElementById('mm-add-formlink').value = r.formUrl;
+      })
+      .getFormUrl(title + grades);
+  }
+}
+
+function mmShowAddModalPrefilled(tournamentName, grades, mailType, threadTitle) {
+  const type = mailType || 'リマインダー';
+  const defaultHour   = type === '振込確認' ? 7  : 8;
+  const defaultMinute = type === '振込確認' ? 50 : 0;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const pad = n => String(n).padStart(2, '0');
+  const defaultDatetime = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T${pad(defaultHour)}:${pad(defaultMinute)}`;
+
+  const fullName = (tournamentName || '') + (grades || '');
+  mmPopulateAddTournamentSelect(fullName);
+  document.getElementById('mm-add-tournament').value = tournamentName || '';
+  document.getElementById('mm-add-grades').value     = grades || '';
+  document.getElementById('mm-add-datetime').value   = defaultDatetime;
+  document.getElementById('mm-add-type').value      = type;
+  document.getElementById('mm-add-modal').style.display = 'flex';
+  // 種別に応じて件名・フォームリンクを初期化
+  mmUpdateAddModalExtras(tournamentName || '', grades || '');
+}
+
+function mmCloseAddModal(e) {
+  if (e && e.target !== document.getElementById('mm-add-modal')) return;
+  document.getElementById('mm-add-modal').style.display = 'none';
+}
+
+function mmSubmitAdd() {
+  const tournamentName = document.getElementById('mm-add-tournament').value.trim();
+  const grades         = document.getElementById('mm-add-grades').value.trim();
+  const sendDateTime   = document.getElementById('mm-add-datetime').value;
+  const mailType       = document.getElementById('mm-add-type').value;
+  const threadTitle    = document.getElementById('mm-add-thread').value.trim();
+  const formLink       = document.getElementById('mm-add-formlink').value.trim();
+
+  if (!tournamentName || !sendDateTime) {
+    alert('大会を選択し、送信予定日時を入力してください');
+    return;
+  }
+
+  const btn = document.querySelector('#mm-add-modal .mm-btn-primary');
+  btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(json => {
+      btn.disabled = false;
+      const data = JSON.parse(json);
+      if (data.error) { alert('エラー: ' + data.error); return; }
+      document.getElementById('mm-add-modal').style.display = 'none';
+      loadMailManagement();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      alert('エラー: ' + e.message);
+    })
+    .addMailManagementRow(JSON.stringify({ tournamentName, grades, sendDateTime, mailType, threadTitle, formLink }));
+}
+</script>

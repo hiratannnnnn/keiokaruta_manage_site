@@ -1,0 +1,107 @@
+<!-- ========== フォーム作成 ========== -->
+<div id="page-form-create" class="page">
+  <div class="list-page">
+    <div class="page-title">フォーム作成</div>
+    <div class="fc-layout">
+
+      <!-- 左: 設定 -->
+      <div class="panel">
+        <div class="panel-header">参加表明フォーム作成</div>
+        <div class="panel-body" style="gap:16px;">
+
+          <!-- 大会名 -->
+          <div class="fc-field-row">
+            <label class="fc-label">大会名 <span class="fc-required-mark">*</span></label>
+            <input type="text" id="fc-title" class="fc-text-input"
+                   placeholder="例: 第27回全国競技かるた◯◯大会（「◯◯級」は不要）">
+            <p class="fc-hint">💡 一意性を保つため「第〇回」を入れることをお勧めします。名前は短くても構いません。</p>
+          </div>
+
+          <!-- 級 -->
+          <div class="fc-field-row">
+            <label class="fc-label">級 <span class="fc-required-mark">*</span></label>
+            <div class="fc-grade-group">
+              <button type="button" class="fc-grade-btn" data-grade="A" onclick="fcToggleGrade(this)">A</button>
+              <button type="button" class="fc-grade-btn" data-grade="B" onclick="fcToggleGrade(this)">B</button>
+              <button type="button" class="fc-grade-btn" data-grade="C" onclick="fcToggleGrade(this)">C</button>
+              <button type="button" class="fc-grade-btn" data-grade="D" onclick="fcToggleGrade(this)">D</button>
+              <button type="button" class="fc-grade-btn" data-grade="E" onclick="fcToggleGrade(this)">E</button>
+            </div>
+            <p class="fc-hint">💡 申込期限ごとにフォームを分けて作成してください。</p>
+          </div>
+
+          <!-- 質問項目 -->
+          <div>
+            <div class="fc-section-label">質問項目</div>
+            <p class="fc-warn-note">⚠️ 後から項目を付け足すとバグを引き起こす可能性があります。なるべく今すべて追加し切ってください。</p>
+            <div class="table-wrap" style="flex:none;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>質問名</th>
+                    <th style="width:64px;text-align:center;">含める</th>
+                    <th style="width:64px;text-align:center;">必須</th>
+                    <th style="width:36px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="fc-questions-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 日程 -->
+          <div>
+            <div class="fc-section-label">日程</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div class="fc-field-row">
+                <label class="fc-label">申込開始日 <span class="fc-required-mark">*</span></label>
+                <input type="date" id="fc-apply-start" class="fc-date-input">
+              </div>
+              <div class="fc-field-row">
+                <label class="fc-label">本申込期限 <span class="fc-required-mark">*</span></label>
+                <input type="date" id="fc-apply-deadline" class="fc-date-input">
+              </div>
+              <div class="fc-field-row">
+                <label class="fc-label">抽選日 <span class="fc-optional-mark">（未定可）</span></label>
+                <input type="date" id="fc-lottery" class="fc-date-input">
+              </div>
+              <div class="fc-field-row">
+                <label class="fc-label">本振込期限 <span class="fc-optional-mark">（未定可）</span></label>
+                <input type="date" id="fc-pay-deadline" class="fc-date-input">
+              </div>
+            </div>
+          </div>
+
+          <!-- 後援大会 -->
+          <label class="fc-check-row">
+            <input type="checkbox" id="fc-is-koen">
+            後援大会（公認大会ではない場合）
+          </label>
+
+          <button class="fc-submit-btn" onclick="submitFormCreate()">フォームを作成する</button>
+          <div id="fc-status" class="fc-status"></div>
+
+        </div>
+      </div>
+
+      <!-- 右: フォームプレビュー -->
+      <div>
+        <div class="fc-section-label" style="margin-bottom:10px;">プレビュー（リアルタイム）</div>
+        <div id="fc-preview-container"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 作成中プログレスモーダル -->
+  <div id="fc-progress-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center;">
+    <div class="fc-progress-box">
+      <div class="fc-prog-title">フォームを作成しています...</div>
+      <div class="fc-prog-message" id="fc-prog-message">準備中</div>
+      <div class="fc-prog-bar-wrap">
+        <div class="fc-prog-bar" id="fc-prog-bar"></div>
+      </div>
+      <div class="fc-prog-pct" id="fc-prog-pct">0%</div>
+    </div>
+  </div>
+</div>

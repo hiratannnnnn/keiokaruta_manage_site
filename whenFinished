@@ -1,0 +1,84 @@
+    } else if (range.getColumn() === 13 && range.getValue() === "完了") {
+      var lock = LockService.getScriptLock();
+      if(lock.tryLock(10000)) {
+        var title = sheet.getRange(range.getRow(), 1).getValue();
+        moveToDone(state=true,name=title);
+        var emailSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("メール管理");
+        var emailData = emailSheet.getDataRange().getValues();
+        Logger.log(title + " メール管理調整");
+
+        // 削除すべき行のインデックスを格納する配列
+        var deleteIndex = [];
+        for (var i = 0; i < emailData.length; i++) {
+          // [0] + [1]の値がtitleに等しい場合、その行のインデックスを保存
+          if (emailData[i][0] + emailData[i][1] === title && emailData[i][7] === "済") {
+            deleteIndex.push(i + 1); // スプレッドシートの行は1から始まるので、1を加算
+          }
+        }
+
+        // 後ろから削除していく
+        for (var i = deleteIndex.length - 1; i >= 0; i--) {
+          emailSheet.deleteRow(deleteIndex[i]);
+        }
+        lock.releaseLock();
+      }
+      
+    }
+
+    function moveToDone(state=false,name=""){
+  Logger.log("moveToDone" + " " + "state:" + state + "," + "name:" + name);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(name==="") {
+    var sheet = ss.getActiveSheet();
+    var sheetName = sheet.getName();
+  } else {
+    var sheetName = name;
+    var sheet = ss.getSheetByName(name);
+  }
+  
+  var ui = SpreadsheetApp.getUi();
+  if(state===false) {
+
+    if(sheetName == "フォーム作成" || sheetName == "メール管理") {
+      ui.alert(
+        '注意',
+        '「メール管理」または「フォーム作成」のシートを開いた状態ではこの関数を実行することはできません。\n削除したいシートを開いた状態で実行してください。',
+        ui.ButtonSet.OK
+      )
+      return;
+    }
+    if (ui.alert(
+      '確認',
+      'この大会のフォームを完了済みのフォルダに移し、このシートは非表示にします。よろしい場合は「OK」を押してください。\n「いいえ」を押すと何もせずに戻ります。',
+      ui.ButtonSet.YES_NO
+    ) == ui.Button.NO) return;
+  }
+  var count = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+  Logger.log(count);
+  // シートのH1セルからフォームのIDを取得
+  var formId = sheet.getRange(1,count + 4).getValue();
+  var formFile = DriveApp.getFileById(formId);
+  Logger.log(formFile.getName());
+  /*
+  try{
+    var folder = DriveApp.getFolderById("1SXIBU6JgNwd2e5kxjoDmYX8mE5hQg_US");
+  } catch(e) {
+    Logger.log(e.message);
+    var folder = DriveApp.getFolderById("1kscn_pf7sqC7c4TuAABJtJvlovofl9ma");
+  }
+  */
+  var folder = DriveApp.getFolderById(ids[1]);
+  Logger.log(folder.getName());
+  formFile.moveTo(folder); // できないっぽい。
+  sheet.hideSheet();
+
+  var calendarSheet = ss.getSheetByName("カレンダー");
+  var calendarColumn = calendarSheet.getRange(1,1,calendarSheet.getLastRow(),1).getValues();
+  for(var i=2;i<calendarColumn.length;i++) {
+    if(calendarColumn[i][0] === sheetName){
+      calendarSheet.getRange(i+1,13).setValue("完了");
+    }
+  }
+}

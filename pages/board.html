@@ -1,0 +1,28 @@
+<!-- ========== 掲示板 ========== -->
+<div id="page-board" class="page">
+  <div class="list-page" style="max-width:720px;">
+
+    <div class="page-title">掲示板</div>
+
+    <!-- 投稿フォーム -->
+    <div class="board-compose">
+      <textarea id="board-input" class="board-textarea" placeholder="みんなに共有したいことを書いてください..."
+                oninput="boardOnInput()" maxlength="500"></textarea>
+      <div class="board-compose-footer">
+        <div class="board-insert-wrap">
+          <button type="button" class="board-insert-btn" onclick="boardToggleTournamentPicker()">📋 大会を挿入</button>
+          <div id="board-tournament-picker" class="board-tournament-picker" style="display:none;"></div>
+        </div>
+        <span id="board-char-count" class="board-char-count">0 / 500</span>
+        <button id="board-submit-btn" class="board-submit-btn" onclick="boardSubmit()" disabled>投稿する</button>
+      </div>
+    </div>
+
+    <!-- 状態表示 -->
+    <div id="board-status" class="status"><span class="spinner"></span> 読み込み中...</div>
+
+    <!-- 投稿一覧 -->
+    <div id="board-feed"></div>
+
+  </div>
+</div>

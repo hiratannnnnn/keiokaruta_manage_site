@@ -1,0 +1,145 @@
+<script>
+// ------------------------------------------------------------
+// 設定ページ：権限マトリクス
+// ------------------------------------------------------------
+const PERM_LABELS = {
+  applyDoneInput:          '申込済み入力（大会一覧）',
+  payDoneInput:            '振込済み入力（大会一覧）',
+  completeTournament:      '完了操作（大会一覧）',
+  payDetailButtons:        '振込状況ボタン（大会詳細）',
+  operationPanel:          '操作パネル（大会詳細）',
+  announcementDoubleCheck: '案内のダブルチェック',
+  deleteTournament:        'シートとフォームを削除（大会詳細）',
+};
+
+const ALL_ROLES_LIST = ['申込係', '振込係', '案内係', '会長副会長'];
+
+let _initialPermState = '';
+
+// チェックボックスの現在状態を JSON 文字列で取得
+function getPermTableState() {
+  const state = {};
+  Object.keys(PERM_LABELS).forEach(key => {
+    state[key] = [];
+    ALL_ROLES_LIST.forEach(role => {
+      const cb = document.querySelector(`input[data-key="${key}"][data-role="${role}"]`);
+      if (cb && cb.checked) state[key].push(role);
+    });
+  });
+  return JSON.stringify(state);
+}
+
+function updateSaveBtn() {
+  document.getElementById('perm-save-btn').disabled =
+    getPermTableState() === _initialPermState;
+}
+
+function renderPermTable() {
+  const keys = Object.keys(PERM_LABELS);
+  let html = '<table class="perm-table"><thead><tr><th>権限</th>';
+  ALL_ROLES_LIST.forEach(r => { html += `<th>${escHtml(r)}</th>`; });
+  html += '</tr></thead><tbody>';
+  keys.forEach(key => {
+    html += `<tr><td class="perm-label">${escHtml(PERM_LABELS[key])}</td>`;
+    ALL_ROLES_LIST.forEach(role => {
+      const checked = (currentPermissions[key] || []).includes(role) ? 'checked' : '';
+      html += `<td class="perm-check"><input type="checkbox" data-key="${key}" data-role="${role}" ${checked}></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('perm-table-wrap').innerHTML = html;
+
+  // 初期状態を記録してボタンを無効化
+  _initialPermState = getPermTableState();
+  document.getElementById('perm-save-btn').disabled = true;
+  document.getElementById('perm-save-status').textContent = '';
+
+  // 変更検知
+  document.querySelectorAll('#perm-table-wrap input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updateSaveBtn);
+  });
+}
+
+// ------------------------------------------------------------
+// 役職者苗字
+// ------------------------------------------------------------
+const ROLE_NAMES_KEYS = ['会長', '副会長', '申込係', '振込係', '案内係'];
+
+function loadRoleNamesSettings() {
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      ROLE_NAMES_KEYS.forEach(key => {
+        const el = document.getElementById('rn-' + key);
+        if (el) el.value = r[key] || '';
+      });
+    })
+    .getRoleNames();
+}
+
+function saveRoleNamesSettings() {
+  const names = {};
+  ROLE_NAMES_KEYS.forEach(key => {
+    names[key] = document.getElementById('rn-' + key)?.value?.trim() || '';
+  });
+  const statusEl = document.getElementById('rn-status');
+  statusEl.textContent = '保存中...';
+  statusEl.style.color = '#666';
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.error) {
+        statusEl.textContent = 'エラー: ' + r.error;
+        statusEl.style.color = '#e74c3c';
+      } else {
+        statusEl.textContent = '保存しました';
+        statusEl.style.color = '#27ae60';
+      }
+    })
+    .withFailureHandler(e => {
+      statusEl.textContent = 'エラー: ' + e.message;
+      statusEl.style.color = '#e74c3c';
+    })
+    .saveRoleNames(JSON.stringify(names));
+}
+
+function savePermSettings() {
+  const perms = {};
+  Object.keys(PERM_LABELS).forEach(key => {
+    perms[key] = [];
+    ALL_ROLES_LIST.forEach(role => {
+      const cb = document.querySelector(`input[data-key="${key}"][data-role="${role}"]`);
+      if (cb && cb.checked) perms[key].push(role);
+    });
+  });
+
+  const btn      = document.getElementById('perm-save-btn');
+  const statusEl = document.getElementById('perm-save-status');
+  btn.disabled       = true;
+  statusEl.textContent = '保存中...';
+  statusEl.style.color = '#666';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.error) {
+        statusEl.textContent = 'エラー: ' + r.error;
+        statusEl.style.color = '#e74c3c';
+        btn.disabled = false; // エラー時は再度保存できるよう戻す
+      } else {
+        currentPermissions = perms;
+        _initialPermState  = getPermTableState(); // 保存後を新たな初期状態に
+        statusEl.textContent = '保存しました';
+        statusEl.style.color = '#27ae60';
+        // ボタンは disabled のまま（未編集状態）
+      }
+    })
+    .withFailureHandler(e => {
+      statusEl.textContent = 'エラー: ' + e.message;
+      statusEl.style.color = '#e74c3c';
+      btn.disabled = false;
+    })
+    .savePermissions(JSON.stringify(perms));
+}
+</script>

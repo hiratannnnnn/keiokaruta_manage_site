@@ -1,0 +1,61 @@
+<script>
+// ------------------------------------------------------------
+// 名簿
+// ------------------------------------------------------------
+let allMembers = [];
+
+function loadMembers() {
+  setStatus('members', 'loading');
+  google.script.run
+    .withSuccessHandler(onMembersLoaded)
+    .withFailureHandler(err => setStatus('members', 'error', err.message))
+    .getMembers();
+}
+
+function onMembersLoaded(json) {
+  const data = JSON.parse(json);
+  if (data.error) { setStatus('members', 'error', data.error); return; }
+  const nameKey = Object.keys(data[0])[0];
+  allMembers = data.sort((a, b) =>
+    String(a[nameKey]).localeCompare(String(b[nameKey]), 'ja')
+  );
+  renderMembers(allMembers);
+}
+
+function renderMembers(members) {
+  if (!members.length) { setStatus('members', 'empty', 'データがありません'); return; }
+
+  const headers = Object.keys(members[0]);
+  document.getElementById('members-thead').innerHTML =
+    '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+  document.getElementById('members-tbody').innerHTML =
+    members.map(m =>
+      '<tr>' + headers.map((h, i) => {
+        const val = m[h] ?? '';
+        if (i === 0) {
+          const esc = String(val).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          return `<td class="name-link" onclick="selectMember('${esc}')">${val}</td>`;
+        }
+        return `<td>${val}</td>`;
+      }).join('') + '</tr>'
+    ).join('');
+
+  document.getElementById('members-status').style.display = 'none';
+  document.getElementById('members-table').style.display = 'table';
+  const badge = document.getElementById('member-count');
+  badge.textContent = members.length + ' 件';
+  badge.style.display = 'inline-block';
+}
+
+function filterMembers() {
+  const q = document.getElementById('member-search').value.trim().toLowerCase();
+  renderMembers(q ? allMembers.filter(m =>
+    Object.values(m).some(v => String(v).toLowerCase().includes(q))
+  ) : allMembers);
+}
+
+function selectMember(name) {
+  document.getElementById('result-name').value = name;
+  searchResults();
+}
+</script>

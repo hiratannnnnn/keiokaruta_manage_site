@@ -1,0 +1,135 @@
+function connectDb(date,tournamentName,name,raffleDate) {
+  Logger.log("connectDb " + date + tournamentName + name);
+  var url = 'http://keiokarutakai.atwebpages.com/register_match.php';
+  var payload = {
+    'register-date': date,
+    'register-location': tournamentName,
+    'register-name': name,
+    'raffle-date': raffleDate
+  };
+
+  var options = {
+    'method': 'post',
+    'payload': payload
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(url,options);
+    var text = response.getContentText();
+    Logger.log(text);
+  } catch (error) {
+    Logger.log(error.toString());
+  }
+}
+
+function registerDatabase(state=false,kounin,name="") {
+  Logger.log("registerDatabase" + " " + state);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui = SpreadsheetApp.getUi();
+  var tournamentSheet;
+  if (name === "") {
+    tournamentSheet = ss.getActiveSheet();
+  } else {
+    tournamentSheet = ss.getSheetByName(name);
+  }
+  
+  var tournamentName = tournamentSheet.getName();
+  Logger.log(tournamentName);
+
+  // count 取得
+  var count = tournamentSheet.getRange(1,1,1,tournamentSheet.getLastColumn()).getValues()[0].filter(function(cell) {
+    return typeof(cell) === "number";
+  })[0];
+  Logger.log(count);
+
+  // 選手のところだけのdata 取得
+  var dat = tournamentSheet.getRange(1,1,tournamentSheet.getLastRow(),count+3).getValues();
+  var data = [];
+  for (var i=0; i<dat.length;i++) {
+    if(typeof(dat[i][2]) === "number")break;
+    if(dat[i][2] !== "" && typeof(dat[i][2]) === "string" && (dat[i][2].includes(" ") || dat[i][2].includes("　"))) {
+      data.push(dat[i]);
+    }
+  }
+
+  var data2 = tournamentSheet.getDataRange().getValues();
+  var list = [];
+  data.forEach(function(row) {
+    if(row[count+2] === "" || row[count+2] === "済" || (row[count+2].includes("繰") && row[count+2].includes("越")) || row[count+2] === "くりこし"){
+      list.push(["〇",row[2],row[count+2]]);
+    } else {
+      list.push(["×",row[2],row[count+2]]);
+    }
+  });
+  Logger.log(data);
+  var raffleDate;
+  tournamentSheet.getRange(1,count+4,tournamentSheet.getLastRow(),2).getValues().forEach(function(row) {
+    if(row[0] === "抽選日" && row[1] !== "未定") {
+      raffleDate = row[1];
+      if(typeof(raffleDate) === "string")raffleDate = new Date(row[1].replace("など",""));
+    }
+  });
+  if (!raffleDate) {
+    raffleDate = new Date();
+  }
+  Logger.log("raffleDate" + raffleDate);
+  var regex = /^[A-E]$/;
+  var dates = {"A":"","B":"","C":"","D":"","E":""};
+  data2.forEach(function(row) {
+    if(regex.test(row[0])){
+      dates[row[0]] = row[count+2];
+    }
+  });
+  Logger.log(dates);
+  var regex2 = /[A-E]{1,5}/g;
+  Logger.log(tournamentName.match(regex2));
+  var str = tournamentName.match(regex2)[0].split("");
+  var str2 = "";
+
+  for (var i=0;i<str.length;i++) {
+    str2 += str[i] + "級：" + Utilities.formatDate(dates[str[i]],"JST","y年M月d日") + ",\n";
+  }
+  let kouninStr = kounin ? "公認" : "非公認";
+  if(state===false && ui.alert(
+    '確認',
+    `${str2}
+    ${tournamentName}（${kouninStr}）
+    の抽選に通った人をデータベースに登録します。登録する人は以下
+    ${list.join("\n")}`,
+    ui.ButtonSet.YES_NO
+  ) === ui.Button.NO)return;
+
+  if(kounin === false
+  /* || (state === false && ui.alert(
+    '確認',
+    `${tournamentName}は公認大会ですか？
+（出場回数のカウントに関わります。）
+かるた協会主催大会（全日本選手権や選抜大会など）は回数に計上されないため、非公認扱いとします。`,
+    ui.ButtonSet.YES_NO
+  )) === ui.Button.NO
+  */
+  ){
+    tournamentName = tournamentName.replace(/([A-Z]+級)$/,'') + "（非公認）";
+    kounin = false;
+  } else {
+    tournamentName = tournamentName.replace(/([A-Z]+級)$/,'');
+  }
+  
+  for (var i=0;i<data.length;i++) {
+    if(data[i][count+2] === "" || data[i][count+2] === "済" || (data[i][count+2].includes("繰") && data[i][count+2].includes("越")) || data[i][count+2] === "くりこし") {
+      connectDb(Utilities.formatDate(dates[data[i][4]],"JST","yyyy-MM-dd"),tournamentName,data[i][2],Utilities.formatDate(raffleDate,"JST","yyyy-MM-dd"));
+    }
+  }
+  
+  Logger.log(data2);
+  for (var i=0;i<data2.length;i++) {
+    if(data2[i][0] === "registerDatabase"){
+      if(kounin){
+        tournamentSheet.getRange(i+2,1).setValue("公認大会として登録済み");
+      } else {
+        tournamentSheet.getRange(i+2,1).setValue("非公認大会として登録済み");
+      }
+      return;
+    }
+  }
+}

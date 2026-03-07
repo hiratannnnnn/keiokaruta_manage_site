@@ -1,0 +1,48 @@
+// シートを削除する関数
+function deleteSheet(state=false) {
+  // アクティブなスプレッドシートとシートを取得
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getActiveSheet();
+  var sheetName = sheet.getName();
+  var ui = SpreadsheetApp.getUi();
+  
+  if(sheetName == "フォーム作成" || sheetName == "メール管理") {
+    if(state === false){
+      ui.alert(
+        '注意',
+        '「メール管理」または「フォーム作成」のシートを開いた状態ではこの関数を実行することはできません。\n削除したいシートを開いた状態で実行してください。',
+        ui.ButtonSet.OK
+      )
+    }
+    return;
+  }
+
+  if(state === false) {
+    if (ui.alert(
+      '確認',
+      'このシートと、元となるGoogleフォームがゴミ箱に移動されます。（消去はされません。）\nよろしい場合は「OK」を押してください。',
+      ui.ButtonSet.YES_NO
+    ) == ui.Button.NO) return;
+  }
+  var count = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+  Logger.log(count);
+  // シートのH1セルからフォームのIDを取得
+  var formId = sheet.getRange(1,count + 4).getValue();
+  
+  // フォームを取得
+  var form = FormApp.openById(formId);
+  DriveApp.getFileById(formId).setTrashed(true);
+  
+  // "ゴミ箱用スプレッドシート"を取得
+  var trashSs = SpreadsheetApp.openById
+    //("1v8BmrAEt-DfcgwksxyHpVIveP7sjC26K0mGltbdBIZs");
+    (ids[0]);
+  
+  // フォームの回答先を"ゴミ箱用スプレッドシート"に変更
+  form.setDestination(FormApp.DestinationType.SPREADSHEET, trashSs.getId());
+  
+  // アクティブなシートを削除
+  ss.deleteSheet(sheet);
+}

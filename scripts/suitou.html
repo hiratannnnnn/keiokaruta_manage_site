@@ -1,0 +1,294 @@
+<script>
+// ============================================================
+// 出納管理・残高記録ページ
+// ============================================================
+let _suAllData = null;
+
+function initSuitou() {
+  suSetLoading(true);
+  google.script.run
+    .withSuccessHandler(json => {
+      const r = JSON.parse(json);
+      if (r.error) {
+        suSetError(r.error);
+        return;
+      }
+      _suAllData = r;
+      suRenderTables(r);
+    })
+    .withFailureHandler(e => suSetError(e.message))
+    .getSuitouSheets();
+}
+
+function suSetLoading(on) {
+  ['su-tx-status', 'su-balance-status'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.display = on ? 'block' : 'none';
+    if (on) el.textContent = '読み込み中...';
+  });
+  document.getElementById('su-tx-table-wrap').style.display = 'none';
+  document.getElementById('su-balance-table-wrap').style.display = 'none';
+}
+
+function suSetError(msg) {
+  ['su-tx-status', 'su-balance-status'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.display = 'block';
+    el.textContent = 'エラー: ' + msg;
+  });
+}
+
+function suRenderTables(data) {
+  suRenderTx(data.transactions);
+  suRenderBalance(data.balances);
+}
+
+function suRenderTx(transactions) {
+  const statusEl = document.getElementById('su-tx-status');
+  const wrapEl   = document.getElementById('su-tx-table-wrap');
+  const tbody    = document.getElementById('su-tx-tbody');
+  if (!transactions || transactions.length === 0) {
+    statusEl.style.display = 'block';
+    statusEl.textContent   = 'データがありません';
+    wrapEl.style.display   = 'none';
+    return;
+  }
+  statusEl.style.display = 'none';
+  tbody.innerHTML = transactions.map(t => {
+    const isDeposit  = t.reason === 'デポジット';
+    const canConvert = t.amount > 0 && !isDeposit;
+    const isPending  = t.rowNum === 0;
+    const actionBtn  = isPending ? '<span style="font-size:0.78rem;color:#999;">同期中...</span>' : (canConvert
+      ? `<button class="su-deposit-btn" onclick="suConvertToDeposit(${t.rowNum}, this)">デポジット化</button>`
+      : '')
+      + `<button class="su-del-btn" onclick="suDeleteRow(${t.rowNum}, this)">削除</button>`;
+    const reasonHtml   = isDeposit
+      ? `<span class="su-deposit-badge">デポジット</span>`
+      : escHtml(t.reason);
+    const escapedName  = t.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<tr>
+      <td class="su-name-link" onclick="suShowAddModal('${escapedName}')">${escHtml(t.name)}</td>
+      <td class="su-amount ${t.amount < 0 ? 'su-amount-neg' : ''}">${t.amount.toLocaleString()}円</td>
+      <td>${reasonHtml}</td>
+      <td class="su-date">${escHtml(t.date)}</td>
+      <td style="white-space:nowrap;">${actionBtn}</td>
+    </tr>`;
+  }).join('');
+  wrapEl.style.display = '';
+}
+
+function suRenderBalance(balances) {
+  const statusEl = document.getElementById('su-balance-status');
+  const wrapEl   = document.getElementById('su-balance-table-wrap');
+  const tbody    = document.getElementById('su-balance-tbody');
+  if (!balances || balances.length === 0) {
+    statusEl.style.display = 'block';
+    statusEl.textContent   = 'データがありません';
+    wrapEl.style.display   = 'none';
+    return;
+  }
+  statusEl.style.display = 'none';
+  tbody.innerHTML = balances.map(b => `
+    <tr>
+      <td>${escHtml(b.name)}</td>
+      <td class="su-amount ${b.balance < 0 ? 'su-amount-neg' : ''}">${b.balance.toLocaleString()}円</td>
+      <td class="su-tournaments">${escHtml(b.tournaments)}</td>
+    </tr>`).join('');
+  wrapEl.style.display = '';
+}
+
+function suUpdate() {
+  const btn      = document.querySelector('.su-update-btn');
+  const statusEl = document.getElementById('su-update-status');
+  btn.disabled         = true;
+  statusEl.textContent = '更新中...';
+  statusEl.style.color = '#666';
+
+  google.script.run
+    .withSuccessHandler(json => {
+      btn.disabled = false;
+      const r = JSON.parse(json);
+      if (r.error) {
+        statusEl.textContent = 'エラー: ' + r.error;
+        statusEl.style.color = '#e74c3c';
+      } else {
+        statusEl.textContent = `完了 — ${r.personCount} 人 / ${r.transactionCount} 件`;
+        statusEl.style.color = '#27ae60';
+        _suAllData = null;
+        initSuitou();
+      }
+    })
+    .withFailureHandler(e => {
+      btn.disabled         = false;
+      statusEl.textContent = 'エラー: ' + e.message;
+      statusEl.style.color = '#e74c3c';
+    })
+    .updateSuitou();
+}
+
+function suShowConfirm(message, onOk, title) {
+  document.getElementById('su-confirm-title').textContent   = title || '確認';
+  document.getElementById('su-confirm-message').textContent = message;
+  const okBtn = document.getElementById('su-confirm-ok');
+  okBtn.onclick = () => { suCloseConfirm(); onOk(); };
+  document.getElementById('su-confirm-modal').style.display = 'flex';
+}
+
+function suCloseConfirm(e) {
+  if (e && e.target !== document.getElementById('su-confirm-modal')) return;
+  document.getElementById('su-confirm-modal').style.display = 'none';
+}
+
+function suDeleteRow(rowNum, btn) {
+  suShowConfirm('この行を削除しますか？', () => {
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(json => {
+        btn.disabled = false;
+        const r = JSON.parse(json);
+        if (r.error) { suShowConfirm('エラー: ' + r.error, () => {}, 'エラー'); return; }
+        initSuitou();
+      })
+      .withFailureHandler(e => {
+        btn.disabled = false;
+        suShowConfirm('エラー: ' + e.message, () => {}, 'エラー');
+      })
+      .deleteSuitouRow(rowNum);
+  }, '削除の確認');
+}
+
+function suConvertToDeposit(rowNum, btn) {
+  suShowConfirm(
+    'この行の事由を「デポジット」に変更しますか？\nシートから再計算しても消えなくなります。',
+    () => {
+      btn.disabled = true;
+      google.script.run
+        .withSuccessHandler(json => {
+          btn.disabled = false;
+          const r = JSON.parse(json);
+          if (r.error) { suShowConfirm('エラー: ' + r.error, () => {}, 'エラー'); return; }
+          initSuitou();
+        })
+        .withFailureHandler(e => {
+          btn.disabled = false;
+          suShowConfirm('エラー: ' + e.message, () => {}, 'エラー');
+        })
+        .convertToDeposit(rowNum);
+    },
+    'デポジット化の確認'
+  );
+}
+
+function suFilterNameSuggestions() {
+  const q    = document.getElementById('su-add-name').value.trim();
+  const list = document.getElementById('su-name-suggest-list');
+  if (!q || !allMembers.length) { list.style.display = 'none'; return; }
+  const nameKey = Object.keys(allMembers[0])[0];
+  const matched = allMembers
+    .map(m => String(m[nameKey]))
+    .filter(n => n.includes(q));
+  if (!matched.length) { list.style.display = 'none'; return; }
+  list.innerHTML = matched.slice(0, 10).map(n =>
+    `<li onmousedown="suSelectName('${n.replace(/'/g, "\\'")}')">${escHtml(n)}</li>`
+  ).join('');
+  list.style.display = 'block';
+}
+
+function suSelectName(name) {
+  document.getElementById('su-add-name').value = name;
+  suHideNameSuggestions();
+}
+
+function suHideNameSuggestions() {
+  document.getElementById('su-name-suggest-list').style.display = 'none';
+}
+
+function suShowAddModal(presetName) {
+  document.getElementById('su-add-name').value   = presetName || '';
+  suHideNameSuggestions();
+  document.getElementById('su-add-amount').value = '2500';
+  suAddError('');
+
+  // 事由selectをリセットして大会一覧を取得
+  const sel = document.getElementById('su-add-reason');
+  sel.innerHTML = '<option value="">読み込み中...</option>';
+
+  google.script.run
+    .withSuccessHandler(json => {
+      const list = JSON.parse(json);
+      sel.innerHTML = '<option value="デポジット">デポジット</option>';
+      if (Array.isArray(list)) {
+        list.forEach(t => {
+          const reason = t.name + '　参加費';
+          const opt = document.createElement('option');
+          opt.value = reason;
+          opt.textContent = reason;
+          sel.appendChild(opt);
+        });
+      }
+    })
+    .withFailureHandler(() => {
+      sel.innerHTML = '<option value="デポジット">デポジット</option>';
+    })
+    .getTournamentList();
+
+  document.getElementById('su-add-modal').style.display = 'flex';
+}
+
+function suCloseAddModal(e) {
+  if (e && e.target !== document.getElementById('su-add-modal')) return;
+  document.getElementById('su-add-modal').style.display = 'none';
+}
+
+function suAddError(msg) {
+  const el = document.getElementById('su-add-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function suSubmitAdd() {
+  const name      = document.getElementById('su-add-name').value.trim();
+  const reason    = document.getElementById('su-add-reason').value;
+  const direction = document.querySelector('input[name="su-direction"]:checked').value;
+  const amountRaw = document.getElementById('su-add-amount').value;
+
+  if (!name)   { suAddError('氏名を入力してください'); return; }
+  if (!reason) { suAddError('事由を選択してください'); return; }
+  if (amountRaw === '' || isNaN(Number(amountRaw)) || Number(amountRaw) < 0) {
+    suAddError('金額を正の数で入力してください'); return;
+  }
+  suAddError('');
+
+  const amount = direction === 'out' ? -Math.abs(Number(amountRaw)) : Math.abs(Number(amountRaw));
+
+  // 楽観的UI更新：即座にモーダルを閉じて先頭に行を挿入
+  document.getElementById('su-add-modal').style.display = 'none';
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${today.getFullYear()}/${pad(today.getMonth()+1)}/${pad(today.getDate())}`;
+  const newTx = { rowNum: 0, name, amount, reason, date: dateStr };
+  if (_suAllData) {
+    _suAllData.transactions.unshift(newTx);
+    suRenderTables(_suAllData);
+  }
+
+  // バックグラウンドでサーバー送信、完了後に静かに再同期
+  google.script.run
+    .withSuccessHandler(json => {
+      const r = JSON.parse(json);
+      if (r.error) {
+        document.getElementById('su-update-status').textContent = '追加エラー: ' + r.error;
+        document.getElementById('su-update-status').style.color = '#e74c3c';
+      }
+      _suAllData = null;
+      initSuitou();
+    })
+    .withFailureHandler(e => {
+      document.getElementById('su-update-status').textContent = '追加エラー: ' + e.message;
+      document.getElementById('su-update-status').style.color = '#e74c3c';
+      _suAllData = null;
+      initSuitou();
+    })
+    .addSuitouRow(JSON.stringify({ name, amount: Number(amount), reason }));
+}
+</script>

@@ -1,0 +1,120 @@
+function countMatches(state=false) {
+  Logger.log("countMatches" + " " + state);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ui; if(state === false) ui = SpreadsheetApp.getUi();
+  var tournamentSheet = ss.getActiveSheet();
+  var tournamentName = tournamentSheet.getName();
+  var count = tournamentSheet.getRange(1,1,1,tournamentSheet.getLastColumn()).getValues()[0].filter(function(cell) {
+    return typeof(cell) === "number";
+  })[0];
+  Logger.log(count);
+  var data = tournamentSheet.getDataRange().getValues();
+  var moshikomiStart = '';
+  var formerDates = {};
+  var regex = /^[A-E]$/;
+
+  
+  tournamentSheet.getRange(1,1,tournamentSheet.getLastRow(),count+5).getValues().forEach(function(row) {
+    if(regex.test(row[0])){
+      var formerDate = new Date(row[count+2]);
+      formerDates[row[0]] = new Date(formerDate.getTime() - 24*60*60*1000);
+    }
+    if(row[count+3] === "申込開始日")moshikomiStart = row[count+4];
+    if(typeof(moshikomiStart) === "string" && row[count+3] === "リマインダー")moshikomiStart = row[count+4];
+  });
+  var kouninCount = 0;
+  for(var j=0;j<data[0].length;j++) {
+    if(typeof(data[0][j])==="string" && data[0][j].includes("公認大会出場回数")){
+      kouninCount = j; 
+    }
+  }// if(kouninCount === 0)return;
+  var differs = {};
+  for (var i=0;i<data.length;i++) {
+    if(typeof(data[i][2]) === "number")break;
+
+    if(data[i][2] !== "" && typeof(data[i][2]) === "string" && 
+    (data[i][2].includes(" ") || data[i][2].includes("　"))// && ['A','B','C'].includes(data[i][4])
+    ) {
+      var matchesList = fetchCountMatches(data[i][2],formerDates[data[i][4]]); // 大会前日をぶち込む
+
+      // moshikomiStartより抽選日が前のものについてのみOK、後のものは弾く
+      matchesList = matchesList.filter(function(item) {
+        var raffleDate = new Date(item.split('：')[2]);
+        return raffleDate <= moshikomiStart;
+      });
+
+      Logger.log(matchesList); // 大会当日までに開催される、抽選に通った大会が出てくる
+      var a;
+      a = matchesList.map(function(item) {
+        return [item.split("：")[0],item.split("：")[1]].join("：");
+      });
+      var num = data[i][kouninCount] === matchesList.length || kouninCount === 0 ? 
+        matchesList.length : 
+        "（入力：" + data[i][kouninCount] + "）" + matchesList.length;
+      
+      tournamentSheet.getRange(i+1,count+4,1,2).setValues([[num,a.join(",")]]);
+      if(data[i][kouninCount] != matchesList.length){
+        tournamentSheet.getRange(i+1,count+4).setBackground("yellow");
+        differs[i] = [data[i][1],data[i][2],data[i][kouninCount],matchesList];
+      } else {
+        tournamentSheet.getRange(i+1,count+4).setBackground("white");
+      }
+    }
+    if(data[i][count+3] === "催促メール設定（「☆大会フォーム」から）"){
+      //tournamentSheet.getRange(i-1,count+4).setValue(Utilities.formatDate(date,"JST","yyyy年MM月dd日まで"));
+      tournamentSheet.getRange(i-1,count+4).setValue("大会開催日までの、申込開始日時点で抽選に通っているもの");
+    }
+  }
+  var aa = "\n";
+  for(var key in differs) {
+    var row = differs[key];
+    aa += row[1] + "　入力: " + row[2] + "　DB上: " + row[3].length + "\n";
+  }
+  if(state === false && aa === "\n"){
+    ui.alert("確認","全員出場回数に問題はありません。",ui.ButtonSet.OK);
+    return;
+  }
+  if(state === false && ui.alert(
+    '確認',
+    '申し込まれた中で、出場大会の回数が違うのが、以下\n' + aa + "\n\nです。\n確認のメールの下書きを作成します。（「送信済み」と書かれている人には作成されません。）\nメールしない場合は、LINEなどで個別に確認をしてください。",
+    ui.ButtonSet.YES_NO
+  ) === ui.Button.YES){
+    for(var key in differs) {
+      var row = data[key];
+      if(row[count+6] !== "作成済み") { // nullの場合も問題なく実行される
+        var to = row[1];
+        var subject = "【出場回数確認】" + tournamentName;
+        var emailBody = createCountConfirmationEmailBody(tournamentName,moshikomiStart,row,differs[key][2],differs[key][3]);
+        GmailApp.createDraft(to,subject,emailBody,{name:"慶應かるた会"});
+        tournamentSheet.getRange((Number(key)+1),count+7).setValue("作成済み").setBackground("#D3D3D3");
+      }
+    }
+  }
+}
+function filterMatches(data, specifiedDate) {
+  Logger.log("filterMatches");
+  // 指定された日時の年度を計算
+  var year = specifiedDate.getFullYear();
+  var month = specifiedDate.getMonth() + 1; // getMonthは0が1月なので、+1して調整
+  // 4月以前なら、年度は前年
+  if (month < 4) {
+    year -= 1;
+  }
+  
+  // 年度の開始と終了を設定
+  var fiscalYearStart = new Date(year, 3, 1); // 4月1日
+  var fiscalYearEnd = new Date(year + 1, 2, 31); // 翌年の3月31日
+  
+  // 条件に一致するlocationをフィルタリング
+  var locations = data.filter(function(item) {
+    var date = new Date(item.date);
+    var location = item.location;
+    // 日付が年度内で、指定された文字列を含まないlocationのみを選択
+    return date >= fiscalYearStart && date <= fiscalYearEnd && date < specifiedDate &&
+           !location.includes('団体') && !location.includes('職域') && !location.includes('非公認');
+  }).map(function(item) {
+    return item.date + "：" + item.location; // 最終的なリストにはlocationのみを含める
+  });
+  
+  return locations;
+}

@@ -1,0 +1,143 @@
+<script>
+// ------------------------------------------------------------
+// ユーティリティ
+// ------------------------------------------------------------
+function setStatus(key, type, msg) {
+  const statusEl = document.getElementById(key + '-status');
+  const tableEl  = document.getElementById(key + '-table');
+  if (tableEl) tableEl.style.display = 'none';
+  statusEl.style.display = 'block';
+  statusEl.className = 'status' + (type === 'error' ? ' error' : '');
+  statusEl.innerHTML = type === 'loading'
+    ? '<span class="spinner"></span> 読み込み中...'
+    : (type === 'error' ? `エラー: ${msg}` : (msg || 'データがありません'));
+}
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ------------------------------------------------------------
+// 完了モーダル（フォーム作成・下書き作成など）
+// ------------------------------------------------------------
+let _completionButtons = [];
+
+function showCompletionModal(title, bodyHtml, buttons) {
+  _completionButtons = buttons;
+  document.getElementById('completion-modal-title').textContent = title;
+  document.getElementById('completion-modal-body').innerHTML = bodyHtml;
+  const footer = document.getElementById('completion-modal-footer');
+  footer.innerHTML = buttons.map((b, i) =>
+    `<button class="modal-footer-btn${b.primary ? ' primary' : ''}" onclick="_completionBtnClick(${i})">${escHtml(b.label)}</button>`
+  ).join('');
+  document.getElementById('completion-modal').style.display = 'flex';
+}
+
+function _completionBtnClick(i) {
+  closeCompletionModal();
+  const btn = _completionButtons[i];
+  if (btn && btn.action) btn.action();
+}
+
+function closeCompletionModal() {
+  document.getElementById('completion-modal').style.display = 'none';
+}
+
+function onCompletionOverlayClick(e) {
+  if (e.target === document.getElementById('completion-modal')) closeCompletionModal();
+}
+
+// ------------------------------------------------------------
+// 権限管理
+// ------------------------------------------------------------
+let currentPermissions = {
+  applyDoneInput:          ['申込係', '会長副会長'],
+  payDoneInput:            ['振込係', '会長副会長'],
+  completeTournament:      ['会長副会長'],
+  payDetailButtons:        ['振込係', '会長副会長'],
+  operationPanel:          ['申込係', '振込係', '案内係', '会長副会長'],
+  announcementDoubleCheck: ['案内係', '会長副会長'],
+};
+
+function hasPermission(key) {
+  const allowed = currentPermissions[key];
+  if (!allowed) return true; // 未定義キーはデフォルト許可
+  return allowed.includes(currentRole);
+}
+
+function loadAndApplyPermissions(callback) {
+  google.script.run
+    .withSuccessHandler(json => {
+      try { currentPermissions = JSON.parse(json); } catch(e) {}
+      if (callback) callback();
+    })
+    .withFailureHandler(() => { if (callback) callback(); })
+    .getPermissions();
+}
+
+// ------------------------------------------------------------
+// タブ切替
+// ------------------------------------------------------------
+let calendarLoaded    = false;
+let makeEmailLoaded   = false;
+
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    document.getElementById('page-' + page).classList.add('active');
+    if (page === 'calendar' && !calendarLoaded) loadCalendar();
+    if (page === 'board') initBoard();
+    if (page === 'make-email' && !makeEmailLoaded) { initMakeEmail(null); makeEmailLoaded = true; }
+    if (page === 'mail-management') initMailManagement();
+    if (page === 'suitou') initSuitou();
+    if (page === 'settings') { renderPermTable(); loadRoleNamesSettings(); }
+  });
+});
+
+// ------------------------------------------------------------
+// 初期化（ログイン後に呼び出す）
+// ------------------------------------------------------------
+function initApp() {
+  const roleClassMap = {
+    '案内係':    'role-announcer',
+    '申込係':    'role-apply',
+    '振込係':    'role-payment',
+    '会長副会長': 'role-president',
+  };
+  document.body.classList.remove('role-announcer', 'role-apply', 'role-payment', 'role-president');
+  const roleClass = roleClassMap[currentRole];
+  if (roleClass) document.body.classList.add(roleClass);
+
+  loadAndApplyPermissions();
+  loadMembers();
+  loadCalendar();
+  document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('nav-settings-btn').style.display =
+    currentRole === '会長副会長' ? 'inline-block' : 'none';
+  const isAnnouncer = currentRole === '案内係' || currentRole === '会長副会長';
+  document.getElementById('nav-form-create-btn').style.display = isAnnouncer ? 'inline-block' : 'none';
+  document.getElementById('nav-make-email-btn').style.display       = isAnnouncer ? 'inline-block' : 'none';
+  document.getElementById('nav-mail-management-btn').style.display  = isAnnouncer ? 'inline-block' : 'none';
+  const canSeeSuitou = currentRole === '会長副会長' || currentRole === '振込係';
+  document.getElementById('nav-suitou-btn').style.display = canSeeSuitou ? 'inline-block' : 'none';
+  showHelpBtn();
+}
+
+window.addEventListener('load', () => {
+  document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
+  // キャッシュ済みログイン情報があれば自動ログイン
+  try {
+    const savedRole = localStorage.getItem('karuta_role');
+    const savedPw   = localStorage.getItem('karuta_pw');
+    if (savedRole && savedPw) {
+      const roleBtn = document.querySelector(`.login-role-btn[data-role="${savedRole}"]`);
+      if (roleBtn) selectLoginRole(roleBtn);
+      document.getElementById('login-pw').value = savedPw;
+      submitLogin();
+    }
+  } catch(e) {}
+});
+</script>

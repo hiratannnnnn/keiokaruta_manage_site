@@ -1,0 +1,467 @@
+まずは「フォーム作成」というシートに行ってください。							to	keiokarutakai@googlegroups.com,mitakarutakai_taikai@googlegroups.com
+"自動で行を非表示や削除することがあるので、
+必ず左の数字で行番号を見てください"		109					bcc	nozomu.ebisui@adst.keio.ac.jp,akkonyasukun@star.ocn.ne.jp,info@hayakawahiroaki.com
+		送信時刻が2分以上過去の場合は送信されない仕様です。			※先に案内を少なくとも送信予定にしてください。			
+リマインダー設定		リマインダー設定時点で送信日時は固定されるので、更新する場合は再度設定してください。		↓デフォルトだと大会名+級+　案内		↓”済”の場合のみ実行	↓空欄の場合のみ実行	
+大会名	級	"送信予定日時
+(yyyy-MM-dd HH:mm:ss)
+※ss(秒数)は00推奨"	メール種別	大会案内メールの件名	"フォームの
+リンク"	"リマインダー
+設定済みか"	送信済みか	処理用変数
+第37回東大阪大会	A級	2025-08-24 8:00:00	リマインダー	第37回東大阪大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSc2RYo4LNUWnL1uj06MqIK-nOH4b6gJxcx9iG4pmGYCyGN9cw/viewform	済	済	TRUE
+第105回横浜大会	A級	2025-08-26 8:00:00	リマインダー	第105回横浜大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd2-QB1rjeACrQiDk5iMsma5kP8MDEb7YPQABwsUdfq3hx0Iw/viewform	済	済	TRUE
+第105回横浜大会	D級	2025-08-26 8:03:00	リマインダー	第105回横浜大会D級　案内	https://docs.google.com/forms/d/e/1FAIpQLScJ58OPjTgLaFnLeUlDYSeuLFaFPJ77d4FmqOkVt9wZSAaQCg/viewform	済	済	TRUE
+第３２回埼玉県百人一首大会	E級	2025-08-30 8:00:00	リマインダー	第３２回埼玉県百人一首大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSc-hcF6bwXJ8BlasZpG8B8CLJmK6nWi6LYRAMVo730cPP5YDw/viewform	済	済	FALSE
+第3回千葉大会	B級	2025-08-30 8:03:00	リマインダー	第3回千葉大会B級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeXRaihfyjxy_mXy2NYsAbE-yMnC91tDJWAcYTWwt549YjsbA/viewform	済	済	TRUE
+第8回秋田大会	ABCD級	2025-08-31 8:00:00	リマインダー	第8回秋田大会ABCD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSf7MvhOkg3aJvD-h95vUNn0A4ckmrMEfIaWp4jSEiRWlU_eVw/viewform	済	済	TRUE
+第14回千葉県かるた大会	ABCD級	2025/09/05 18:21:00	リマインダー	第14回千葉県かるた大会ABCD級　案内	https://docs.google.com/forms/d/e/1FAIpQLScbnPfP50gRg_iGdBq0TrUSmpaCsDgCuy9xAmVUZSdbYzOFAA/viewform	済	済	TRUE
+第7回新潟大会	ABCDE級	2025-09-07 8:00:00	リマインダー	第7回新潟大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLScadXZK4oHCTNdG32fbhrypW9JR9eBySksir0tqhUPH1nLixw/viewform	済	済	TRUE
+第37回東大阪大会	A級	2025-09-12 7:50:00	振込確認			済	済	FALSE
+第8回秋田大会	ABCD級	2025-09-14 7:50:00	振込確認			済	済	FALSE
+第７２期名人位・第７０期クイーン位東西予選	A級	2025-09-16 8:00:00	リマインダー	第７２期名人位・第７０期クイーン位東西予選A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdl_Uy4dk1Tx2oao9LPXRAXaArmwEyyjfIpnmWB4nSolTOZUw/viewform	済	済	TRUE
+第6回札幌大会	DE級	2025-09-16 8:03:00	リマインダー	第6回札幌大会DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSe26wnfVpPI7wcHHy8MAVga26OuBMTsvyBLwq3pe01Pv8Y8lA/viewform	済	済	TRUE
+第41回熊本大会	CD級	2025-09-18 8:00:00	リマインダー	第41回熊本大会CD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfqgYotn6llDWLDflSJWfloPOFWCV9Xz_xjQ98eeCb5XSmjCg/viewform	済	済	TRUE
+第3回千葉大会	B級	2025-09-20 7:50:00	振込確認			済	済	FALSE
+第84回北國大会	ABCDE級	2025-09-20 8:00:00	リマインダー	第84回北國大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdG3twxomIiIQ2ZlMxdFEA6ZXceLQVkkPuESm8AhrVslZ1Mpg/viewform	済	済	TRUE
+第15回足利大会	BCDE級	2025-09-23 8:00:00	リマインダー	第15回足利大会BCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSffWu2bEuGInhrSodDnIcIHcP164dqxlKFkwwBMpHGQeq58AA/viewform	済	済	TRUE
+第7回新潟大会	ABCDE級	2025-09-30 14:50:00	振込確認			済	無効	TRUE
+第 96 回全国競技かるた学生選手権大会	E級	2025-10-08 8:00:00	リマインダー	第 96 回全国競技かるた学生選手権大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd_EAXN-hgWIulPGFciXpHhBNJc1IR-aTlXhy2iZL8ekOlXBw/viewform	済	済	TRUE
+第34回広島大会	DE級	2025-10-13 8:00:00	リマインダー	第34回広島大会DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfEnCXUZzMP0Kv1JQ49XmxcnvfXop2ygtoPiNIUnjoqREFUDw/viewform	済	済	TRUE
+第15回岡山大会	ABC級	2025-10-13 8:03:00	リマインダー	第15回岡山大会ABC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfYmFT_070gJVCuVBNuXcp39Ie0I-eHNWuv6JAgv6Vy9_H2Rg/viewform			
+第33回全日本新人選手権かるた府中大会	ABCDE級	2025/10/13 8:06:00	リマインダー	第33回全日本新人選手権かるた府中大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdoGbC8aogaBk9lvs5Eq9htSN3CPJ7Q4A1orL0KM4zVrA2NYw/viewform	済	済	TRUE
+第１６回全日本グランドチャンピオン大会	A級	2025-10-13 8:09:00	リマインダー	第１６回全日本グランドチャンピオン大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLScp5eysv7DWokv-WeWMoR14cNazVR5D4vnzBIun6MNp2x9VBA/viewform	済	済	TRUE
+第20回鳳玉大会	CDE級	2025-10-13 8:12:00	リマインダー	第20回鳳玉大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdkA8dmx_96t4Zsu_-esBhqpxavMPhkU9odLw4iCiiLo5n5rQ/viewform	済	済	TRUE
+第1回鳳雛大会	A級	2025-10-13 8:15:00	リマインダー	第1回鳳雛大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSesf8cY1YR6Whcy6SJ6j9ZW74N5QwIZPENwgmAo7MwNLB3fcA/viewform	済	済	TRUE
+第21回香川大会	AB級	2025-10-15 8:00:00	リマインダー	第21回香川大会AB級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdtybI0urykPp11y3k4t336sI02tgEQ-RkOPmjuQ_soTeO-aQ/viewform	済	済	TRUE
+第34回奈良大会	ABCDE級	2025-10-15 8:03:00	リマインダー	第34回奈良大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSf_6oAM_mQhlZ20vuXhH6TZbl0xM91-VpfyjB5D1oLn51pNBA/viewform	済	済	TRUE
+第64回和歌山大会	ABCDE級	2025/10/16 8:00:00	リマインダー	第64回和歌山大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLScwy-tyDQZakqQQ5zqtGQfk2LLLrqCzKEEGRZN6l7pBP-F3MQ/viewform	済	済	TRUE
+第79回東京東会大会	BC級	2025-10-21 8:00:00	リマインダー	第79回東京東会大会BC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSepObtQJFy2NRYJDidKsVk3o3u3borTWVhDxV0qg_6Nb3tWOw/viewform	済	済	FALSE
+第6回愛知大会	AB級	2025-10-21 8:06:00	リマインダー	第6回愛知大会AB級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdEPtvOJp6XdxDssu9fxMZ0YFMF6jiV31ZgWAeEDEKoyHddug/viewform	済	済	TRUE
+九段大会２０２５（３）	CD級	2025/10/22 9:00:00	リマインダー	九段大会２０２５（３）CD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeXEe08XvAYeTqXZJQHv2tWhSDEpGVGL4n98ulJYyBk8lo8Ag/viewform	済	済	TRUE
+第6回札幌大会	ABC級	2025-10-22 9:03:00	リマインダー	第6回札幌大会ABC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdIi6JQxfC8T2bwIaCJEm3BgzVh7yDld1z8qPGtma0r9sf-BQ/viewform	済	済	TRUE
+第39回さがみ野大会	A級	2025-10-22 9:09:00	リマインダー	第39回さがみ野大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdQNYVlTpZ3aqg2-0SwhAel8eDzJ68YhqLblCLzT7PWVRjG5w/viewform	済	済	TRUE
+第 96 回全国競技かるた学生選手権大会	E級	2025-10-24 7:50:00	振込確認			済	済	FALSE
+第15回岡山大会①	BC級	2025-10-24 8:00:00	リマインダー	第15回岡山大会①BC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSf_FY8v5C-pCD1OOBQL1TR6SMlysvUyqP2wayhZ2MX2YiViNw/viewform	済	済	TRUE
+第12回宇都宮大会	ABCD級	2025-10-24 8:03:00	リマインダー	第12回宇都宮大会ABCD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSccH7kefzn80fqVhv-YQXrsdWT-faoKu2lAcZ-NDYSmX3kAsQ/viewform	済	済	TRUE
+第15回岡山大会②	AC級	2025-10-24 8:06:00	リマインダー	第15回岡山大会②AC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeWFW8pb-jQeWeD8xsui-f-A97M4x3J47LlypSrjh8GD8nxCQ/viewform	済	済	TRUE
+第9回信州大会	DE級	2025-10-24 8:09:00	リマインダー	第9回信州大会DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSccHI3req2BFt16dDgZOZR_Cbvv36tcxq-VF-5xdaZ6EamagQ/viewform	済	済	TRUE
+第 28 回神奈川県かるた選手権大会	E級	2025-10-28 8:00:00	リマインダー	第 28 回神奈川県かるた選手権大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdJZxGhGmu0wLPT4RH41HKqrYREfyU8gnq8NKJRCkqdRKUcPQ/viewform	済	済	TRUE
+九段大会２０２５（３）	CD級	2025-10-29 7:50:00	振込確認			済	済	FALSE
+第７５回高松宮記念杯近江神宮全国大会①	E級	2025-10-29 8:00:00	リマインダー	第７５回高松宮記念杯近江神宮全国大会①E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfl09C6EMbIpntv9bLIGGCjSa5Cjg-2JMDP4PC3dc3qeOa_xw/viewform	済	済	TRUE
+第96回学生選手権大会	A級	2025-11-07 8:00:00	リマインダー	第96回学生選手権大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdQtopi-HGcwHsFL4QvFT9YxP-hhPBzscfoFe2BtQg_lt0iXg/viewform	済	済	TRUE
+第64回和歌山大会	ABCDE級	2025-11-08 7:50:00	振込確認			済	済	FALSE
+第39回さがみ野大会	A級	2025-11-08 7:53:00	振込確認			済	済	FALSE
+第8回大阪なにはえ大会	A級	2025-11-08 8:00:00	リマインダー	第8回大阪なにはえ大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLScmr9Rq6VART9QxtdM2V51Qbt-GceBRkHuW8lw6EpAjsyv-_A/viewform	済	済	TRUE
+第21回鳳玉大会	CDE級	2025-11-08 8:03:00	リマインダー	第21回鳳玉大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfN3hbKBUoUcdcnjpUTHwNx6fRCz32Fla0djumdPv5jU_EfTw/viewform	済	済	TRUE
+第6回愛知大会	AB級	2025-11-11 7:50:00	振込確認			済	済	FALSE
+第 28 回神奈川県かるた選手権大会	E級	2025-11-14 7:50:00	振込確認			済	済	FALSE
+第12回宇都宮大会	ABCD級	2025-11-16 7:50:00	振込確認			済	済	FALSE
+第20回鳳玉大会	CDE級	2025-11-17 7:50:00	振込確認			済	済	FALSE
+第8９回椿杯争奪大会	DE級	2025-11-17 8:00:00	リマインダー	第8９回椿杯争奪大会DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdlhBHEr0AJI5Qlopjmz31aJxpwhnSJ6jEbQUzyggFSMc6qvw/viewform	済	済	TRUE
+第44回東京吉野会大会	A級	2025-11-18 8:00:00	リマインダー	第44回東京吉野会大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfjNWohxracaPm2U3IQ9Acn9UgeluXJzSS7Br6KOJSr5i4McQ/viewform	済	済	TRUE
+第７５回高松宮記念杯近江神宮全国大会②	CD級	2025-11-19 8:00:00	リマインダー	第７５回高松宮記念杯近江神宮全国大会②CD級　案内	https://docs.google.com/forms/d/e/1FAIpQLScoVPZ5hnN24DZGXEBabdH2Tf9ys16-m_W8HzESYKhmbIZHzw/viewform	済	済	TRUE
+第 13 回山口大会	ABCDE級	2025-11-21 8:00:00	リマインダー	第 13 回山口大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd1xTZt8UXkbcPy3z08zNLTnWTW7G7L_mWPXIJldVScLOzmZQ/viewform	済	済	TRUE
+2026年新春全国大会	ABCDE級	2025-11-30 8:00:00	リマインダー	2026年新春全国大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdDGCSSQw2xsfKCWY2LhLQxSsRwkpQCwHLNsg7jAkFX3gS7qg/viewform	済	済	TRUE
+第50回記念Friendship杯交流大会	CDE級	2025-12-02 8:00:00	リマインダー	第50回記念Friendship杯交流大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSenMCqtNW40E8qYopGc1YJudDKQnlx_hQjSvx1G6FxLQ34XJA/viewform	済	済	FALSE
+第44回東京吉野会大会	A級	2025-12-03 7:50:00	振込確認			済	済	FALSE
+第44回東京吉野会大会	A級	2025-12-03 7:53:00	振込確認			済	済	FALSE
+第44回東京吉野会大会	A級	2025-12-03 7:56:00	振込確認			済	済	FALSE
+第55回大宰府大会	ABCD級	2025-12-03 8:00:00	リマインダー	第55回大宰府大会ABCD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdF4US8jYrJHVBHbQRI-0z_COCagQytRy0OQAYmgpk1M-8gVA/viewform	済	済	TRUE
+第22回鳳玉大会	CDE級	2025-12-03 8:03:00	リマインダー	第22回鳳玉大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfrc20inB3mMeEdDoEfMETAcKFr3fwBiKOzFbX7iZ1A1O7r2A/viewform	済	済	TRUE
+第77回京都大会	CDE級	2025-12-06 8:00:00	リマインダー	第77回京都大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd7sIgq75oXknGzXtazS1pFOQnG48R05xcT6uqOawRnogHfZg/viewform	済	済	FALSE
+第8回大阪なにはえ大会	A級	2025-12-08 7:50:00	振込確認			済	済	FALSE
+第７５回高松宮記念杯近江神宮全国大会③	AB級	2025-12-10 8:00:00	リマインダー	第７５回高松宮記念杯近江神宮全国大会③AB級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdiXtQhPOlhKRJ6L-2irzLvCdF6Tgzzx2W8-pSAIBP4dOj14g/viewform	済	済	TRUE
+第83回桑名大会	CDE級	2025-12-10 8:03:00	リマインダー	第83回桑名大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLScJNptVtujEp86_GresuhR0MQtDLm_GNzZImf8Sr-71Ayi1_w/viewform	済	済	TRUE
+第34回広島大会	AB級	2025-12-14 8:00:00	リマインダー	第34回広島大会AB級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfCqAZs4N2cFvf2lp3JAaKg1dkvpNhV3jfdkESAlUjdRy_jLw/viewform	済	済	FALSE
+第79回東京東会大会	E級	2025-12-14 20:10:00	リマインダー	第79回東京東会大会E級　案内
+	https://docs.google.com/forms/d/e/1FAIpQLSd84GZLFBpHAjnuelNkgWii7wKHnKgePx64WM3-DtM7vKhUiw/viewform	済	済	FALSE
+第79回東京東会大会	E級	2025-12-15 8:00:00	リマインダー	第79回東京東会大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd84GZLFBpHAjnuelNkgWii7wKHnKgePx64WM3-DtM7vKhUiw/viewform			
+2026年新春全国大会	ABCDE級	2025-12-16 7:50:00	振込確認			済	済	FALSE
+第50回記念Friendship杯交流大会	CDE級	2025-12-21 7:50:00	振込確認			済	済	FALSE
+第107回大阪大会	A級	2025-12-26 8:00:00	リマインダー	第107回大阪大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSc7JZi3DXDS839R3i2ffvYBVcauqo2m77K6klpb8hmOKPVh-A/viewform	済	済	FALSE
+九段大会２０２５（４）	CDE級	2025-12-27 8:00:00	リマインダー	九段大会２０２５（４）CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd5YfEgyyRphr1osbB8-QN8r_IWaSYixyV6NGpuTTgQ2gBa9A/viewform	済	済	FALSE
+第79回東京東会大会	E級	2026-01-02 7:50:00	振込確認			済	済	FALSE
+第22回鳳玉大会	CDE級	2026-01-07 7:50:00	振込確認			済	済	FALSE
+九段大会２０２５（４）	CDE級	2026-01-07 7:53:00	振込確認			済	済	FALSE
+第７５回高松宮記念杯近江神宮全国大会③	AB級	2026-01-07 7:56:00	振込確認			済	済	FALSE
+第23回鳳玉大会	CDE級	2026-01-08 8:00:00	リマインダー	第23回鳳玉大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdKOSODw7vCMIAG6GXAHzzU7qpdHNDTAq8sZU3EqinEYXNAJA/viewform	済	済	FALSE
+第59回静岡大会	ABC級	2026-01-17 8:00:00	リマインダー	第59回静岡大会ABC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeDU95pUHr992O_hqZjCnMO8SKeK34c84oP4PpwJhVcbkdtWQ/viewform	済	済	TRUE
+第７９回東京東会大会	D級	2026-01-22 8:00:00	リマインダー	第７９回東京東会大会D級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeA8dIiWMy2aJg0OB8lo3AGCoVc2tTPHqyiSULReR5fjgqzmA/viewform	済	済	FALSE
+第37回全国競技かるた東大阪大会	BCD級	2026-01-22 8:03:00	リマインダー	第37回全国競技かるた東大阪大会BCD級　案内	https://docs.google.com/forms/d/e/1FAIpQLSf3JqqmeE88e3biQI_KCZtiZPF4eaGfVfdVn3NrfEdSUk9UeA/viewform	済	済	FALSE
+第9回信州大会	BC級	2026-01-23 8:00:00	リマインダー	第9回信州大会BC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfY6oErK04keiDcO7BSA43Fbpm4DEdozRwu4GErUwxRjXdG9Q/viewform	済	済	FALSE
+第1回競技かるた須磨千鳥大会	D級	2026-02-02 8:00:00	リマインダー	第1回競技かるた須磨千鳥大会D級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfSk9wtONyqS0qfL3eKVnFjQZfOMaL_tZCrS44J4auyr8oOtA/viewform	済	済	FALSE
+第23回鳳玉大会	CDE級	2026-02-04 7:50:00	振込確認			済	済	FALSE
+第７９回東京東会大会	A級	2026-02-05 8:00:00	リマインダー	第７９回東京東会大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLScAXqH2N9p1vIwfSHuRHM8jje56TbGDLf2rvVARs2T1hseBKg/viewform	済	済	FALSE
+第24回鳳玉大会	CDE級	2026-02-05 8:03:00	リマインダー	第24回鳳玉大会CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLScLCGgHZl8Ddv33OfVm3k4rU5bGH6XH7mUn8ym45-1ij4EioQ/viewform	済	済	FALSE
+第9回信州大会	BC級	2026-02-06 7:50:00	振込確認			済	済	FALSE
+九段大会２０２５（５）	DE級	2026-02-08 8:00:00	リマインダー	九段大会２０２５（５）DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfxev1WvE2EBXtbTufVMg9TmczyCoegkhQLS3xFKCF-DK7zdQ/viewform	済	済	FALSE
+九段大会２０２５（５）	C級	2026-02-09 8:00:00	リマインダー	九段大会２０２５（５）C級　案内	https://docs.google.com/forms/d/e/1FAIpQLSft0-yZETO6wPJyhD6AmrdrphGQ4RhC1r_xYAJnuhpPSc7uPQ/viewform	済	済	FALSE
+第45回鹿児島大会	ABC級	2026-02-11 8:00:00	リマインダー	第45回鹿児島大会ABC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSet7NpuTRWZ5EXRLR7Cl4h959WETgn58lwa6NWDP4VHfs7K_g/viewform	済	済	FALSE
+第７９回東京東会大会	D級	2026-02-15 7:50:00	振込確認			済	済	FALSE
+第５５回松山大会	ABC級	2026-02-17 8:00:00	リマインダー	第５５回松山大会ABC級　案内	https://docs.google.com/forms/d/e/1FAIpQLSctitPuLGpgKWL8jacEfPgEHC2lqD4z9p1veiwqgq96S2ssOg/viewform	済	済	FALSE
+九段大会２０２５（５）	DE級	2026-02-18 7:50:00	振込確認			済	済	FALSE
+第83回桑名大会	AB級	2026-02-18 8:00:00	リマインダー	第83回桑名大会AB級　案内	https://docs.google.com/forms/d/e/1FAIpQLSd-QAzQTP00xNj6goyX14ndEAvgeQrDOxw45CEhYfM05INuqA/viewform	済	済	FALSE
+第７９回東京東会大会	A級	2026-02-20 7:50:00	振込確認			済	済	FALSE
+第24回鳳玉大会	CDE級	2026-03-02 7:50:00	振込確認			済	済	FALSE
+九段大会２０２５（６）	CDE級	2026-03-02 8:00:00	リマインダー	九段大会２０２５（６）CDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeRlBiOpI5sCrESm670OHgvSWk995-biLBIHLu8viarBYKENA/viewform	済	済	FALSE
+第83回桑名大会	AB級	2026-03-05 7:50:00	振込確認			済	済	FALSE
+第１０５回横浜大会	E級	2026-03-10 8:00:00	リマインダー	第１０５回横浜大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSf67I6VQPsXgYwRziAydxCJ1otyld8R_-7uLYZzFgSN_6gsWw/viewform	済		FALSE
+鳳玉大会	DE級	2026-03-11 8:00:00	リマインダー	鳳玉大会DE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeBmKT1z7bOzNRlGEqCAIW2woO1I_9iAq5rZZ3ag5QOk7amGg/viewform	済		FALSE
+第65回全日本選手権大会	A級	2026-03-17 8:00:00	リマインダー	第65回全日本選手権大会A級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdGWqbe4PtW0zPlouGL-hY843lOeJJ9iSH2aIXnUXZa1Bil4g/viewform	済		FALSE
+第27回こばえちゃ山形全国競技かるた酒田大会	A～E級	2026-03-21 8:00:00	リマインダー	第27回こばえちゃ山形全国競技かるた酒田大会A～E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSfhjBRKKauFOjTh8KLxSf7KpF7kadrkvqXZnRWdgzNzKPF2pA/viewform	済		FALSE
+第27回こばえちゃ山形全国競技かるた酒田大会	ABCDE級	2026-03-21 8:03:00	リマインダー	第27回こばえちゃ山形全国競技かるた酒田大会ABCDE級　案内	https://docs.google.com/forms/d/e/1FAIpQLSdol3rUvJ1G9YgLIgN_KABScFhtTh2l-C2VR8yHBGtXfEw4-g/viewform	済		FALSE
+第34回東京都大会	E級		リマインダー	第34回東京都大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSeTQDe78piz-0EXEuTPF9X0XI53XZnZNWcPWUxe_LjPSZZI4g/viewform			
+第1回須磨大会	E級		リマインダー	第1回須磨大会E級　案内	https://docs.google.com/forms/d/e/1FAIpQLSffAd7xZ7On99M5NF_Ht8DaJqBaOdajNvp2rX1NWn9Ql018nw/viewform		
+
+
+function setReminders(state=false,input="") {
+  Logger.log("setReminders " + "state:" + state + "input:" + input);
+  // アクティブなスプレッドシートを取得
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('メール管理');
+  var admin = sheet.getRange("J2").getValue();
+  var adminRange = sheet.getRange('K4');
+  var calendarSheet = ss.getSheetByName("カレンダー");
+  var ui = SpreadsheetApp.getUi(); 
+  // 必要な行のデータを一度に取得
+  var rowNum = sheet.getRange('C2').getValue();
+  var rowValues = sheet.getRange(rowNum, 1, 1, 8).getValues()[0]; // 1行8列分のデータを取得
+
+  var tournamentName = rowValues[0];
+  var grades = rowValues[1];
+  var targetDateStr = rowValues[2];
+  var formLink = rowValues[5];
+  var threadTitle = rowValues[4];
+  Logger.log(threadTitle);
+  var status = rowValues[7];
+
+  // 送信済みかどうかのチェック
+  if (status.includes("済") && admin !== true) {
+    if(state===false){
+      ui.alert('エラー', '送信済みとなっています。行番号に間違いがないかどうか見直してください。', ui.ButtonSet.OK);
+    } else {
+      adminRange.setValue("送信済みとなっています。");
+    }
+    return;
+  }
+  
+  if (targetDateStr === "" && admin !== true) {
+    if(state===false){
+      ui.alert('エラー', '送信予定日時を設定しないとリマインダー設定できません。', ui.ButtonSet.OK);
+    } else {
+      adminRange.setValue("送信予定日時を設定してください。");
+    }
+    return;
+  }
+
+  var targetDate = new Date(targetDateStr);
+  var now = new Date();
+
+  if (targetDate.getTime() <= now.getTime() && admin !== true) {
+    if(state===false){
+      ui.alert('エラー', '送信予定日時は現在時刻よりも未来である必要があります。', ui.ButtonSet.OK);
+    } else {
+      adminRange.setValue("送信予定日時は現在時刻よりも未来である必要があります。");
+    }
+    return;
+  }
+
+  // 未振り込み者を表示するかどうかの確認
+  if(state===false){
+    var includeNotPaid = ui.alert(
+      '振込について',
+      '未振り込み者を表示しますか？\n大体の大会は抽選後の前納制、もしくは後納制ですので、「いいえ」を選択してください。ただし、申込時点で振込まで完了する必要がある場合は「OK」を選択してください。\n「いいえ」→表示しない、「OK」→表示する',
+      ui.ButtonSet.YES_NO
+    ) === ui.Button.YES;
+  } else {
+    var includeNotPaid = input === "" ? false : true;
+  }
+
+  // makeParticipantList と tomorrowDate の計算
+  var participantList = makeParticipantList(tournamentName, grades, includeNotPaid);
+  var weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  var tomorrow = new Date(targetDateStr);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  var tomorrowDateStr = Utilities.formatDate(tomorrow, "JST", "M月d日") + "（" + weekdays[tomorrow.getDay()] + "）";
+  if(state===false){
+    if (threadTitle == "") {
+      if (ui.alert(
+        '件名',
+        '引用する案内メールの件名が空欄になっています。\n戻る場合は「いいえ」を、引用せずにこのまま続行する場合は「OK」を押してください。',
+        ui.ButtonSet.YES_NO
+      ) == ui.Button.YES) {
+        var quotedEmailContent = "";
+      } else {
+        return;
+      }
+    } else {
+      var quotedEmailContent = quoteEmail(threadTitle);
+      Logger.log(quotedEmailContent);
+      if (quotedEmailContent === "") {
+        ui.alert(
+          'エラー',
+          threadTitle + '\nこの件名ではメールを見つけることができませんでした。もう一度間違いがないか確認してください。案内メールの引用なしで続ける場合は、件名の欄を空欄にして実行してください。',
+          ui.ButtonSet.OK
+        )
+        return;
+      }
+    }
+  } else { // 合っている前提で行く
+    var quotedEmailContent = quoteEmail(threadTitle);
+  }
+  
+  var emailBody = createEmailBody(tournamentName, grades, participantList, tomorrowDateStr, formLink, quotedEmailContent);
+  // ユーザにメールの全文と送信日時を確認してもらう
+  if(state===false){
+    var response = ui.alert(
+      'メールプレビュー',
+      'この内容で' + Utilities.formatDate(targetDate, "JST", "yyyy'年'MM'月'dd'日の'HH'時'mm'分'") + 'にリマインダーを設定しますがよろしいですか？「いいえ」を押すとキャンセルされ、「OK」を押すと設定されます。（申込者と未振り込み者は送信直前に確定されます。）\n\n' + "    「\n" + emailBody + "\n」",
+      ui.ButtonSet.YES_NO
+    );
+  } else {
+    var response = ui.Button.YES;
+  }
+
+  // ユーザが「OK」を選択した場合、リマインダーを設定
+  if (response == ui.Button.YES) {
+    ScriptApp.newTrigger('sendEmails')
+      .timeBased()
+      .at(targetDate)
+      .create();
+    sheet.getRange(rowNum,7,1,3).setValues([["済","",includeNotPaid]]);
+
+    var tournamentSheet = ss.getSheetByName(tournamentName+grades);
+    var count = tournamentSheet.getRange(1,1,1,tournamentSheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+    var formId = tournamentSheet.getRange(1,count + 4).getValue();
+
+    var form = FormApp.openById(formId);
+    var description = 
+    "こちらは" + tournamentName + grades + "の参加表明フォームです。\n" +
+    "該当項目に回答の上、送信してください。\n" +
+    "このフォームの回答期限は【" + tomorrowDateStr + "】の23:59までです。\n" + 
+    "回答が正しく送信されている場合、入力いただいたメールアドレスに回答のコピーが届きますのでご確認ください。"
+    ;
+    form.setDescription(description);
+    var calendarRowNum = findFromCalendar(calendarSheet,tournamentName+grades);
+    Logger.log(calendarRowNum);
+    calendarSheet.getRange(calendarRowNum,4).setValue(Utilities.formatDate(targetDate,"JST","yyyy/MM/dd"));
+    var moshikomiStart = new Date(targetDate.getTime() + 48 * 60 * 60 * 1000);
+    calendarSheet.getRange(calendarRowNum,5).setValue(Utilities.formatDate(moshikomiStart,"JST","yyyy/MM/dd"));
+  } else {
+    // ユーザが「いいえ」を選択した場合、処理を中断
+    return;
+  }
+  ui.alert('完了しました。');
+}
+
+function setPaymentReminders(name="",state=false) {
+  Logger.log("setPaymentReminder " + "name:" + name + "state:" + state);
+  // 現在のシートを取得
+  var ui = SpreadsheetApp.getUi();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if(name === "") {
+    var currentSheet = ss.getActiveSheet();
+  } else {
+    var currentSheet = ss.getSheetByName(name);
+  }
+  var calendarSheet = ss.getSheetByName("カレンダー");
+  var sheetName = currentSheet.getName();
+  const match = sheetName.match(/(.*?)([A-Z]+級)$/);
+  if (sheetName == "フォーム作成" || sheetName == "メール管理") {
+    ui.alert(
+      '注意',
+      'この関数は「フォーム作成」または「メール管理」に適用することはできません。該当する大会のシートを開いた状態で実行してください。',
+      ui.ButtonSet.OK
+    )
+    return;
+  }
+  
+  var count = currentSheet.getRange(1,1,1,currentSheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+  var columnData = currentSheet.getRange(2, count + 4, currentSheet.getLastRow(),1).getValues();
+  var where;
+  for (var i = 0; i < columnData.length; i++) {
+    if (columnData[i][0] === "催促メール設定（「☆大会フォーム」から）") {
+      // 見つかった場合、その一つ下のセルに「設定済み」を書き込む
+      where = i;
+      break;
+    }
+  }
+  var sendDateTime = currentSheet.getRange(where + 3,count + 5).getValue();
+  if(typeof(sendDateTime) === "string" || sendDateTime === ""){
+    if(state === false){
+      ui.alert(
+        '注意',
+        '送信時刻が入力されていない場合は設定することができません。',
+        ui.ButtonSet.OK
+      );
+    }
+    return;
+  }
+  var ifAfter = currentSheet.getRange(where+4,count+5).getValue() === "" ? false : true;
+  Logger.log(ifAfter);  
+  var ifAfterStr = ifAfter ? '後' : '前';
+  if(state === false) {if(ui.alert(
+      '確認',
+      sheetName + 'について、「振り込み済みか」列の欄が空欄になっている人に対して、振込期限のリマインダーメールを' + 
+      Utilities.formatDate(sendDateTime, "JST", "yyyy年MM月dd日　HH時mm分")
+      + 'に送信します。\n' + 
+      'この大会は' + ifAfterStr + '納制です。\n' + 
+      '氏名の間に空白（「　」または「 」）が入っていない場合は送信時刻までに空白を入れてください。\nよろしい場合は「OK」を押してください。「いいえ」を押すと設定されずに戻ります。',
+      ui.ButtonSet.YES_NO
+    ) == ui.Button.NO)return;
+  }
+  // "メール管理"シートを取得
+  var emailSheet = ss.getSheetByName('メール管理');
+  var emailSheetLastRow = emailSheet.getLastRow();
+  var emailData = emailSheet.getRange('A6:H' + emailSheetLastRow).getValues();
+  var paymentRow;
+
+  // 送信日時を探す
+  var isInSheet = sendDateTime === "";
+  Logger.log(isInSheet);
+  if (isInSheet) {
+    for (var i = 0; i < emailData.length; i++) {
+      if (emailData[i][0] + emailData[i][1] === sheetName) {
+        paymentRow = emailData[i];
+        paymentRow[3] = "振込確認"
+        sendDateTime = new Date(emailData[i][2]);
+        var nextDay = new Date(sendDateTime.getTime() + (24 * 60 * 60 * 1000));
+        nextDay.setHours(8);
+        nextDay.setMinutes(0);
+        nextDay.setSeconds(0);
+        sendDateTime = nextDay;
+        var nextDayStr = Utilities.formatDate(nextDay,"JST","yyyy-MM-dd HH:mm:ss");
+        paymentRow[2] = nextDayStr;
+        break;
+      }
+    }
+  } else {
+    paymentRow = [match[1],match[2],sendDateTime,"振込確認","","","","",ifAfter];
+    paymentRow[2] = Utilities.formatDate(sendDateTime,"JST","yyyy-MM-dd HH:mm:ss");
+  }
+  Logger.log(paymentRow);
+  
+  //トリガーを設定
+  ScriptApp.newTrigger('sendEmails')
+      .timeBased()
+      .at(sendDateTime)
+      .create();
+  paymentRow[6] = "済";
+  emailSheet.getRange(emailSheetLastRow+1,1,1,9).setValues([paymentRow]);
+  currentSheet.getRange(where + 3, count + 4).setValue("設定済み");
+  var calendarRowNum = findFromCalendar(calendarSheet,sheetName);
+  calendarSheet.getRange(calendarRowNum,9).setValue(Utilities.formatDate(sendDateTime,"JST","yyyy/MM/dd"));
+  var now = new Date();
+  var now2 = new Date(now.getTime() + 24*60*60*1000);
+  calendarSheet.getRange(calendarRowNum,10).setValue(Utilities.formatDate(now2,"JST","yyyy/MM/dd"));
+}
+
+function makeParticipantList(title, grades, includeNotPaid) {
+  Logger.log("makeParticipantList" + includeNotPaid);
+  // スプレッドシートを開く
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // title+grades の名前でシートを検索して開く
+  var sheet = ss.getSheetByName(title + grades);
+  var count = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+
+  
+  // C, D, G 列のデータを取得
+  var data = sheet.getRange(2,3,sheet.getLastRow()-1,count+1).getValues();
+  Logger.log(data);
+  data = data.filter(function(row) {
+    return row[2] !== "";
+  });
+  Logger.log(data);
+  
+  var participantListByGrade = {};
+  var gradesArray = grades.split("");
+  gradesArray.pop();
+  for (var i = 0; i < gradesArray.length; i++) {
+    var grade = gradesArray[i] + "級";
+    participantListByGrade[grade] = [];
+  }
+
+  var participantsByLastName = {};
+  data.forEach(function(row) {
+    var fullName = row[0].replace("　", " ");
+    var lastName = fullName.split(" ")[0];
+
+    if (!participantsByLastName[lastName]) {
+      participantsByLastName[lastName] = [];
+    }
+
+    participantsByLastName[lastName].push(fullName);
+  });
+  Logger.log(participantsByLastName);
+  
+  var paidList = []; // 振り込み者のリスト
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var name = row[0]; // C列: 氏名
+    var gradeStr = row[2]; // D列: 級（"A"のような形）
+    //Logger.log("gradeStr: " + gradeStr);
+    var paidStatus = row[row.length - 1]; 
+    
+    var isPaid = paidStatus.trim() === "済";
+    name = name.replace("　"," ");
+
+    Logger.log(name);
+    //var lastName = name.split(/\s|　/)[0];
+    Logger.log(isPaid);
+    
+    //if (isPaid && !paidList.includes(name) && isPaid !== "催促メールを送信しました。") {
+    // 変更 2024/12/2
+    if (isPaid && !paidList.includes(name)) {
+    
+      Logger.log("あ");
+      paidList.push(name);
+    }
+    
+    // 級ごとに名前を振り分け
+    var individualGrades = gradeStr.replace("級", "").split("");
+
+    for (var j = 0; j < individualGrades.length; j++) {
+      var grade = individualGrades[j] + "級";
+      if (participantListByGrade[grade] && !participantListByGrade[grade].includes(name)) {
+        participantListByGrade[grade].push(name);
+      }
+    }
+  }
+  participantListByGrade = updateParticipantNames(participantListByGrade,participantsByLastName);
+  paidList = updatePaidListNames(paidList,participantsByLastName);
+  Logger.log(participantListByGrade);
+  var resultStr = "";
+  var totalApplicants = 0;
+  
+  for (var grade in participantListByGrade) {
+    totalApplicants += participantListByGrade[grade].length;
+  }
+  
+  if (totalApplicants === 0) {
+    resultStr = "現在、どなたからも申し込みは頂いておりません。\n";
+  } else {
+    resultStr += "現在、以下の方々からご連絡を頂いております。(敬称略)\n";
+    for (var grade in participantListByGrade) {
+      resultStr += grade + "：";
+      if (participantListByGrade[grade].length > 0) {
+        resultStr += participantListByGrade[grade].join("、") + "\n";
+      } else {
+        resultStr += "\n";
+      }
+    }
+    if (includeNotPaid && paidList.length > 0) {
+      Logger.log(paidList);
+      resultStr += "\nそのうち、振込の完了を確認できている方：\n" + paidList.join("、") + "\n\n確認漏れがございましたら申し訳ありません。\n明日までに振込を確認できない場合はキャンセルとせざるを得ない場合がありますので、ご了承ください。\nご相談等がある場合は、このメールに返信するか、会長 / 副会長までご連絡ください。\n";
+    }
+  }
+  
+  return resultStr;
+}

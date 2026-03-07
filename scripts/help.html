@@ -1,0 +1,72 @@
+<script>
+// ------------------------------------------------------------
+// ヘルプ（掲示板スプレッドシートの「ヘルプ」シートから取得）
+// ------------------------------------------------------------
+let _helpContent = null; // キャッシュ
+
+function showHelpForCurrentPage() {
+  const activeBtn = document.querySelector('nav button.active');
+  const page = activeBtn ? activeBtn.dataset.page : 'calendar';
+
+  if (_helpContent) {
+    _renderHelpModal(page, _helpContent);
+    document.getElementById('help-modal').style.display = 'flex';
+    return;
+  }
+
+  // 未ロードならサーバーから取得
+  document.getElementById('help-modal-title').textContent = 'ヘルプ';
+  document.getElementById('help-modal-body').innerHTML =
+    '<div class="status"><span class="spinner"></span> 読み込み中...</div>';
+  document.getElementById('help-modal').style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.error) {
+        document.getElementById('help-modal-body').innerHTML =
+          `<p style="color:#e74c3c;font-size:0.9rem;">エラー: ${escHtml(r.error)}</p>`;
+        return;
+      }
+      _helpContent = r.content;
+      _renderHelpModal(page, _helpContent);
+    })
+    .withFailureHandler(e => {
+      document.getElementById('help-modal-body').innerHTML =
+        `<p style="color:#e74c3c;font-size:0.9rem;">エラー: ${escHtml(e.message)}</p>`;
+    })
+    .getHelpContent();
+}
+
+function _renderHelpModal(page, content) {
+  const c = content[page];
+  document.getElementById('help-modal-title').textContent =
+    (c ? c.title : page) + '　ヘルプ';
+
+  const body = document.getElementById('help-modal-body');
+  if (!c || !c.sections.length) {
+    body.innerHTML = '<p style="color:#aaa;font-size:0.9rem;">このページのヘルプはまだ準備されていません。</p>';
+  } else {
+    body.innerHTML = c.sections.map(s => `
+      <div class="help-section">
+        ${s.heading ? `<div class="help-heading">${escHtml(s.heading)}</div>` : ''}
+        <ul class="help-list">
+          ${s.items.map(item => `<li>${escHtml(item)}</li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+  }
+}
+
+function closeHelpModal() {
+  document.getElementById('help-modal').style.display = 'none';
+}
+
+function onHelpOverlayClick(e) {
+  if (e.target === document.getElementById('help-modal')) closeHelpModal();
+}
+
+function showHelpBtn() {
+  document.getElementById('help-btn').style.display = 'inline-flex';
+}
+</script>

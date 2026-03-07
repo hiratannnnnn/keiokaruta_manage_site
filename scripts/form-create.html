@@ -1,0 +1,370 @@
+<script>
+// ------------------------------------------------------------
+// フォーム作成ページ
+// ------------------------------------------------------------
+
+// 質問データ（mutable）。pinnedはtrueで削除不可・pinned以外はユーザー追加行
+let fcQuestions = [
+  { name: '氏名（名字と名前の間に空白を含めてください。）',                       inc: 1, req: 1, editable: false, pinned: true  },
+  { name: 'ふりがな',                                                              inc: 1, req: 1, editable: false, pinned: true  },
+  { name: '級',                                                                    inc: 1, req: 1, editable: false, pinned: true  },
+  { name: '段位',                                                                  inc: 1, req: 1, editable: false, pinned: true  },
+  { name: '希望日',                                                                inc: 0, req: 0, editable: true,  pinned: false },
+  { name: 'C級：過去一年の入賞歴　DE級：過去開催の鳳玉大会DE級での 3 位入賞経験', inc: 0, req: 0, editable: true,  pinned: false },
+  { name: '公認大会出場回数',                                                      inc: 1, req: 0, editable: false, pinned: true  },
+  { name: 'その他',                                                                inc: 1, req: 0, editable: false, pinned: true  }, // 常に最後
+];
+
+// DOM から現在値を fcQuestions に同期する（再描画前に呼ぶ）
+function fcSyncFromDom() {
+  document.querySelectorAll('[data-fc-inc]').forEach(el => {
+    const i = parseInt(el.dataset.fcInc);
+    if (fcQuestions[i]) fcQuestions[i].inc = el.checked ? 1 : 0;
+  });
+  document.querySelectorAll('[data-fc-req]').forEach(el => {
+    const i = parseInt(el.dataset.fcReq);
+    if (fcQuestions[i]) fcQuestions[i].req = el.checked ? 1 : 0;
+  });
+  document.querySelectorAll('[data-fc-name]').forEach(el => {
+    const i = parseInt(el.dataset.fcName);
+    if (fcQuestions[i] && fcQuestions[i].editable) fcQuestions[i].name = el.value;
+  });
+}
+
+// 質問テーブルを再描画する
+function fcRenderQuestionsTable() {
+  const tbody = document.getElementById('fc-questions-tbody');
+  if (!tbody) return;
+  let html = '';
+  const last = fcQuestions.length - 1;
+  fcQuestions.forEach((q, i) => {
+    // 「＋」行は公認大会出場回数の直上にのみ表示
+    if (q.name.includes('公認大会出場回数')) {
+      html += `<tr class="fc-add-row">
+        <td colspan="4"><button type="button" class="fc-add-btn" onclick="fcAddQuestion(${i})">＋</button></td>
+      </tr>`;
+    }
+    const nameCell = q.editable
+      ? `<td><input type="text" class="fc-q-name-input" data-fc-name="${i}" value="${escHtml(q.name)}" oninput="fcRenderPreview()"></td>`
+      : `<td style="font-size:0.85rem;">${escHtml(q.name)}</td>`;
+    const delCell = q.pinned
+      ? `<td></td>`
+      : `<td style="text-align:center;"><button type="button" class="fc-del-q-btn" onclick="fcRemoveQuestion(${i})" title="削除">✕</button></td>`;
+    const trStyle = q.inc ? ' style="border-left:3px solid #3498db;background:#f0f7ff;"' : '';
+    html += `<tr${trStyle}>
+      ${nameCell}
+      <td style="text-align:center;">
+        <input type="checkbox" data-fc-inc="${i}" ${q.inc ? 'checked' : ''} onchange="fcOnIncludeChange(${i})">
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" data-fc-req="${i}" ${q.req ? 'checked' : ''} ${q.inc ? '' : 'disabled'} onchange="fcRenderPreview()">
+      </td>
+      ${delCell}
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function fcAddQuestion(insertBeforeIdx) {
+  fcSyncFromDom();
+  fcQuestions.splice(insertBeforeIdx, 0, { name: '', inc: 1, req: 0, editable: true, pinned: false });
+  fcRenderQuestionsTable();
+  // 新しく挿入されたinputにフォーカス
+  const input = document.querySelector(`[data-fc-name="${insertBeforeIdx}"]`);
+  if (input) input.focus();
+  fcRenderPreview();
+}
+
+function fcRemoveQuestion(idx) {
+  fcSyncFromDom();
+  fcQuestions.splice(idx, 1);
+  fcRenderQuestionsTable();
+  fcRenderPreview();
+}
+
+function initFormCreate() {
+  fcRenderQuestionsTable();
+
+  const applyStartEl = document.getElementById('fc-apply-start');
+  if (applyStartEl) applyStartEl.value = new Date().toISOString().slice(0, 10);
+
+  document.getElementById('fc-title')?.addEventListener('input', fcRenderPreview);
+  applyStartEl?.addEventListener('change', fcRenderPreview);
+
+  fcRenderPreview();
+}
+
+function fcOnIncludeChange(i) {
+  fcSyncFromDom();
+  fcRenderQuestionsTable();
+  fcRenderPreview();
+}
+
+function fcToggleGrade(btn) {
+  btn.classList.toggle('active');
+  fcRenderPreview();
+}
+
+function fcGetGrades() {
+  const bare = ['A', 'B', 'C', 'D', 'E']
+    .filter(g => document.querySelector('.fc-grade-btn[data-grade="' + g + '"]')?.classList.contains('active'))
+    .join('');
+  return bare ? bare + '級' : '';
+}
+
+function fcGetQuestionsData() {
+  fcSyncFromDom();
+  return fcQuestions.map(q => [q.name, q.inc, q.req]);
+}
+
+function fcBuildConfirmText(title, grades, questionsData, moshiDeadStr, huriDeadStr) {
+  const questionsText = questionsData
+    .filter(r => r[1] === 1)
+    .map(r => (r[2] === 1 ? '【必須】' : '（任意）') + r[0])
+    .join('、\n');
+  return '「' + title + grades + '　参加表明フォーム」という名称のフォームを作成します。\n' +
+    '本申込期限が ' + moshiDeadStr + '、\n' +
+    '本振込期限が ' + (huriDeadStr || '未定') + ' です。\n\n' +
+    '質問項目は、\n' + questionsText + '\n\n' +
+    'よろしければ「OK」を押してください。';
+}
+
+let _fcLastResult = null;
+
+// ------------------------------------------------------------
+// リアルタイムプレビュー
+// ------------------------------------------------------------
+function fcRenderPreview() {
+  const container = document.getElementById('fc-preview-container');
+  if (!container) return;
+
+  const rawTitle = document.getElementById('fc-title')?.value?.trim() || '';
+  const grades   = fcGetGrades();
+  const applyStartStr = document.getElementById('fc-apply-start')?.value || '';
+  const questionsData = fcGetQuestionsData();
+
+  const displayTitle = (rawTitle || '大会名') + grades + '\u3000参加表明フォーム';
+  const displayDesc  =
+    'こちらは' + (rawTitle || '大会名') + grades + 'の参加表明フォームです。\n' +
+    '該当項目に回答の上、送信してください。\n' +
+    '回答が正しく送信されている場合、入力いただいたメールアドレスに回答のコピーが届きますのでご確認ください。';
+
+  // 公認大会出場回数の動的タイトル計算
+  let kouninTitle = '公認大会出場回数';
+  if (applyStartStr) {
+    const d = new Date(applyStartStr);
+    const m = d.getMonth(); // 0-indexed
+    const y = d.getFullYear();
+    const fy = (m + 1) < 4 ? y - 1 : y;
+    const startLabel = fy + '年4月1日';
+    const endLabel   = y + '年' + (m + 1) + '月' + d.getDate() + '日';
+    kouninTitle = fy + '年度公認大会出場回数（' + startLabel + '～' + endLabel + '）';
+  }
+
+  const gradeSet = grades ? grades.replace('級', '').split('') : [];
+  const DANKAI   = ['無段', '初段', '二段', '三段', '四段', '五段', '六段', '七段', '八段'];
+
+  // 各質問カードを生成
+  let cardsHtml = '';
+  for (let i = 0; i < questionsData.length; i++) {
+    const [name, inc, req] = questionsData[i];
+    if (!inc) continue;
+
+    const isKounin = name.includes('公認大会出場回数');
+    const actualTitle = isKounin ? kouninTitle : name;
+    const reqMark = req ? '<span class="fc-pv-required">*</span>' : '';
+    let bodyHtml = '';
+
+    if (name === '級') {
+      bodyHtml = gradeSet.map(g =>
+        `<div class="fc-pv-radio"><span class="fc-pv-radio-dot"></span>${escHtml(g)}</div>`
+      ).join('');
+    } else if (name === '段位') {
+      bodyHtml = DANKAI.map(s =>
+        `<div class="fc-pv-radio"><span class="fc-pv-radio-dot"></span>${s}</div>`
+      ).join('');
+    } else if (isKounin) {
+      bodyHtml =
+        '<div class="fc-pv-help">今年度の「申込開始日時点で、出場した、または出場することが分かっている公認大会」の回数をお書きください。<br>' +
+        '現在慶應かるた会botの出場回数確認は機能していません。自己管理をお願いします。</div>' +
+        '<div class="fc-pv-text-line"></div>';
+    } else if (name.includes('氏名')) {
+      bodyHtml =
+        '<div class="fc-pv-help">半角または全角スペースを含めてください。</div>' +
+        '<div class="fc-pv-text-line"></div>';
+    } else {
+      bodyHtml = '<div class="fc-pv-text-line"></div>';
+    }
+
+    cardsHtml += `<div class="fc-pv-card">
+      <div class="fc-pv-q-title">${escHtml(actualTitle)}${reqMark}</div>
+      ${bodyHtml}
+    </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="fc-pv-wrap">
+      <div class="fc-pv-top-bar"></div>
+      <div class="fc-pv-header-card">
+        <div class="fc-pv-form-title">${escHtml(displayTitle)}</div>
+        <div class="fc-pv-form-desc">${escHtml(displayDesc)}</div>
+      </div>
+      <div class="fc-pv-card">
+        <div class="fc-pv-email-note">メールアドレス <span class="fc-pv-required">*</span></div>
+        <div class="fc-pv-text-line"></div>
+      </div>
+      ${cardsHtml}
+    </div>`;
+}
+
+// ------------------------------------------------------------
+// プログレスモーダル
+// ------------------------------------------------------------
+const FC_PROGRESS_STAGES = [
+  { pct: 5,  msg: 'フォームテンプレートをコピー中...' },
+  { pct: 18, msg: '質問項目を追加中...' },
+  { pct: 35, msg: '大会情報をカレンダーシートに記録中...' },
+  { pct: 50, msg: '申込者管理シートを作成中...' },
+  { pct: 65, msg: 'メール管理シートに登録中...' },
+  { pct: 80, msg: '設定を書き込み中...' },
+  { pct: 93, msg: 'サーバーの応答を待っています...' },
+];
+
+let _fcProgTimer  = null;
+let _fcProgStage  = 0;
+let _fcProgPct    = 0;
+
+function fcShowProgressModal() {
+  _fcProgStage = 0;
+  _fcProgPct   = 0;
+  fcUpdateProgressUI(0, 'フォーム作成を開始しています...');
+  const overlay = document.getElementById('fc-progress-overlay');
+  overlay.style.display = 'flex';
+
+  // 各ステージを時間差で進める
+  let delay = 0;
+  FC_PROGRESS_STAGES.forEach((stage, idx) => {
+    delay += (idx === 0 ? 300 : 1800);
+    _fcProgTimer = setTimeout(() => {
+      _fcProgStage = idx;
+      fcUpdateProgressUI(stage.pct, stage.msg);
+    }, delay);
+  });
+}
+
+function fcUpdateProgressUI(pct, msg) {
+  _fcProgPct = pct;
+  document.getElementById('fc-prog-bar').style.width = pct + '%';
+  document.getElementById('fc-prog-pct').textContent  = pct + '%';
+  document.getElementById('fc-prog-message').textContent = msg;
+}
+
+function fcCompleteProgress(tournamentName) {
+  clearTimeout(_fcProgTimer);
+  fcUpdateProgressUI(100, '完了！');
+  setTimeout(() => {
+    fcHideProgressModal();
+    showCompletionModal(
+      '✅ フォームを作成しました',
+      `<p>「${escHtml(tournamentName)}　参加表明フォーム」を作成しました。</p>` +
+      `<p class="completion-next-label">次のステップ</p>` +
+      `<ul class="completion-next-list">` +
+      `<li>大会詳細ページで内容を確認できます</li>` +
+      `<li>続けて案内メールを作成しましょう</li>` +
+      `</ul>`,
+      [
+        { label: '閉じる', action: null },
+        { label: '大会詳細を開く', action: () => fcGoToDetail(tournamentName) },
+        { label: '案内メールを作成する →', action: fcGoToMakeEmail, primary: true },
+      ]
+    );
+  }, 600);
+}
+
+function fcGoToMakeEmail() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-page="make-email"]').classList.add('active');
+  document.getElementById('page-make-email').classList.add('active');
+  initMakeEmail(_fcLastResult);
+}
+
+function fcGoToDetail(tournamentName) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-page="calendar"]').classList.add('active');
+  document.getElementById('page-calendar').classList.add('active');
+  calendarLoaded = false;
+  openTournamentDetail(tournamentName);
+}
+
+function fcHideProgressModal() {
+  clearTimeout(_fcProgTimer);
+  document.getElementById('fc-progress-overlay').style.display = 'none';
+}
+
+function submitFormCreate() {
+  const title         = document.getElementById('fc-title').value.trim();
+  const grades        = fcGetGrades();
+  const applyStartStr = document.getElementById('fc-apply-start').value;
+  const applyDeadStr  = document.getElementById('fc-apply-deadline').value;
+  const lotteryStr    = document.getElementById('fc-lottery').value;
+  const payDeadStr    = document.getElementById('fc-pay-deadline').value;
+  const isKoen        = document.getElementById('fc-is-koen').checked;
+  const questionsData = fcGetQuestionsData();
+
+  const statusEl = document.getElementById('fc-status');
+  statusEl.textContent = '';
+  statusEl.className   = 'fc-status';
+
+  if (!title)         { statusEl.textContent = '大会名を入力してください'; statusEl.className = 'fc-status error'; return; }
+  if (!grades)        { statusEl.textContent = '少なくとも1つの級を選択してください'; statusEl.className = 'fc-status error'; return; }
+  if (!applyStartStr) { statusEl.textContent = '申込開始日を入力してください'; statusEl.className = 'fc-status error'; return; }
+  if (!applyDeadStr)  { statusEl.textContent = '本申込期限を入力してください'; statusEl.className = 'fc-status error'; return; }
+
+  const confirmText = fcBuildConfirmText(title, grades, questionsData, applyDeadStr, payDeadStr);
+
+  showConfirmModal(confirmText, () => {
+    fcShowProgressModal();
+
+    google.script.run
+      .withSuccessHandler(res => {
+        const r = JSON.parse(res);
+        if (r.error) {
+          fcHideProgressModal();
+          statusEl.textContent = 'エラー: ' + r.error;
+          statusEl.className   = 'fc-status error';
+          return;
+        }
+        _fcLastResult = {
+          title, grades,
+          applyStart:    applyStartStr,
+          applyDeadline: applyDeadStr,
+          lottery:       lotteryStr,
+          payDeadline:   payDeadStr,
+          formUrl:       r.formUrl,
+          questionsData,
+        };
+        fcCompleteProgress(title + grades);
+      })
+      .withFailureHandler(e => {
+        fcHideProgressModal();
+        statusEl.textContent = 'エラー: ' + e.message;
+        statusEl.className   = 'fc-status error';
+      })
+      .createFormFromWeb(JSON.stringify({
+        title,
+        grades,
+        questionsData,
+        moshikomiStartStr: applyStartStr,
+        moshiDeadStr:      applyDeadStr,
+        raffleStr:         lotteryStr,
+        huriDeadStr:       payDeadStr,
+        isKoen,
+      }));
+  });
+}
+
+// ページロード時に質問テーブルを初期化（リスナー登録・初回プレビュー描画も含む）
+initFormCreate();
+</script>

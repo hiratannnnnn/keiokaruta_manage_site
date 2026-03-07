@@ -1,0 +1,116 @@
+<!-- ========== 出納管理・残高記録 ========== -->
+<div id="page-suitou" class="page">
+  <div class="list-page">
+    <div class="page-title">出納管理</div>
+
+    <div class="su-toolbar">
+      <button class="su-update-btn" onclick="suUpdate()">シートから再計算</button>
+      <span id="su-update-status" class="su-update-status"></span>
+      <button class="su-add-btn" onclick="suShowAddModal()">＋ 追加</button>
+    </div>
+
+    <div class="su-columns">
+      <!-- 左：出納管理 -->
+      <div class="su-section su-col-tx">
+        <div class="su-section-title">トランザクション一覧</div>
+        <div id="su-tx-status" class="status" style="display:none;"></div>
+        <div id="su-tx-table-wrap" class="mm-table-wrapper" style="display:none;">
+          <table class="mm-table">
+            <thead>
+              <tr>
+                <th>氏名</th>
+                <th>金額</th>
+                <th>事由</th>
+                <th>最終更新</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="su-tx-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 右：残高記録 -->
+      <div class="su-section su-col-balance">
+        <div class="su-section-title">残高記録</div>
+        <div id="su-balance-status" class="status" style="display:none;"></div>
+        <div id="su-balance-table-wrap" class="mm-table-wrapper" style="display:none;">
+          <table class="mm-table su-balance-table">
+            <thead>
+              <tr>
+                <th>氏名</th>
+                <th>残高</th>
+                <th>大会</th>
+              </tr>
+            </thead>
+            <tbody id="su-balance-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== 確認モーダル ===== -->
+<div id="su-confirm-modal" class="mm-modal-overlay" style="display:none;" onclick="suCloseConfirm(event)">
+  <div class="mm-modal-box" style="width:360px;">
+    <div class="mm-modal-header">
+      <span class="mm-modal-title" id="su-confirm-title">確認</span>
+      <button class="mm-modal-close" onclick="suCloseConfirm()">✕</button>
+    </div>
+    <div class="mm-modal-body">
+      <p id="su-confirm-message" style="font-size:0.9rem;line-height:1.6;white-space:pre-wrap;"></p>
+    </div>
+    <div class="mm-modal-footer">
+      <button class="mm-btn-secondary" onclick="suCloseConfirm()">キャンセル</button>
+      <button class="mm-btn-primary" id="su-confirm-ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 追加モーダル ===== -->
+<div id="su-add-modal" class="mm-modal-overlay" style="display:none;" onclick="suCloseAddModal(event)">
+  <div class="mm-modal-box" style="width:460px;">
+    <div class="mm-modal-header">
+      <span class="mm-modal-title">追加</span>
+      <button class="mm-modal-close" onclick="suCloseAddModal()">✕</button>
+    </div>
+    <div class="mm-modal-body" style="gap:14px;">
+      <div class="fc-field-row">
+        <label class="su-add-label">氏名 <span class="fc-required-mark">*</span></label>
+        <div class="su-name-suggest-wrap">
+          <input type="text" id="su-add-name" class="fc-text-input" placeholder="名前で絞り込み..."
+                 oninput="suFilterNameSuggestions()" onblur="suHideNameSuggestions()">
+          <ul id="su-name-suggest-list" class="su-suggest-list" style="display:none;"></ul>
+        </div>
+      </div>
+      <div class="fc-field-row">
+        <label class="su-add-label">事由 <span class="fc-required-mark">*</span></label>
+        <select id="su-add-reason" class="fc-text-input su-add-select">
+          <option value="">読み込み中...</option>
+        </select>
+      </div>
+      <div class="fc-field-row">
+        <label class="su-add-label">方向 <span class="fc-required-mark">*</span></label>
+        <div class="su-direction-group">
+          <label class="su-direction-label">
+            <input type="radio" name="su-direction" value="in" checked> 選手→慶應（＋）
+          </label>
+          <label class="su-direction-label">
+            <input type="radio" name="su-direction" value="out"> 慶應→大会（－）
+          </label>
+        </div>
+      </div>
+      <div class="fc-field-row">
+        <label class="su-add-label">金額 <span class="fc-required-mark">*</span></label>
+        <input type="number" id="su-add-amount" class="fc-text-input" min="0" step="100" value="2500">
+      </div>
+    </div>
+    <div id="su-add-error" style="display:none;color:#e74c3c;font-size:0.85rem;padding:0 4px;"></div>
+    <div class="mm-modal-footer">
+      <button class="mm-btn-secondary" onclick="suCloseAddModal()">キャンセル</button>
+      <button class="mm-btn-primary" onclick="suSubmitAdd()">追加</button>
+    </div>
+  </div>
+</div>

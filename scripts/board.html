@@ -1,0 +1,171 @@
+<script>
+// ------------------------------------------------------------
+// 掲示板
+// ------------------------------------------------------------
+let _boardPosts = [];
+
+function initBoard() {
+  _boardPosts = [];
+  document.getElementById('board-feed').innerHTML = '';
+  document.getElementById('board-status').style.display = 'block';
+  document.getElementById('board-status').className = 'status';
+  document.getElementById('board-status').innerHTML = '<span class="spinner"></span> 読み込み中...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      if (r.error) {
+        document.getElementById('board-status').className = 'status error';
+        document.getElementById('board-status').textContent = 'エラー: ' + r.error;
+        return;
+      }
+      _boardPosts = r.posts;
+      boardRender();
+    })
+    .withFailureHandler(e => {
+      document.getElementById('board-status').className = 'status error';
+      document.getElementById('board-status').textContent = 'エラー: ' + e.message;
+    })
+    .getBoardPosts();
+}
+
+function boardRender() {
+  const statusEl = document.getElementById('board-status');
+  const feedEl   = document.getElementById('board-feed');
+
+  if (!_boardPosts.length) {
+    statusEl.style.display = 'block';
+    statusEl.className = 'status';
+    statusEl.textContent = 'まだ投稿がありません。';
+    feedEl.innerHTML = '';
+    return;
+  }
+
+  statusEl.style.display = 'none';
+  feedEl.innerHTML = _boardPosts.map(p => boardPostHtml(p)).join('');
+}
+
+const BOARD_ROLE_CLASS = {
+  '申込係':   'board-role-apply',
+  '振込係':   'board-role-payment',
+  '案内係':   'board-role-announce',
+  '会長副会長':'board-role-president',
+  '会長':     'board-role-president',
+  '副会長':   'board-role-president',
+};
+
+function boardPostHtml(p) {
+  const roleClass = BOARD_ROLE_CLASS[p.role] || 'board-role-other';
+  const canDelete = currentRole === '会長副会長' || currentRole === p.role;
+  const delBtn = canDelete
+    ? `<button class="board-del-btn" onclick="boardDelete('${p.id}', this)" title="削除">✕</button>`
+    : '';
+  const displayName = p.name ? p.name + '（' + p.role + '）' : p.role;
+  return `<div class="board-card" id="board-post-${p.id}">
+    <div class="board-card-header">
+      <span class="board-role-badge ${roleClass}">${escHtml(p.role)}</span>
+      <span class="board-poster">${escHtml(displayName)}</span>
+      <span class="board-datetime">${escHtml(p.datetime)}</span>
+      ${delBtn}
+    </div>
+    <div class="board-content">${escHtml(p.content).replace(/\n/g, '<br>')}</div>
+  </div>`;
+}
+
+function boardToggleTournamentPicker() {
+  const picker = document.getElementById('board-tournament-picker');
+  if (picker.style.display !== 'none') {
+    picker.style.display = 'none';
+    return;
+  }
+  if (!allTournaments || !allTournaments.length) {
+    picker.innerHTML = '<div class="board-picker-empty">大会データがありません</div>';
+    picker.style.display = 'block';
+    return;
+  }
+  picker.innerHTML = allTournaments.map(t =>
+    `<div class="board-picker-item" onclick="boardInsertTournament('${t.name.replace(/'/g, "\\'")}')">
+      ${escHtml(t.name)}
+    </div>`
+  ).join('');
+  picker.style.display = 'block';
+}
+
+function boardInsertTournament(name) {
+  const ta  = document.getElementById('board-input');
+  const pos = ta.selectionStart;
+  const val = ta.value;
+  const insert = '【' + name + '】';
+  ta.value = val.slice(0, pos) + insert + val.slice(pos);
+  ta.selectionStart = ta.selectionEnd = pos + insert.length;
+  ta.focus();
+  document.getElementById('board-tournament-picker').style.display = 'none';
+  boardOnInput();
+}
+
+// ピッカー外クリックで閉じる
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('board-insert-wrap') ||
+               e.target.closest('.board-insert-wrap');
+  if (!e.target.closest('.board-insert-wrap')) {
+    const picker = document.getElementById('board-tournament-picker');
+    if (picker) picker.style.display = 'none';
+  }
+});
+
+function boardOnInput() {
+  const val = document.getElementById('board-input').value;
+  document.getElementById('board-char-count').textContent = val.length + ' / 500';
+  document.getElementById('board-submit-btn').disabled = val.trim().length === 0;
+}
+
+function boardSubmit() {
+  const content = document.getElementById('board-input').value.trim();
+  if (!content) return;
+
+  const btn = document.getElementById('board-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '投稿中...';
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.textContent = '投稿する';
+      const r = JSON.parse(res);
+      if (r.error) {
+        showAlertModal('エラー: ' + r.error);
+        btn.disabled = false;
+        return;
+      }
+      // 楽観的UI: 先頭に追加
+      const newPost = { id: r.id, datetime: r.datetime, role: r.role, name: r.name, content };
+      _boardPosts.unshift(newPost);
+      document.getElementById('board-input').value = '';
+      document.getElementById('board-char-count').textContent = '0 / 500';
+      boardRender();
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      btn.textContent = '投稿する';
+      showAlertModal('エラー: ' + e.message);
+    })
+    .addBoardPost(JSON.stringify({ content, role: currentRole }));
+}
+
+function boardDelete(postId, btn) {
+  showConfirmModal('この投稿を削除しますか？', () => {
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(res => {
+        const r = JSON.parse(res);
+        if (r.error) { showAlertModal('エラー: ' + r.error); btn.disabled = false; return; }
+        _boardPosts = _boardPosts.filter(p => p.id !== postId);
+        boardRender();
+      })
+      .withFailureHandler(e => {
+        btn.disabled = false;
+        showAlertModal('エラー: ' + e.message);
+      })
+      .deleteBoardPost(postId);
+  });
+}
+</script>

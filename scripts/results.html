@@ -1,0 +1,48 @@
+<script>
+// ------------------------------------------------------------
+// 大会結果
+// ------------------------------------------------------------
+function searchResults() {
+  const name = document.getElementById('result-name').value.trim();
+  if (!name) { setStatus('results', 'empty', '選手名を入力してください'); return; }
+  const date = document.getElementById('result-date').value;
+  setStatus('results', 'loading');
+  google.script.run
+    .withSuccessHandler(onResultsLoaded)
+    .withFailureHandler(err => setStatus('results', 'error', err.message))
+    .getTournamentResults(name, date);
+}
+
+function onResultsLoaded(raw) {
+  const res  = JSON.parse(raw);
+  const body = res.body ?? '';
+  const statusEl = document.getElementById('results-status');
+
+  statusEl.style.display = 'block';
+  statusEl.className = 'status';
+  statusEl.innerHTML =
+    `<pre style="text-align:left;white-space:pre-wrap;word-break:break-all;font-size:0.8rem;">` +
+    `URL: ${escHtml(res.url ?? '—')}\nHTTP: ${res.status ?? '—'}\nBody: ${escHtml(body)}</pre>`;
+
+  if (res.error) return;
+
+  try {
+    const results = JSON.parse(body);
+    if (!Array.isArray(results) || !results.length) return;
+
+    document.getElementById('results-tbody').innerHTML =
+      results.map(r =>
+        `<tr><td>${r.date ?? ''}</td><td>${r.location ?? ''}</td><td>${r.raffleDate ?? ''}</td></tr>`
+      ).join('');
+
+    document.getElementById('results-table').style.display = 'table';
+    const badge = document.getElementById('result-count');
+    badge.textContent = results.length + ' 件';
+    badge.style.display = 'inline-block';
+  } catch (e) { /* bodyが配列でなければテーブルは出さない */ }
+}
+
+document.getElementById('result-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchResults();
+});
+</script>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>慶應かるた会 管理システム</title>
+  <?!= include('style') ?>
+</head>
+<body>
+
+<!-- ========== ログイン画面 ========== -->
+<div id="login-overlay" class="login-overlay">
+  <div class="login-box">
+    <div class="login-title">慶應かるた会 管理システム</div>
+    <div class="login-role-group">
+      <button class="login-role-btn active" data-role="申込係" onclick="selectLoginRole(this)">申込係</button>
+      <button class="login-role-btn" data-role="振込係" onclick="selectLoginRole(this)">振込係</button>
+      <button class="login-role-btn" data-role="案内係" onclick="selectLoginRole(this)">案内係</button>
+      <button class="login-role-btn" data-role="会長副会長" onclick="selectLoginRole(this)">会長副会長</button>
+    </div>
+    <input type="password" id="login-pw" class="login-pw-input" placeholder="パスワード"
+           onkeydown="if(event.key==='Enter') submitLogin()">
+    <button class="login-submit-btn" onclick="submitLogin()">ログイン</button>
+    <button id="login-cancel-btn" class="login-cancel-btn" onclick="cancelRelogin()" style="display:none;">キャンセル</button>
+    <div id="login-error" class="login-error"></div>
+    <button id="login-logout-btn" class="login-logout-btn" onclick="clearLoginCache()" style="display:none;">保存済みログイン情報をクリア</button>
+  </div>
+</div>
+
+<div class="sticky-top">
+  <header>
+    <div class="header-inner">
+      <h1>慶應かるた会 管理システム</h1>
+      <span id="current-role-badge" class="current-role-badge" style="display:none;"
+          title="クリックしてログインし直す" onclick="showReloginOverlay()"></span>
+      <button id="help-btn" class="help-btn" onclick="showHelpForCurrentPage()" style="display:none;" title="ヘルプ">？</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" data-page="calendar">大会一覧</button>
+    <button data-page="player">選手大会照会</button>
+    <button data-page="form-create" id="nav-form-create-btn" style="display:none;">フォーム作成</button>
+    <button data-page="make-email" id="nav-make-email-btn" style="display:none;">案内作成</button>
+    <button data-page="mail-management" id="nav-mail-management-btn" style="display:none;">メール管理</button>
+    <button data-page="suitou" id="nav-suitou-btn" style="display:none;">出納管理</button>
+    <button data-page="board" id="nav-board-btn">掲示板</button>
+    <button data-page="settings" id="nav-settings-btn" style="display:none;">設定</button>
+  </nav>
+</div>
+
+<?!= include('pages/player') ?>
+<?!= include('pages/calendar') ?>
+<?!= include('pages/form-create') ?>
+<?!= include('pages/make-email') ?>
+<?!= include('pages/mail-management') ?>
+<?!= include('pages/suitou') ?>
+<?!= include('pages/board') ?>
+<?!= include('pages/settings') ?>
+
+<!-- ========== 完了モーダル ========== -->
+<div id="completion-modal" class="modal-overlay" style="display:none;" onclick="onCompletionOverlayClick(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="completion-modal-title"></span>
+      <button class="modal-close-btn" onclick="closeCompletionModal()">✕</button>
+    </div>
+    <div class="modal-body" id="completion-modal-body" style="flex-direction:column;gap:8px;"></div>
+    <div class="modal-footer" id="completion-modal-footer"></div>
+  </div>
+</div>
+
+<!-- ========== ヘルプモーダル ========== -->
+<div id="help-modal" class="modal-overlay" style="display:none;" onclick="onHelpOverlayClick(event)">
+  <div class="modal-box help-box">
+    <div class="modal-header">
+      <span id="help-modal-title">ヘルプ</span>
+      <button class="modal-close-btn" onclick="closeHelpModal()">✕</button>
+    </div>
+    <div class="modal-body" id="help-modal-body"></div>
+  </div>
+</div>
+
+<?!= include('scripts/utils') ?>
+<?!= include('scripts/members') ?>
+<?!= include('scripts/results') ?>
+<?!= include('scripts/calendar') ?>
+<?!= include('scripts/form-create') ?>
+<?!= include('scripts/make-email') ?>
+<?!= include('scripts/mail-management') ?>
+<?!= include('scripts/suitou') ?>
+<?!= include('scripts/help') ?>
+<?!= include('scripts/board') ?>
+<?!= include('scripts/settings') ?>
+
+</body>
+</html>

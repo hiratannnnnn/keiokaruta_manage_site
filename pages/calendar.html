@@ -1,0 +1,278 @@
+<!-- ========== 大会一覧 ========== -->
+<div id="page-calendar" class="page active">
+  <div class="list-page">
+
+    <!-- 一覧ビュー -->
+    <div id="calendar-list-view">
+      <div class="page-title">
+        大会一覧
+        <span id="calendar-count" class="count-badge" style="display:none;"></span>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="calendar-search" placeholder="大会名で絞り込み..." oninput="filterCalendar()">
+        <button onclick="loadCalendar()">再読込</button>
+      </div>
+      <div class="table-wrap">
+        <div id="calendar-status" class="status"><span class="spinner"></span> 読み込み中...</div>
+        <table id="calendar-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>大会名</th>
+              <th>案内</th>
+              <th>申込開始</th>
+              <th>申込期限</th>
+              <th></th>
+              <th>抽選日</th>
+              <th>振込期限</th>
+              <th></th>
+              <th>大会日時</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="calendar-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 詳細ビュー -->
+    <div id="calendar-detail-view" class="detail-view">
+      <button class="back-btn" onclick="showCalendarList()">← 大会一覧に戻る</button>
+      <div class="detail-header-row">
+        <div id="detail-title" class="detail-title"></div>
+        <div id="detail-title-badges" class="detail-title-badges"></div>
+      </div>
+
+      <div class="detail-columns">
+
+        <!-- 左: スクロール可能 -->
+        <div class="detail-left">
+
+          <div id="detail-status" class="status"><span class="spinner"></span> 読み込み中...</div>
+
+          <!-- 参加者一覧 -->
+          <div id="detail-person-section" style="display:none;">
+            <div class="detail-section-header">
+              <div class="detail-section-title">参加者一覧</div>
+              <button id="toggle-cols-btn" class="toggle-btn" onclick="toggleDetailColumns()">詳細列を非表示</button>
+            </div>
+            <div class="table-wrap">
+              <table class="sheet-table" id="detail-person-table">
+                <thead id="detail-person-thead"></thead>
+                <tbody id="detail-person-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- グレードサマリー -->
+          <div id="detail-grade-section" style="display:none;">
+            <div class="detail-section-title" style="margin-top:14px;">級別サマリー</div>
+            <div class="table-wrap">
+              <table class="sheet-table" id="detail-grade-table">
+                <thead><tr><th>級</th><th>参加費</th><th>人数</th><th>合計</th><th>大会日時</th></tr></thead>
+                <tbody id="detail-grade-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 右: 常時表示ステータス＋操作 -->
+        <div class="detail-right">
+          <div class="detail-section-title">ステータス</div>
+          <div id="detail-status-loading" class="status"><span class="spinner"></span></div>
+          <table class="sheet-table" id="detail-status-table" style="display:none;">
+            <thead><tr><th>項目</th><th>値</th></tr></thead>
+            <tbody id="detail-bottom-right-tbody"></tbody>
+          </table>
+
+          <!-- 必要タスク -->
+          <div id="detail-tasks-section" style="display:none;">
+            <div class="detail-section-title" style="margin-top:14px;">必要タスク</div>
+            <div id="detail-tasks-list"></div>
+          </div>
+
+          <!-- 操作パネル -->
+          <div id="detail-ops-section" style="display:none;">
+            <div class="detail-section-title" style="margin-top:14px;">操作</div>
+            <div class="official-toggle-row">
+              <div id="detail-official-badge" class="official-badge"></div>
+              <button class="official-toggle-btn" id="btn-toggle-official" onclick="triggerToggleOfficial()">切替</button>
+            </div>
+            <div id="toggle-official-status" class="op-status"></div>
+            <button class="op-btn" id="btn-register" onclick="triggerRegisterDatabase()">大会として登録</button>
+            <div id="register-status" class="op-status"></div>
+            <button class="op-btn" id="btn-count" onclick="triggerCountMatches()">出場履歴を更新</button>
+            <div id="count-status" class="op-status"></div>
+            <button class="op-btn" id="btn-pay-done" onclick="triggerPayDoneFromDetail()" style="display:none;">大会への振込み</button>
+            <div id="pay-done-status" class="op-status"></div>
+            <div id="detail-complete-section" style="display:none;margin-top:10px;border-top:1px solid #ddd;padding-top:10px;">
+              <button class="op-btn complete-btn" id="btn-complete-detail" onclick="triggerCompleteTournamentFromDetail()">大会を完了とする</button>
+              <div id="complete-detail-status" class="op-status"></div>
+            </div>
+            <div id="detail-delete-section" style="display:none;margin-top:10px;border-top:1px solid #ddd;padding-top:10px;">
+              <button class="op-btn op-btn-danger" id="btn-delete" onclick="triggerDeleteTournament()">シートとフォームを削除</button>
+              <div id="delete-status" class="op-status"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 大会への振込みモーダル ========== -->
+<div id="pay-done-modal" class="modal-overlay" style="display:none;" onclick="onPayDoneModalOverlayClick(event)">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span>大会への振込み</span>
+    </div>
+    <div class="modal-body">
+      <div id="pay-done-summary" class="confirm-message" style="margin-bottom:16px;"></div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.95rem;">
+        <input type="checkbox" id="pay-done-check" onchange="onPayDoneCheckChange()">
+        振り込みました。
+      </label>
+      <div class="confirm-buttons" style="margin-top:16px;">
+        <button id="pay-done-confirm-btn" class="confirm-yes-btn" onclick="executePayDone()" disabled>完了</button>
+        <button class="confirm-no-btn" onclick="closePayDoneModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 振込済み入力方法モーダル ========== -->
+<div id="pay-method-modal" class="modal-overlay" style="display:none;" onclick="onPayMethodOverlayClick(event)">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span>振込済みの入力方法</span>
+    </div>
+    <div class="modal-body">
+      <p id="pay-method-message" class="confirm-message"></p>
+      <p style="font-size:0.83rem;color:#666;margin-top:10px;line-height:1.6;">
+        <strong>通常の振込済み</strong>：大会への参加費を出納管理にマイナス計上します。<br>
+        <strong>デポジットとして完了</strong>：参加者のデポジットで賄われる場合など、マイナス計上を行わずに済みとして処理します。
+      </p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;">
+        <button class="confirm-yes-btn" onclick="executePayMethod(false)">通常の振込済み</button>
+        <button class="confirm-yes-btn" style="background:#8e44ad;" onclick="executePayMethod(true)">デポジットとして完了</button>
+        <button class="confirm-no-btn" onclick="closePayMethodModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== デポジット選択モーダル ========== -->
+<div id="deposit-choice-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span>デポジットの確認</span>
+    </div>
+    <div class="modal-body">
+      <p id="deposit-choice-message" class="confirm-message"></p>
+      <div class="confirm-buttons">
+        <button class="confirm-yes-btn" onclick="executeDepositChoice(true)">使う</button>
+        <button class="confirm-no-btn"  onclick="executeDepositChoice(false)">使わない</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 確認モーダル ========== -->
+<div id="confirm-modal" class="modal-overlay" style="display:none;" onclick="onConfirmOverlayClick(event)">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span>確認</span>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="confirm-buttons">
+        <button class="confirm-yes-btn" onclick="executeConfirmedAction()">はい</button>
+        <button class="confirm-no-btn"  onclick="closeConfirmModal()">いいえ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 入力モーダル ========== -->
+<div id="input-modal" class="modal-overlay" style="display:none;" onclick="onInputOverlayClick(event)">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span id="input-modal-title"></span>
+      <button class="modal-close-btn" onclick="closeInputModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="input-modal-message" class="confirm-message"></p>
+      <input type="number" id="input-modal-field" class="login-pw-input" min="1" placeholder="半角数字で入力"
+             onkeydown="if(event.key==='Enter') executeInputAction()">
+      <div id="input-modal-error" style="color:#e74c3c;font-size:0.82rem;min-height:1.2em;margin-top:4px;"></div>
+      <div class="confirm-buttons" style="margin-top:10px;">
+        <button class="confirm-yes-btn" onclick="executeInputAction()">OK</button>
+        <button class="confirm-no-btn" onclick="closeInputModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== アラートモーダル ========== -->
+<div id="alert-modal" class="modal-overlay" style="display:none;" onclick="onAlertOverlayClick(event)">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span id="alert-modal-title">エラー</span>
+      <button class="modal-close-btn" onclick="closeAlertModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="alert-modal-message" class="confirm-message"></p>
+      <div class="confirm-buttons">
+        <button class="confirm-yes-btn" onclick="closeAlertModal()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 案内ダブルチェックモーダル ========== -->
+<div id="double-check-modal" class="modal-overlay" style="display:none;" onclick="onDoubleCheckOverlayClick(event)">
+  <div class="modal-box double-check-box">
+    <div class="modal-header">
+      <span>案内のダブルチェック</span>
+      <button class="modal-close-btn" onclick="closeDoubleCheckModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.9rem;color:#555;margin-bottom:6px;">以下の大会の案内送付内容を確認しましたか？</p>
+      <p id="double-check-name" style="font-size:1.05rem;font-weight:700;color:#2c3e50;padding:10px;background:#f4f6f8;border-radius:6px;margin-bottom:10px;"></p>
+      <div id="double-check-content" class="double-check-content"></div>
+      <p style="font-size:0.82rem;color:#888;margin-top:12px;">「OK」を押すと、この大会の案内ダブルチェックを完了としてマークします。</p>
+      <div class="confirm-buttons" style="margin-top:10px;">
+        <button class="confirm-yes-btn" onclick="executeDoubleCheck()">OK</button>
+        <button class="confirm-no-btn" onclick="closeDoubleCheckModal()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 大会結果モーダル ========== -->
+<div id="player-modal" class="modal-overlay" style="display:none;" onclick="closePlayerModal(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="modal-player-name"></span>
+      <button class="modal-close-btn" onclick="closePlayerModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="search-bar">
+        <input type="text" id="modal-result-name" placeholder="選手名（例：山田 太郎）">
+        <input type="date" id="modal-result-date">
+        <button onclick="searchModalResults()">検索</button>
+      </div>
+      <div class="table-wrap">
+        <div id="modal-results-status" class="status">選手名を入力して「検索」を押してください。</div>
+        <table id="modal-results-table" style="display:none;">
+          <thead>
+            <tr><th>大会日</th><th>場所</th><th>抽選公開日</th></tr>
+          </thead>
+          <tbody id="modal-results-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
