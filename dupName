@@ -1,0 +1,18 @@
+// 追加 20250120
+function dupName(name) {
+  const names = name.replace("　", " ").split(" ");
+  if (dupNames.includes(names[0])) {
+    return names[0] + names[1][0];
+  } else {
+    return names[0];
+  }
+
+}
+
+const dupNames = SpreadsheetApp.getActiveSpreadsheet()
+              .getSheetByName("名簿")
+              .getDataRange().getValues()
+              .filter((row) => {
+                return row[2] === "重複";
+              })
+              .map((row) => row[1]);

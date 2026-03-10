@@ -1,0 +1,157 @@
+// 案内メール作成、出場者確定メール
+function createDraft2(state=false,input="") {
+  Logger.log("createDraft2 " + "state:" + state + "input:" + input);
+  var ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const createEmailSheet = ss.getSheetByName("案内メール作成");
+  var data = createEmailSheet.getRange(1,1,createEmailSheet.getLastRow(),createEmailSheet.getLastColumn()).getValues();
+  const tournamentName = data[34][1];
+  const tournamentSheet = ss.getSheetByName(tournamentName);
+  const count = tournamentSheet.getRange(1,1,1,tournamentSheet.getLastColumn()).getValues()[0].filter(function(cell) {
+      return typeof(cell) === "number";
+    })[0];
+  var to = data[0][10];
+  var bcc = data[1][10];
+  var subject = tournamentName + "　出場者確定のお知らせ";
+  var emailBody = data[34][3];
+
+  // 追加20250120
+  const block = emailBody.split("詳細は添付ファイルをご確認ください。");
+  const gradeMap = {};
+  tournamentSheet.getDataRange().getValues()
+  .filter(
+    function(row) {  return /^[A-E]$/.test(row[4])  }
+  )
+  .forEach(
+    function(row) {
+      if (!gradeMap[row[4]]) {
+        gradeMap[row[4]] = [];
+        gradeMap[row[4]].push(row);
+      } else {
+        gradeMap[row[4]].push(row);
+      }
+    }
+  );
+  const raffledMap = {};
+  Object.keys(gradeMap).forEach(function(grade) {
+    raffledMap[grade] = {};
+    raffledMap[grade]["抽選通過"] =
+      gradeMap[grade].filter(function(row) {
+        return row[count+2] === "済" || row[count+2] === "";
+      });
+    raffledMap[grade]["抽選落ち"] =
+      gradeMap[grade].filter(function(row) {
+        return row[count+2].includes("キャンセル待ち");
+      });
+  });
+  let text = "";
+  const grades = ["A", "B", "C", "D", "E"];
+  for (let i=0; i<5; i++) {
+    if (!raffledMap[grades[i]]) continue;
+    const ok = raffledMap[grades[i]]["抽選通過"];
+    const pien = raffledMap[grades[i]]["抽選落ち"];
+    if (raffledMap[grades[i]]) {
+      text += grades[i] + "級：\n" +
+              "　抽選通過：";
+      if (!ok) {
+        text += "なし";
+      } else {
+        text += ok.map((row) => dupName(row[2])).join("、");
+      } text += "\n";
+
+      text += "　抽選落ち：";
+      if (!pien) {
+        text += "なし";
+      } else {
+        text += pien.map((row) => dupName(row[2])).join("、");
+      } text += "\n";
+    }
+  }
+
+  emailBody = block[0] + "詳細は添付ファイルをご確認ください。\n\n" +
+              text + block[1];
+
+
+
+  if(state===false) {
+    if(ui.alert(
+      '確認',
+      '宛先: '+ to + "\n" +
+      "bcc: " + bcc + "\n" +
+      "件名: " + subject + "\n" +
+      "本文: \n" + emailBody + "\n" +
+      "という内容の下書きを作成します。（送信はされません。）\n" +
+      "よろしい場合は「OK」を押してください。「いいえ」を押すと何もせずに戻ります。",
+      ui.ButtonSet.YES_NO
+    ) === ui.Button.NO)return;
+  }
+
+  GmailApp.createDraft(
+    to,
+    subject,
+    emailBody,
+    {   bcc: bcc,   name:"慶應かるた会"    }
+  );
+
+  var date = data[42][1];var gachiDate = data[42][2];
+
+  var columnData = tournamentSheet.getRange(2, count + 4, tournamentSheet.getLastRow(),1).getValues();
+  var where=0;
+  var today = new Date();
+  for (var i = 0; i < columnData.length; i++) {
+    if (columnData[i][0] === "催促メール設定（「☆大会フォーム」から）") {
+      // 見つかった場合、その一つ下のセルに「設定済み」を書き込む
+      where = i;
+    }
+    if(columnData[i][0] === "抽選日" && columnData[i][1] === "未定") {
+      tournamentSheet.getRange(i+2,count+5).setValue(Utilities.formatDate(today,"JST","yyyy/M/d"));
+    }
+  }
+
+  if (typeof(date) !== "string") {
+    date.setHours(7);
+    date.setMinutes(50);
+    if(state===false) {
+      if(ui.alert(
+        '確認',
+        '下書きを作成しました。\nまた、催促メールの設定を' + Utilities.formatDate(date,"JST","yyyy-MM-dd HH:mm:ss") + 'に設定しますがよろしいですか？\nよろしい場合は「OK」を押してください。「いいえ」を押すと催促メールは設定されません。',
+        ui.ButtonSet.YES_NO
+      ) === ui.Button.NO)return;
+    } else {
+      if(input === "") {
+        return;
+      }
+    }
+  }
+
+  Logger.log("日時設定");
+  tournamentSheet.getRange(where + 3,count + 5).setValue(date);
+
+  setPaymentReminders(name=tournamentName,true);
+  var calendarSheet = ss.getSheetByName("カレンダー");
+  var aaa = typeof(today) !== "string" ? Utilities.formatDate(today,"JST","yyyy/M/d") : today;
+  var bbb = typeof(gachiDate) !== "string" ? Utilities.formatDate(gachiDate,"JST", "yyyy/M/d") : gachiDate;
+  calendarSheet.getRange(findFromCalendar(calendarSheet,tournamentName),8).setValue(aaa);
+  calendarSheet.getRange(findFromCalendar(calendarSheet,tournamentName),11).setValue(bbb);
+
+  // データベース登録
+  Logger.log("データベース登録");
+  if(state === false) {
+    Logger.log("あ");
+    if(ui.alert(
+      '確認',
+      'データベースの登録に移りますか？\nすぐには登録されません',
+      ui.ButtonSet.YES_NO
+    ) === ui.Button.YES) {
+      let a = tournamentSheet.getRange(1,2,tournamentSheet.getLastRow(), 1).getValues();
+      for (let i=0; i<a.length; i++) {
+        if (a[i][0] === "非公認の場合は下に文字") {
+          kounin = a[i+1][0] === "" ? true : false;
+        }
+      }
+      registerDatabase(state=false,kounin=kounin,name=tournamentName);
+    }
+  }
+
+  ui.alert('完了しました。');
+}

@@ -8,6 +8,24 @@ const ME_WEEKDAYS   = ['日', '月', '火', '水', '木', '金', '土'];
 
 let _meActiveTab = 0;
 const ME_TYPE_LABELS = ['案内メール', '振込案内', 'Free', '読手講習会など'];
+let _meLotteryResults = null; // null=未取得, {fetching:true}=取得中, {grades:[...]}=取得済み
+
+function meFetchLotteryResults() {
+  const title  = document.getElementById('me-title')?.value?.trim() || '';
+  const active = meGetActiveGrades();
+  if (!title || !active.length) { _meLotteryResults = null; meRenderPreview(); return; }
+  const sheetName = title + active.join('') + '級';
+  _meLotteryResults = { fetching: true };
+  meRenderPreview();
+  google.script.run
+    .withSuccessHandler(res => {
+      const r = JSON.parse(res);
+      _meLotteryResults = r.ok ? r : null;
+      meRenderPreview();
+    })
+    .withFailureHandler(() => { _meLotteryResults = null; meRenderPreview(); })
+    .getLotteryResults(sheetName);
+}
 
 function meFormatDateJP(str) {
   if (!str) return '';
@@ -124,7 +142,7 @@ function meSelectTournament() {
 
   meApplyFeeDefaults(document.getElementById('me-title').value);
   meUpdateGradeRowVisibility();
-  meRenderPreview();
+  meFetchLotteryResults();
 
   // フォームURL自動取得
   google.script.run
@@ -144,6 +162,7 @@ function initMakeEmail(data) {
   ME_GRADES.forEach(g => {
     document.querySelector(`.me-grade-btn[data-grade="${g}"]`)?.classList.remove('active');
   });
+  _meLotteryResults = null;
   ['me-title', 'me-venue', 'me-lottery', 'me-form-url', 'me-openchat'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -252,7 +271,12 @@ function meSwitchTab(idx) {
   document.querySelectorAll('.me-tab1-only').forEach(el => {
     el.style.display = idx === 1 ? '' : 'none';
   });
-  meRenderPreview();
+  if (idx === 1) {
+    meFetchLotteryResults();
+  } else {
+    _meLotteryResults = null;
+    meRenderPreview();
+  }
 }
 
 function meCreateDraft() {
@@ -470,9 +494,25 @@ function meBuildConfirmedText() {
     .map(g => { const v = document.getElementById('me-fee-' + g)?.value?.trim(); return v ? `${g}級：${v}円` : ''; })
     .filter(Boolean).join('\n');
 
+  let lotteryBlock = '';
+  if (_meLotteryResults && _meLotteryResults.fetching) {
+    lotteryBlock = '\n【抽選結果】\n（取得中...）\n';
+  } else if (_meLotteryResults && _meLotteryResults.grades) {
+    const lines = _meLotteryResults.grades
+      .filter(g => active.includes(g.grade))
+      .map(g =>
+        `${g.grade}級：\n` +
+        `\u3000抽選通過：${g.winnerNames.join('、')}\n` +
+        `\u3000抽選落ち：${g.loserNames.join('、')}`
+      );
+    if (lines.length) lotteryBlock = `\n【抽選結果】\n${lines.join('\n')}\n`;
+  }
+
   return (
     'こんばんは。\n\n大会案内係です。\n\n' +
-    `${title}${gradesStr}の出場者が確定いたしましたので、ご報告いたします。\n詳細は添付ファイルをご確認ください。\n\n` +
+    `${title}${gradesStr}の出場者が確定いたしましたので、ご報告いたします。` +
+    lotteryBlock +
+    '\n詳細は添付ファイルをご確認ください。\n\n' +
     '参加が確定した方は、以下の口座まで\n\n' +
     `参加費：\n${feeLines}\n\n` +
     'の振り込みをお願いいたします。\n' +

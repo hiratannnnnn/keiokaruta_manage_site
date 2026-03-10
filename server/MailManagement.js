@@ -55,15 +55,16 @@ function addMailManagementRow(json) {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
     const lastRow = Math.max(sheet.getLastRow(), 5);
-    sheet.getRange(lastRow + 1, 1, 1, 8).setValues([[
+    sheet.getRange(lastRow + 1, 1, 1, 9).setValues([[
       d.tournamentName || '',
       d.grades         || '',
       d.sendDateTime   || '',
       d.mailType       || 'リマインダー',
       d.threadTitle    || '',
       d.formLink       || '',
+      d.mailType === '振込確認' ? '済' : '',
       '',
-      '',
+      false,
     ]]);
 
     // 振込確認の場合、カレンダーシートにも振込確認送信日を記録（col 9）
