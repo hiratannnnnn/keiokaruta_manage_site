@@ -2,12 +2,29 @@
 // Gmail 下書き作成
 // ============================================================
 
+// 設定シート D13（to）・D14（bcc）から既定の宛先を取得
+// 注意：振込確認メールは個別送信のため、この関数の戻り値を使用しないこと
+function getDefaultRecipients_() {
+  try {
+    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.SETTINGS);
+    if (!sheet) return { to: '', bcc: '' };
+    return {
+      to:  String(sheet.getRange(13, 4).getValue() || ''),
+      bcc: String(sheet.getRange(14, 4).getValue() || ''),
+    };
+  } catch(e) {
+    return { to: '', bcc: '' };
+  }
+}
+
 // タブ0：案内メール
 function createDraft1(json) {
   try {
     const d = JSON.parse(json);
+    const { to, bcc } = getDefaultRecipients_();
     const subject = (d.title || '') + (d.grades || '') + 'の案内';
-    GmailApp.createDraft('', subject, d.body || '');
+    GmailApp.createDraft(to, subject, d.body || '', { bcc, name: '慶應かるた会' });
     return JSON.stringify({ ok: true });
   } catch(e) {
     return JSON.stringify({ error: e.message });
@@ -18,8 +35,9 @@ function createDraft1(json) {
 function createDraft2(json) {
   try {
     const d = JSON.parse(json);
+    const { to, bcc } = getDefaultRecipients_();
     const subject = (d.title || '') + (d.grades || '') + '\u3000出場者確定のお知らせ';
-    GmailApp.createDraft('', subject, d.body || '');
+    GmailApp.createDraft(to, subject, d.body || '', { bcc, name: '慶應かるた会' });
     return JSON.stringify({ ok: true });
   } catch(e) {
     return JSON.stringify({ error: e.message });
@@ -94,7 +112,8 @@ function getLotteryResults(sheetName) {
 function createDraft3(json) {
   try {
     const d = JSON.parse(json);
-    GmailApp.createDraft('', '', d.body || '');
+    const { to, bcc } = getDefaultRecipients_();
+    GmailApp.createDraft(to, '', d.body || '', { bcc, name: '慶應かるた会' });
     return JSON.stringify({ ok: true });
   } catch(e) {
     return JSON.stringify({ error: e.message });
@@ -105,8 +124,9 @@ function createDraft3(json) {
 function createDraft4(json) {
   try {
     const d = JSON.parse(json);
+    const { to, bcc } = getDefaultRecipients_();
     const subject = (d.subject || '') + '　案内';
-    GmailApp.createDraft('', subject, d.body || '');
+    GmailApp.createDraft(to, subject, d.body || '', { bcc, name: '慶應かるた会' });
     return JSON.stringify({ ok: true });
   } catch(e) {
     return JSON.stringify({ error: e.message });

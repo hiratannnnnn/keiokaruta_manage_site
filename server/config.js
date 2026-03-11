@@ -16,6 +16,7 @@ const CONFIG = {
     MEMBERS:  '名簿',
     CALENDAR: 'カレンダー',
     MAIL:     'メール管理',
+    SETTINGS: '設定用',
   },
 
   // 大会結果検索API
