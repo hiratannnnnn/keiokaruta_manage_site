@@ -42,7 +42,12 @@ function addQuestionsToForm(formId, questionsData, moshikomiStart, grades) {
       const item = form.addTextItem();
       item.setTitle(actualTitle).setRequired(req === 1);
       if (name.includes('氏名')) {
+        const validation = FormApp.createTextValidation()
+          .setHelpText('半角または全角スペースを含めてください。')
+          .requireTextMatchesPattern('.*[ 　]+.*')
+          .build();
         item.setHelpText('半角または全角スペースを含めてください。');
+        item.setValidation(validation);
       } else if (isKounin) {
         item.setHelpText(
           '今年度の「申込開始日時点で、出場した、または出場することが分かっている公認大会」' +
@@ -52,7 +57,7 @@ function addQuestionsToForm(formId, questionsData, moshikomiStart, grades) {
     }
   });
 
-  return 1 + questionCount; // 1 = タイムスタンプ列
+  return questionCount; // タイムスタンプ・メールアドレス列は含まない
 }
 
 // カレンダーシートから大会行を検索し、行番号（1-indexed）を返す
@@ -96,7 +101,7 @@ function createFormFromWeb(paramsJson) {
     );
     try { form.setPublished(true); } catch(e) {}  // 旧バージョン互換
     form.setAcceptingResponses(true);
-    form.setCollectEmail(false);
+    form.setCollectEmail(true);
     form.setLimitOneResponsePerUser(false);
 
     const formId  = form.getId();

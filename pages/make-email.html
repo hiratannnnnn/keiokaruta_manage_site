@@ -85,13 +85,13 @@
 
             <!-- 定員（タブ0のみ） -->
             <div class="me-tab0-only">
-              <div class="fc-section-label">定員（省略可）</div>
+              <div class="fc-section-label">定員 <span class="fc-required-mark">*</span></div>
               <table style="width:100%;border-collapse:collapse;"><tbody>
-                <tr id="me-cap-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="number" id="me-cap-A" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
-                <tr id="me-cap-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="number" id="me-cap-B" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
-                <tr id="me-cap-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="number" id="me-cap-C" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
-                <tr id="me-cap-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="number" id="me-cap-D" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
-                <tr id="me-cap-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="number" id="me-cap-E" class="me-num-input" placeholder="省略可" min="0" step="16" oninput="meRenderPreview()"></td></tr>
+                <tr id="me-cap-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="number" id="me-cap-A" class="me-num-input" placeholder="人数" min="0" step="16" oninput="meRenderPreview()"></td><td><label class="me-mitei-label"><input type="checkbox" id="me-cap-mitei-A" onchange="meOnCapMiteiChange('A')"> 未定</label></td></tr>
+                <tr id="me-cap-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="number" id="me-cap-B" class="me-num-input" placeholder="人数" min="0" step="16" oninput="meRenderPreview()"></td><td><label class="me-mitei-label"><input type="checkbox" id="me-cap-mitei-B" onchange="meOnCapMiteiChange('B')"> 未定</label></td></tr>
+                <tr id="me-cap-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="number" id="me-cap-C" class="me-num-input" placeholder="人数" min="0" step="16" oninput="meRenderPreview()"></td><td><label class="me-mitei-label"><input type="checkbox" id="me-cap-mitei-C" onchange="meOnCapMiteiChange('C')"> 未定</label></td></tr>
+                <tr id="me-cap-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="number" id="me-cap-D" class="me-num-input" placeholder="人数" min="0" step="16" oninput="meRenderPreview()"></td><td><label class="me-mitei-label"><input type="checkbox" id="me-cap-mitei-D" onchange="meOnCapMiteiChange('D')"> 未定</label></td></tr>
+                <tr id="me-cap-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="number" id="me-cap-E" class="me-num-input" placeholder="人数" min="0" step="16" oninput="meRenderPreview()"></td><td><label class="me-mitei-label"><input type="checkbox" id="me-cap-mitei-E" onchange="meOnCapMiteiChange('E')"> 未定</label></td></tr>
               </tbody></table>
             </div>
 

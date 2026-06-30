@@ -23,7 +23,7 @@ function createDraft1(json) {
   try {
     const d = JSON.parse(json);
     const { to, bcc } = getDefaultRecipients_();
-    const subject = (d.title || '') + (d.grades || '') + 'の案内';
+    const subject = (d.title || '') + (d.grades || '') + '\u3000案内';
     GmailApp.createDraft(to, subject, d.body || '', { bcc, name: '慶應かるた会' });
     return JSON.stringify({ ok: true });
   } catch(e) {

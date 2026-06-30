@@ -246,6 +246,32 @@ function setGradeFee(sheetName, grade, fee) {
   }
 }
 
+// 大会シートのグレード行（A〜E）に大会日を書き込む
+// gradeDatesJson: JSON文字列 { A: "2026-05-01", B: "2026-05-01", ... }
+function saveTournamentDates(sheetName, gradeDatesJson) {
+  try {
+    const gradeDates = JSON.parse(gradeDatesJson);
+    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
+
+    const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const count = headerRow.find(c => typeof c === 'number' && Number.isFinite(c));
+    if (count == null) throw new Error('N が取得できません');
+
+    const data = sheet.getDataRange().getValues();
+    for (let i = 0; i < data.length; i++) {
+      const grade = String(data[i][0]).trim();
+      if (/^[A-E]$/.test(grade) && gradeDates[grade]) {
+        sheet.getRange(i + 1, count + 3).setValue(new Date(gradeDates[grade]));
+      }
+    }
+    return JSON.stringify({ ok: true });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
 // フォームURL取得（col N+4: フォームURL）
 function getFormUrl(name) {
   try {

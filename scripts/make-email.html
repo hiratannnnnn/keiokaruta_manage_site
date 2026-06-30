@@ -87,6 +87,17 @@ function meBulkTimeChange(value) {
   meRenderPreview();
 }
 
+function meOnCapMiteiChange(g) {
+  const input = document.getElementById('me-cap-' + g);
+  if (document.getElementById('me-cap-mitei-' + g).checked) {
+    input.value = '';
+    input.disabled = true;
+  } else {
+    input.disabled = false;
+  }
+  meRenderPreview();
+}
+
 function meToggleGrade(btn) {
   btn.classList.toggle('active');
   meUpdateGradeRowVisibility();
@@ -175,6 +186,12 @@ function initMakeEmail(data) {
       if (el) el.value = r['案内係'] || '';
     })
     .getRoleNames();
+  ME_GRADES.forEach(g => {
+    const cb  = document.getElementById('me-cap-mitei-' + g);
+    const inp = document.getElementById('me-cap-' + g);
+    if (cb)  { cb.checked = false; }
+    if (inp) { inp.value = ''; inp.disabled = false; }
+  });
   ['me-apply-start', 'me-apply-kaInai', 'me-pay-kaInai', 'me-pay-real', 'me-date-bulk'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -279,6 +296,22 @@ function meSwitchTab(idx) {
   }
 }
 
+function meSaveTournamentDates() {
+  const title  = document.getElementById('me-title')?.value?.trim() || '';
+  const active = meGetActiveGrades();
+  if (!title || !active.length) return;
+  const sheetName  = title + active.join('') + '級';
+  const gradeDates = {};
+  active.forEach(g => {
+    const v = document.getElementById('me-date-' + g)?.value;
+    if (v) gradeDates[g] = v;
+  });
+  if (!Object.keys(gradeDates).length) return;
+  google.script.run
+    .withFailureHandler(e => console.error('saveTournamentDates error:', e.message))
+    .saveTournamentDates(sheetName, JSON.stringify(gradeDates));
+}
+
 function meCreateDraft() {
   const body     = document.getElementById('me-output').value;
   const title    = document.getElementById('me-title')?.value?.trim() || '';
@@ -295,6 +328,21 @@ function meCreateDraft() {
   ];
 
   const statusEl = document.getElementById('me-draft-status');
+  statusEl.textContent = '';
+  statusEl.className = 'me-draft-status';
+
+  if (_meActiveTab === 0) {
+    const missingCap = active.filter(g =>
+      !document.getElementById('me-cap-mitei-' + g)?.checked &&
+      !document.getElementById('me-cap-' + g)?.value?.trim()
+    );
+    if (missingCap.length) {
+      statusEl.textContent = '定員を入力してください：' + missingCap.map(g => g + '級').join('、');
+      statusEl.className = 'me-draft-status error';
+      return;
+    }
+  }
+
   statusEl.textContent = '作成中...';
   statusEl.className = 'me-draft-status';
 
@@ -307,6 +355,7 @@ function meCreateDraft() {
       } else {
         statusEl.textContent = '';
         if (_meActiveTab === 0) {
+          meSaveTournamentDates();
           showCompletionModal(
             '✅ 下書きを作成しました',
             '<p>案内メールの下書きをGmailに保存しました。</p>' +
@@ -440,7 +489,11 @@ function meBuildAnnouncementText() {
   }).join('\n');
 
   const capLines = active
-    .map(g => { const v = document.getElementById('me-cap-' + g)?.value?.trim(); return v ? `${g}級：${v}名` : ''; })
+    .map(g => {
+      if (document.getElementById('me-cap-mitei-' + g)?.checked) return `${g}級：未定`;
+      const v = document.getElementById('me-cap-' + g)?.value?.trim();
+      return v ? `${g}級：${v}名` : '';
+    })
     .filter(Boolean).join('\n');
 
   const eligLines = active
