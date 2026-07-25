@@ -195,8 +195,28 @@ function taikaiGetParticipations_(name, beforeDate, email) {
   if (!player) return [];
   const query = {};
   if (beforeDate) query.held_on_to = taikaiFormatDate_(beforeDate);
-  const rows = taikaiApiRequest_('GET', '/players/' + encodeURIComponent(String(player.id)) + '/participations', null, query) || [];
-  return rows.map(item => ({
+  const path = '/players/' + encodeURIComponent(String(player.id)) + '/participations';
+  const activeRows = taikaiApiRequest_(
+    'GET', path, null, Object.assign({}, query, { canceled: false })
+  ) || [];
+  const canceledRows = taikaiApiRequest_(
+    'GET', path, null, Object.assign({}, query, { canceled: true })
+  ) || [];
+  const latestByTournament = {};
+  activeRows.concat(canceledRows).forEach(item => {
+    const key = String(item.tournament_id);
+    const current = latestByTournament[key];
+    if (!current || taikaiCompareIds_(item.entry_id, current.entry_id) > 0) {
+      latestByTournament[key] = item;
+    }
+  });
+  return Object.keys(latestByTournament).map(key => latestByTournament[key])
+    .filter(item => !item.canceled_at)
+    .sort((a, b) =>
+      String(a.held_on || '').localeCompare(String(b.held_on || '')) ||
+      taikaiCompareIds_(a.entry_id, b.entry_id)
+    )
+    .map(item => ({
     date: item.held_on || '',
     location: item.tournament_name || '',
     raffleDate: item.lottery_result_date || '',
@@ -204,7 +224,17 @@ function taikaiGetParticipations_(name, beforeDate, email) {
     grade: item.grade || '',
     canceledAt: item.canceled_at || null,
     raw: item,
-  }));
+    }));
+}
+
+function taikaiCompareIds_(left, right) {
+  const leftText = String(left === undefined || left === null ? '' : left);
+  const rightText = String(right === undefined || right === null ? '' : right);
+  if (/^\d+$/.test(leftText) && /^\d+$/.test(rightText) &&
+      leftText.length !== rightText.length) {
+    return leftText.length - rightText.length;
+  }
+  return leftText.localeCompare(rightText);
 }
 
 function taikaiRegisterEntry_(tournamentName, grade, heldOn, playerName, email) {
@@ -228,10 +258,10 @@ function taikaiFindTournamentEntry_(tournamentName, playerName) {
     tournament_id: tournament.id,
     player_id: player.id,
   }) || [];
-  if (entries.length !== 1) {
-    throw new Error('大会と選手に対応する出場登録を一意に特定できません。');
-  }
-  return entries[0];
+  if (!entries.length) throw new Error('大会と選手に対応する出場登録が見つかりません。');
+  return entries.reduce((latest, entry) =>
+    !latest || taikaiCompareIds_(entry.id, latest.id) > 0 ? entry : latest
+  , null);
 }
 
 function taikaiSetPaymentByPlayer_(tournamentName, playerName, isPaid) {

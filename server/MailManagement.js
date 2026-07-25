@@ -115,7 +115,13 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   const count = headerRow.find(c => typeof c === 'number' && Number.isFinite(c));
   if (count == null) return '（N が取得できません）\n';
 
-  const data = sheet.getRange(2, 3, sheet.getLastRow() - 1, count + 1).getValues()
+  const allRows = sheet.getDataRange().getValues();
+  let formEndIdx = 1;
+  for (let i = 1; i < allRows.length; i++) {
+    if (String(allRows[i][0] || '').trim() === '') break;
+    formEndIdx = i + 1;
+  }
+  const data = latestFormRowsByPlayer_(allRows.slice(1, formEndIdx))
     .filter(row => row[2] !== '');
 
   const gradesArray = grades.replace('級', '').split('');
@@ -124,9 +130,9 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   const paidList = [];
 
   data.forEach(row => {
-    const name      = String(row[0]).replace('　', ' ');
-    const gradeStr  = String(row[2]);
-    const isPaid    = String(row[row.length - 1]).trim() === '済';
+    const name      = String(row[2]).replace('　', ' ');
+    const gradeStr  = String(row[4]);
+    const isPaid    = String(row[count + 2]).trim() === '済';
 
     if (isPaid && !paidList.includes(name)) paidList.push(name);
 

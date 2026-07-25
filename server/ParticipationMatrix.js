@@ -28,7 +28,7 @@ function getParticipationMatrix() {
       if (!tournamentId) return;
       const key = String(entry.player_id) + ':' + tournamentId;
       const current = latestEntries[key];
-      if (!current || compareTaikaiIds_(entry.id, current.id) > 0) {
+      if (!current || taikaiCompareIds_(entry.id, current.id) > 0) {
         latestEntries[key] = entry;
       }
     });
@@ -64,13 +64,4 @@ function getParticipationMatrix() {
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
-}
-
-function compareTaikaiIds_(left, right) {
-  const leftText = String(left === undefined || left === null ? '' : left);
-  const rightText = String(right === undefined || right === null ? '' : right);
-  if (/^\d+$/.test(leftText) && /^\d+$/.test(rightText)) {
-    if (leftText.length !== rightText.length) return leftText.length - rightText.length;
-  }
-  return leftText.localeCompare(rightText);
 }

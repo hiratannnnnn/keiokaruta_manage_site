@@ -56,6 +56,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
   const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues().slice(2);
   const grouped = {};
   const errors = [];
+  let entrySourceOrder = 0;
   fiscalSyncSetProgress_(operationId, {
     phase: 'scanning',
     processed: 0,
@@ -142,7 +143,6 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       const isTarget = payStatus === '' || payStatus === '済'
         || (payStatus.includes('繰') && payStatus.includes('越'))
         || payStatus === 'くりこし';
-      if (!isTarget) continue;
 
       const email = String(row[1] || '').trim();
       const grade = String(row[4] || '').replace(/級/g, '').trim().toUpperCase();
@@ -171,6 +171,13 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
             || payStatus === 'くりこし',
           source_sheet: sheetName,
           source_row: i + 1,
+          // 同一人物・同一大会の重複時は、回答時刻が新しい行を正とする。
+          // 時刻がない場合も後から読み込んだ行を採用できるよう順序を保持する。
+          registered_at_ms: row[0] && typeof row[0].getTime === 'function' && !isNaN(row[0].getTime())
+            ? row[0].getTime()
+            : null,
+          source_order: entrySourceOrder++,
+          is_sync_target: isTarget,
         });
       } catch (e) {
         errors.push(sheetName + ': ' + e.message);
@@ -199,6 +206,16 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 
   const tournaments = Object.keys(grouped).map(name => grouped[name]);
   tournaments.forEach(tournament => {
+    tournament.entries = fiscalSyncLatestEntries_(tournament.entries)
+      .filter(entry => entry.is_sync_target)
+      .map(entry => {
+        const clean = Object.assign({}, entry);
+        delete clean.registered_at_ms;
+        delete clean.source_order;
+        delete clean.is_sync_target;
+        return clean;
+      });
+
     const scheduleKeys = {};
     tournament.schedules.forEach(schedule => {
       const key = schedule.grade + '|' + schedule.held_on;
@@ -206,20 +223,6 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
         errors.push(tournament.name + ': 同じ級・開催日の日程が重複しています（' + key + '）。');
       }
       scheduleKeys[key] = true;
-    });
-    const entryKeys = {};
-    tournament.entries.forEach(entry => {
-      const key = entry.email.toLowerCase() + '|' + entry.grade + '|' + entry.held_on;
-      if (entryKeys[key]) {
-        const former = entryKeys[key];
-        errors.push(
-          tournament.name + ': 同じ選手・日程の申込が重複しています（'
-          + entry.email + '、' + entry.grade + '級、' + entry.held_on + '）。'
-          + former.source_sheet + ' ' + former.source_row + '行目 / '
-          + entry.source_sheet + ' ' + entry.source_row + '行目'
-        );
-      }
-      entryKeys[key] = entry;
     });
   });
   fiscalSyncSetProgress_(operationId, {
@@ -240,6 +243,23 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       entry_count: tournaments.reduce((sum, item) => sum + item.entries.length, 0),
     },
   };
+}
+
+function fiscalSyncLatestEntries_(entries) {
+  const latestByEmail = {};
+  (entries || []).forEach(entry => {
+    const key = String(entry.email || '').trim().toLowerCase();
+    const current = latestByEmail[key];
+    const entryTime = entry.registered_at_ms === null ? -Infinity : Number(entry.registered_at_ms);
+    const currentTime = !current || current.registered_at_ms === null
+      ? -Infinity
+      : Number(current.registered_at_ms);
+    if (!current || entryTime > currentTime ||
+        (entryTime === currentTime && Number(entry.source_order) > Number(current.source_order))) {
+      latestByEmail[key] = entry;
+    }
+  });
+  return Object.keys(latestByEmail).map(key => latestByEmail[key]);
 }
 
 function previewFiscalYearDatabaseSync(password, operationId) {

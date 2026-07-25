@@ -82,20 +82,21 @@ function getLotteryResults(sheetName) {
     }
 
     const stats = {}; // { grade: { winnerNames: [], loserNames: [] } }
-    for (let i = 1; i < formEndIdx; i++) {
-      const name = String(allData[i][2] || '').trim();
-      if (!name) continue;
-      const grade = String(allData[i][4] || '').trim()
+    const latestRows = latestFormRowsByPlayer_(allData.slice(1, formEndIdx));
+    latestRows.forEach(row => {
+      const name = String(row[2] || '').trim();
+      if (!name) return;
+      const grade = String(row[4] || '').trim()
         .replace(/[Ａ-Ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-      if (!/^[A-E]$/.test(grade)) continue;
+      if (!/^[A-E]$/.test(grade)) return;
       if (!stats[grade]) stats[grade] = { winnerNames: [], loserNames: [] };
-      const pay = String(allData[i][N + 2] || '').trim();
+      const pay = String(row[N + 2] || '').trim();
       if (pay === '' || pay === '済') {
         stats[grade].winnerNames.push(dupName(name));
       } else if (pay.includes('キャンセル待ち')) {
         stats[grade].loserNames.push(dupName(name));
       }
-    }
+    });
 
     const grades = Object.keys(stats).sort().map(g => ({
       grade:       g,
