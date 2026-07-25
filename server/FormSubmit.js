@@ -35,14 +35,5 @@ function registerFormResponseToDatabase(e) {
     throw new Error('回答から氏名・メールアドレス・級を取得できません。');
   }
 
-  const schedule = taikaiResolveSchedule_(match[1], grade, heldOn);
-  const player = taikaiSplitPlayerName_(name);
-  return taikaiApiRequest_('POST', '/registrations', {
-    schedule_id: String(schedule.id),
-    player: {
-      family_name: player.family_name,
-      given_name: player.given_name,
-      email: email,
-    },
-  });
+  return taikaiRegisterEntry_(match[1], grade, heldOn, name, email);
 }

@@ -14,6 +14,7 @@ const CONFIG = {
   // スプレッドシート内のシート名
   SHEET_NAMES: {
     MEMBERS:  '名簿',
+    EMAIL_MAP: 'DBメール対応表',
     CALENDAR: 'カレンダー',
     MAIL:     'メール管理',
     SETTINGS: '設定用',

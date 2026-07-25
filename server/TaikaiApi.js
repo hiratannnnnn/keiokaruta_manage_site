@@ -75,7 +75,7 @@ function getTaikaiApiDebugLog() {
 }
 
 function taikaiFindPlayer_(name, email) {
-  const query = email ? { email: email } : { name: name };
+  const query = email ? { email: pseudonymousEmailFor_(email) } : { name: name };
   const players = taikaiApiRequest_('GET', '/players', null, query) || [];
   if (!players.length) return null;
   if (players.length !== 1) throw new Error('同姓同名の選手がいるため、選手を特定できません。');
@@ -240,12 +240,13 @@ function taikaiCompareIds_(left, right) {
 function taikaiRegisterEntry_(tournamentName, grade, heldOn, playerName, email) {
   const schedule = taikaiResolveSchedule_(tournamentName, grade, heldOn);
   const player = taikaiSplitPlayerName_(playerName);
+  const dbEmail = rememberPseudonymousEmail_(email, playerName);
   return taikaiApiRequest_('POST', '/registrations', {
     schedule_id: String(schedule.id),
     player: {
       family_name: player.family_name,
       given_name: player.given_name,
-      email: String(email || '').trim(),
+      email: dbEmail,
     },
   });
 }

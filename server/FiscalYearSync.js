@@ -167,7 +167,9 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
           family_name: player.family_name,
           given_name: player.given_name,
           ruby: rubyIndex >= 0 ? String(row[rubyIndex] || '').trim() || null : null,
-          email: email,
+          // プレビュー内にも実メールを出さない。対応表への保存は実行時だけ行う。
+          email: pseudonymousEmailFor_(email),
+          real_email: normalizePrivateEmail_(email),
           club: clubIndex >= 0 ? String(row[clubIndex] || '').trim() || null : null,
           grade: grade,
           held_on: heldOn,
@@ -218,6 +220,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
         delete clean.registered_at_ms;
         delete clean.source_order;
         delete clean.is_sync_target;
+        // API送信用の公開スナップショットには実メールを残さない。
         return clean;
       });
 
@@ -270,7 +273,11 @@ function fiscalSyncLatestEntries_(entries) {
 function previewFiscalYearDatabaseSync(password, operationId) {
   try {
     databaseAdminAuthenticate_(password);
-    return JSON.stringify(buildFiscalYearDatabaseSnapshot_(operationId));
+    const snapshot = buildFiscalYearDatabaseSnapshot_(operationId);
+    snapshot.tournaments.forEach(tournament => {
+      tournament.entries.forEach(entry => { delete entry.real_email; });
+    });
+    return JSON.stringify(snapshot);
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
@@ -283,6 +290,7 @@ function syncFiscalYearDatabase(password) {
     if (snapshot.errors.length) {
       throw new Error('同期前検証でエラーがあります。プレビューを確認してください。');
     }
+    rememberSnapshotEmailMappings_(snapshot);
     const result = taikaiApiRequest_('POST', '/admin/fiscal-year-sync', {
       fiscal_year: snapshot.fiscal_year,
       tournaments: snapshot.tournaments.map(item => ({
@@ -290,7 +298,11 @@ function syncFiscalYearDatabase(password) {
         registration_completed: item.registration_completed,
         payment_completed: item.payment_completed,
         schedules: item.schedules,
-        entries: item.entries,
+        entries: item.entries.map(entry => {
+          const clean = Object.assign({}, entry);
+          delete clean.real_email;
+          return clean;
+        }),
       })),
     });
     return JSON.stringify({ ok: true, preview: snapshot.summary, result: result });
