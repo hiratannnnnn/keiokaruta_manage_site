@@ -193,6 +193,46 @@
     resize: vertical;
   }
   .db-admin-result-header { display: flex; align-items: center; justify-content: space-between; }
+  .db-admin-table-toolbar {
+    display: grid;
+    grid-template-columns: minmax(230px, 1fr) minmax(240px, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+  }
+  .db-admin-table-toolbar label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 0.85rem;
+  }
+  .db-admin-table-toolbar button, .db-admin-edit-actions button {
+    min-height: 37px;
+    padding: 7px 16px;
+    border: 0;
+    border-radius: 5px;
+    background: #315b7d;
+    color: #fff;
+    cursor: pointer;
+  }
+  .db-admin-table-wrap { max-height: 560px; margin-top: 8px; overflow: auto; }
+  .db-admin-table-wrap table { min-width: max-content; }
+  .db-admin-table-wrap th { position: sticky; top: 0; z-index: 1; }
+  .db-admin-table-wrap td { max-width: 360px; overflow-wrap: anywhere; }
+  .db-admin-editable-row { cursor: pointer; }
+  .db-admin-editable-row:hover td { background: #edf6ff; }
+  .db-admin-table-note { margin: 8px 0 0; color: #667; font-size: 0.82rem; }
+  .db-admin-json-editor {
+    width: 100%;
+    min-height: 210px;
+    padding: 10px;
+    border: 1px solid #ccd4dc;
+    border-radius: 5px;
+    font: 13px/1.55 monospace;
+    resize: vertical;
+  }
+  .db-admin-edit-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .db-admin-edit-actions .db-admin-delete-button { background: #c0392b; }
+  .db-admin-advanced > summary { cursor: pointer; list-style-position: inside; }
   .db-admin-help { margin-top: 14px; font-size: 0.86rem; }
   .db-admin-help summary { cursor: pointer; color: #315b7d; }
   .db-admin-help > div { margin-top: 9px; }
@@ -218,6 +258,7 @@
     overflow-wrap: anywhere;
   }
   @media (max-width: 720px) {
+    .db-admin-table-toolbar { grid-template-columns: 1fr; }
     .db-admin-request-row { grid-template-columns: 90px 1fr; }
     .db-admin-request-row button { grid-column: 1 / -1; }
     .db-admin-editors { grid-template-columns: 1fr; }

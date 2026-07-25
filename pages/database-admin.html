@@ -4,23 +4,65 @@
     <div class="page-title">DB管理</div>
 
     <div class="panel db-admin-panel">
-      <div class="panel-header">taikai_manage APIコンソール</div>
+      <div class="panel-header">DBテーブル表示</div>
       <div class="panel-body">
         <p class="db-admin-warning">
-          DBへ反映される管理操作です。更新・削除は元に戻せない場合があります。
-          任意SQLや許可されていないAPIは実行できません。
+          DBへ反映される管理画面です。更新・削除は元に戻せない場合があります。
         </p>
 
-        <div class="db-admin-presets">
-          <button type="button" onclick="dbAdminPreset('GET','/tournaments')">大会</button>
-          <button type="button" onclick="dbAdminPreset('GET','/schedules')">日程</button>
-          <button type="button" onclick="dbAdminPreset('GET','/players')">選手</button>
-          <button type="button" onclick="dbAdminPreset('GET','/entries')">申込</button>
-          <button type="button" onclick="dbAdminPreset('GET','/announcements')">案内</button>
-          <button type="button" onclick="dbAdminPreset('GET','/email-jobs')">メールジョブ</button>
-          <button type="button" onclick="dbAdminPreset('GET','/email-deliveries')">配信履歴</button>
+        <div class="db-admin-table-toolbar">
+          <label>
+            表示するテーブル
+            <select id="db-admin-resource" class="me-select" onchange="dbAdminLoadTable()">
+              <option value="tournaments">大会（tournaments）</option>
+              <option value="schedules">日程（tournament_schedules）</option>
+              <option value="players">選手（players）</option>
+              <option value="entries">申込（entries）</option>
+              <option value="announcements">案内（announcements）</option>
+              <option value="recipient-groups">宛先グループ（recipient_groups）</option>
+              <option value="email-jobs">メールジョブ（email_jobs）</option>
+              <option value="email-deliveries">配信履歴（email_deliveries）</option>
+            </select>
+          </label>
+          <label>
+            表内検索
+            <input id="db-admin-filter" class="fc-text-input" placeholder="表示中のデータを絞り込み"
+                   oninput="dbAdminRenderTable()">
+          </label>
+          <button id="db-admin-reload" type="button" onclick="dbAdminLoadTable()">再読込</button>
         </div>
 
+        <div id="db-admin-table-status" class="op-status"></div>
+        <div class="table-wrap db-admin-table-wrap">
+          <table class="sheet-table" id="db-admin-table" style="display:none;">
+            <thead id="db-admin-thead"></thead>
+            <tbody id="db-admin-tbody"></tbody>
+          </table>
+        </div>
+        <p class="db-admin-table-note">編集できる行はクリックできます。Query JSONの入力は不要です。</p>
+      </div>
+    </div>
+
+    <div id="db-admin-edit-panel" class="panel db-admin-panel" style="display:none;">
+      <div class="panel-header db-admin-result-header">
+        <span id="db-admin-edit-title">行を編集</span>
+        <button type="button" onclick="dbAdminCloseEditor()">閉じる</button>
+      </div>
+      <div class="panel-body">
+        <textarea id="db-admin-edit-json" class="db-admin-json-editor" spellcheck="false"></textarea>
+        <div class="db-admin-edit-actions">
+          <button id="db-admin-save-row" type="button" onclick="dbAdminSaveRow()">変更を保存</button>
+          <button id="db-admin-delete-row" class="db-admin-delete-button" type="button"
+                  onclick="dbAdminDeleteRow()" style="display:none;">大会と関連データを削除</button>
+          <span id="db-admin-edit-status" class="op-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <details class="panel db-admin-panel db-admin-advanced">
+      <summary class="panel-header">詳細操作（APIコンソール）</summary>
+      <div class="panel-body">
+        <p>通常は上の表だけで閲覧・編集できます。新規登録や特殊な更新を行う場合に使用します。</p>
         <div class="db-admin-request-row">
           <select id="db-admin-method" class="me-select" onchange="dbAdminMethodChanged()">
             <option>GET</option>
@@ -34,48 +76,19 @@
           <button id="db-admin-run" class="login-submit-btn" type="button"
                   onclick="dbAdminExecute()">実行</button>
         </div>
-
         <div class="db-admin-editors">
           <label>
-            Query JSON
-            <textarea id="db-admin-query" spellcheck="false">{}</textarea>
+            絞り込み（Query JSON・空欄可）
+            <textarea id="db-admin-query" spellcheck="false"></textarea>
           </label>
           <label id="db-admin-body-wrap">
-            Body JSON
+            登録・更新内容（Body JSON）
             <textarea id="db-admin-body" spellcheck="false">{}</textarea>
           </label>
         </div>
-
         <div id="db-admin-status" class="op-status"></div>
-
-        <details class="db-admin-help">
-          <summary>操作例と利用可能な更新</summary>
-          <div>
-            <code>PATCH /players/123</code>
-            <pre>{"family_name":"山田","given_name":"太郎","email":"taro@example.com"}</pre>
-            <code>PATCH /schedules/45</code>
-            <pre>{"payment_deadline":"2026-08-01","venue":"会場名"}</pre>
-            <code>PUT /entries/67/payment</code>
-            <pre>{"is_paid":true}</pre>
-            <code>POST /tournaments</code>
-            <pre>{"name":"大会名","registration_completed":false,"payment_completed":false}</pre>
-            <p>
-              ID付きの大会・日程・選手・申込・案内・宛先グループ・メールジョブは
-              PATCHで編集できます。DELETEは大会のみ許可され、関連データも削除されます。
-            </p>
-          </div>
-        </details>
+        <pre id="db-admin-response">詳細操作の結果がここに表示されます。</pre>
       </div>
-    </div>
-
-    <div class="panel db-admin-panel">
-      <div class="panel-header db-admin-result-header">
-        <span>APIレスポンス</span>
-        <button type="button" onclick="dbAdminCopyResponse()">コピー</button>
-      </div>
-      <div class="panel-body">
-        <pre id="db-admin-response">「実行」を押すと、ここに結果が表示されます。</pre>
-      </div>
-    </div>
+    </details>
   </div>
 </div>

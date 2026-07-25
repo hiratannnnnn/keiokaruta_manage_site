@@ -1,18 +1,200 @@
 <script>
+const DB_ADMIN_RESOURCES = {
+  'tournaments': {
+    path: '/tournaments', label: '大会', editable: true, deletable: true,
+    fields: ['name', 'registration_completed', 'payment_completed'],
+  },
+  'schedules': {
+    path: '/schedules', label: '日程', editable: true,
+    fields: ['held_on', 'grade', 'application_deadline', 'payment_deadline', 'payment_timing',
+      'lottery_result_date', 'venue', 'reception_ends_at', 'is_sanctioned'],
+  },
+  'players': {
+    path: '/players', label: '選手', editable: true,
+    fields: ['family_name', 'given_name', 'ruby', 'line_user_id', 'club'],
+  },
+  'entries': {
+    path: '/entries', label: '申込', editable: true,
+    fields: ['schedule_id'],
+  },
+  'announcements': {
+    path: '/announcements', label: '案内', editable: true,
+    fields: ['subject', 'form_url', 'gmail_message_id'],
+  },
+  'recipient-groups': {
+    path: '/recipient-groups', label: '宛先グループ', editable: true,
+    fields: ['name'],
+  },
+  'email-jobs': {
+    path: '/email-jobs', label: 'メールジョブ', editable: true,
+    fields: ['scheduled_at', 'mail_type', 'announcement_id', 'recipient_group_id'],
+  },
+  'email-deliveries': { path: '/email-deliveries', label: '配信履歴',     editable: false },
+};
+
+let dbAdminRows = [];
+let dbAdminSelected = null;
+
 function initDatabaseAdmin() {
   dbAdminMethodChanged();
-  if (!document.getElementById('db-admin-response').dataset.loaded) {
-    dbAdminPreset('GET', '/tournaments');
-  }
+  if (!document.getElementById('db-admin-table').dataset.loaded) dbAdminLoadTable();
 }
 
-function dbAdminPreset(method, path) {
-  document.getElementById('db-admin-method').value = method;
-  document.getElementById('db-admin-path').value = path;
-  document.getElementById('db-admin-query').value = '{}';
-  document.getElementById('db-admin-body').value = '{}';
-  dbAdminMethodChanged();
-  dbAdminExecute();
+function dbAdminPassword() {
+  return localStorage.getItem('karuta_pw') || '';
+}
+
+function dbAdminCall(request, onSuccess, onFailure) {
+  google.script.run
+    .withSuccessHandler(json => {
+      const response = JSON.parse(json);
+      if (response.error) {
+        onFailure(new Error(response.error));
+      } else {
+        onSuccess(response.data);
+      }
+    })
+    .withFailureHandler(error => onFailure(error))
+    .databaseAdminRequest(JSON.stringify(Object.assign({
+      password: dbAdminPassword(),
+      query: {},
+      body: null,
+    }, request)));
+}
+
+function dbAdminLoadTable() {
+  const key = document.getElementById('db-admin-resource').value;
+  const resource = DB_ADMIN_RESOURCES[key];
+  const status = document.getElementById('db-admin-table-status');
+  const reload = document.getElementById('db-admin-reload');
+  reload.disabled = true;
+  status.textContent = '読み込み中...';
+  status.className = 'op-status';
+  dbAdminCloseEditor();
+
+  dbAdminCall({ method: 'GET', path: resource.path }, data => {
+    reload.disabled = false;
+    dbAdminRows = Array.isArray(data) ? data : (data ? [data] : []);
+    document.getElementById('db-admin-table').dataset.loaded = 'true';
+    status.textContent = dbAdminRows.length + '件';
+    status.className = 'op-status ok';
+    dbAdminRenderTable();
+  }, error => {
+    reload.disabled = false;
+    dbAdminRows = [];
+    status.textContent = 'エラー: ' + error.message;
+    status.className = 'op-status error';
+    dbAdminRenderTable();
+  });
+}
+
+function dbAdminCellText(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function dbAdminRenderTable() {
+  const table = document.getElementById('db-admin-table');
+  const filter = document.getElementById('db-admin-filter').value.trim().toLowerCase();
+  const rows = dbAdminRows.filter(row =>
+    !filter || Object.values(row).some(value => dbAdminCellText(value).toLowerCase().includes(filter))
+  );
+  const columns = [];
+  rows.forEach(row => Object.keys(row).forEach(key => {
+    if (!columns.includes(key)) columns.push(key);
+  }));
+
+  if (!rows.length) {
+    table.style.display = 'none';
+    document.getElementById('db-admin-thead').innerHTML = '';
+    document.getElementById('db-admin-tbody').innerHTML = '';
+    return;
+  }
+
+  const resource = DB_ADMIN_RESOURCES[document.getElementById('db-admin-resource').value];
+  document.getElementById('db-admin-thead').innerHTML =
+    '<tr>' + columns.map(column => '<th>' + escHtml(column) + '</th>').join('') + '</tr>';
+  document.getElementById('db-admin-tbody').innerHTML = rows.map(row => {
+    const originalIndex = dbAdminRows.indexOf(row);
+    return '<tr' + (resource.editable ? ' class="db-admin-editable-row" onclick="dbAdminOpenEditor(' + originalIndex + ')"' : '') + '>' +
+      columns.map(column => '<td>' + escHtml(dbAdminCellText(row[column])) + '</td>').join('') +
+      '</tr>';
+  }).join('');
+  table.style.display = '';
+}
+
+function dbAdminOpenEditor(index) {
+  const key = document.getElementById('db-admin-resource').value;
+  const resource = DB_ADMIN_RESOURCES[key];
+  const row = dbAdminRows[index];
+  if (!resource.editable || !row || row.id === undefined) return;
+  dbAdminSelected = { key, id: row.id };
+  document.getElementById('db-admin-edit-title').textContent =
+    resource.label + ' ID ' + row.id + ' を編集';
+  const editableData = {};
+  resource.fields.forEach(field => {
+    if (Object.prototype.hasOwnProperty.call(row, field)) editableData[field] = row[field];
+  });
+  document.getElementById('db-admin-edit-json').value = JSON.stringify(editableData, null, 2);
+  document.getElementById('db-admin-delete-row').style.display = resource.deletable ? '' : 'none';
+  document.getElementById('db-admin-edit-status').textContent = '';
+  document.getElementById('db-admin-edit-panel').style.display = '';
+  document.getElementById('db-admin-edit-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function dbAdminCloseEditor() {
+  dbAdminSelected = null;
+  const panel = document.getElementById('db-admin-edit-panel');
+  if (panel) panel.style.display = 'none';
+}
+
+function dbAdminSaveRow() {
+  if (!dbAdminSelected) return;
+  const resource = DB_ADMIN_RESOURCES[dbAdminSelected.key];
+  const status = document.getElementById('db-admin-edit-status');
+  let body;
+  try {
+    body = JSON.parse(document.getElementById('db-admin-edit-json').value);
+  } catch (e) {
+    status.textContent = 'JSONが不正です。';
+    status.className = 'op-status error';
+    return;
+  }
+  delete body.id;
+  if (!window.confirm(resource.label + ' ID ' + dbAdminSelected.id + ' の変更を保存しますか？')) return;
+  status.textContent = '保存中...';
+  status.className = 'op-status';
+  dbAdminCall({
+    method: 'PATCH',
+    path: resource.path + '/' + encodeURIComponent(String(dbAdminSelected.id)),
+    body,
+  }, () => {
+    status.textContent = '保存しました';
+    status.className = 'op-status ok';
+    dbAdminLoadTable();
+  }, error => {
+    status.textContent = 'エラー: ' + error.message;
+    status.className = 'op-status error';
+  });
+}
+
+function dbAdminDeleteRow() {
+  if (!dbAdminSelected || dbAdminSelected.key !== 'tournaments') return;
+  if (!window.confirm('大会と関連する日程・申込データを削除します。この操作は元に戻せません。')) return;
+  const status = document.getElementById('db-admin-edit-status');
+  status.textContent = '削除中...';
+  status.className = 'op-status';
+  dbAdminCall({
+    method: 'DELETE',
+    path: '/tournaments/' + encodeURIComponent(String(dbAdminSelected.id)),
+  }, () => {
+    dbAdminCloseEditor();
+    dbAdminLoadTable();
+  }, error => {
+    status.textContent = 'エラー: ' + error.message;
+    status.className = 'op-status error';
+  });
 }
 
 function dbAdminMethodChanged() {
@@ -30,7 +212,7 @@ function dbAdminParseJson(id, emptyValue) {
   try {
     return JSON.parse(text);
   } catch (e) {
-    throw new Error(id === 'db-admin-query' ? 'Query JSONが不正です。' : 'Body JSONが不正です。');
+    throw new Error(id === 'db-admin-query' ? '絞り込みJSONが不正です。' : 'Body JSONが不正です。');
   }
 }
 
@@ -49,45 +231,22 @@ function dbAdminExecute() {
     status.className = 'op-status error';
     return;
   }
+  if (method !== 'GET' && !window.confirm(method + ' ' + path + ' をDBへ反映しますか？')) return;
 
-  if (method !== 'GET') {
-    const message = method === 'DELETE'
-      ? `${path} を削除します。関連データも削除される場合があります。実行しますか？`
-      : `${method} ${path} をDBへ反映します。実行しますか？`;
-    if (!window.confirm(message)) return;
-  }
-
-  const password = localStorage.getItem('karuta_pw') || '';
   const button = document.getElementById('db-admin-run');
   button.disabled = true;
   status.textContent = '実行中...';
   status.className = 'op-status';
-
-  google.script.run
-    .withSuccessHandler(json => {
-      button.disabled = false;
-      const response = JSON.parse(json);
-      output.dataset.loaded = 'true';
-      output.textContent = JSON.stringify(response.error ? response : response.data, null, 2);
-      if (response.error) {
-        status.textContent = 'エラー: ' + response.error;
-        status.className = 'op-status error';
-      } else {
-        status.textContent = '完了';
-        status.className = 'op-status ok';
-      }
-    })
-    .withFailureHandler(error => {
-      button.disabled = false;
-      status.textContent = 'エラー: ' + error.message;
-      status.className = 'op-status error';
-      output.textContent = error.message;
-    })
-    .databaseAdminRequest(JSON.stringify({ password, method, path, query, body }));
-}
-
-function dbAdminCopyResponse() {
-  const text = document.getElementById('db-admin-response').textContent;
-  if (navigator.clipboard) navigator.clipboard.writeText(text);
+  dbAdminCall({ method, path, query, body }, data => {
+    button.disabled = false;
+    output.textContent = JSON.stringify(data, null, 2);
+    status.textContent = '完了';
+    status.className = 'op-status ok';
+  }, error => {
+    button.disabled = false;
+    output.textContent = error.message;
+    status.textContent = 'エラー: ' + error.message;
+    status.className = 'op-status error';
+  });
 }
 </script>
