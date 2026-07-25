@@ -32,8 +32,8 @@ const DB_ADMIN_RESOURCES = {
 
 const DB_ADMIN_PAGE_SIZE = 25;
 const dbAdminPanes = {
-  left:  { rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
-  right: { rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
+  left:  { allRows: [], filteredRows: [], rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
+  right: { allRows: [], filteredRows: [], rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
 };
 let dbAdminSelected = null;
 
@@ -75,46 +75,58 @@ function dbAdminScheduleSearch(side) {
   const status = document.getElementById('db-admin-status-' + side);
   status.textContent = '検索中...';
   status.className = 'op-status db-admin-searching';
-  pane.timer = setTimeout(() => dbAdminLoadPane(side), 350);
+  pane.timer = setTimeout(() => dbAdminApplyFilter(side), 200);
 }
 
 function dbAdminLoadPane(side) {
   const pane = dbAdminPanes[side];
   const key = document.getElementById('db-admin-resource-' + side).value;
-  const search = document.getElementById('db-admin-filter-' + side).value.trim();
+  const resource = DB_ADMIN_RESOURCES[key];
   const status = document.getElementById('db-admin-status-' + side);
   const reload = document.getElementById('db-admin-reload-' + side);
   const requestId = ++pane.requestId;
   clearTimeout(pane.timer);
   reload.disabled = true;
-  status.textContent = search ? '検索中...' : '読み込み中...';
+  status.textContent = '読み込み中...';
   status.className = 'op-status db-admin-searching';
 
   dbAdminCall({
     method: 'GET',
-    path: '/admin/database/' + key,
-    query: { search, limit: DB_ADMIN_PAGE_SIZE, offset: pane.offset },
+    path: resource.path,
   }, data => {
     if (requestId !== pane.requestId) return;
     reload.disabled = false;
-    pane.rows = data.rows || [];
-    pane.total = Number(data.total || 0);
-    pane.offset = Number(data.offset || 0);
+    pane.allRows = Array.isArray(data) ? data : (data ? [data] : []);
     document.getElementById('db-admin-table-' + side).dataset.loaded = 'true';
-    status.textContent = search
-      ? '検索完了：' + pane.total + '件'
-      : pane.total + '件';
-    status.className = 'op-status ok';
-    dbAdminRenderPane(side);
+    dbAdminApplyFilter(side);
   }, error => {
     if (requestId !== pane.requestId) return;
     reload.disabled = false;
+    pane.allRows = [];
+    pane.filteredRows = [];
     pane.rows = [];
     pane.total = 0;
     status.textContent = 'エラー: ' + error.message;
     status.className = 'op-status error';
     dbAdminRenderPane(side);
   });
+}
+
+function dbAdminApplyFilter(side) {
+  const pane = dbAdminPanes[side];
+  const search = document.getElementById('db-admin-filter-' + side).value.trim().toLowerCase();
+  const status = document.getElementById('db-admin-status-' + side);
+  pane.filteredRows = pane.allRows.filter(row =>
+    !search || Object.values(row).some(value =>
+      dbAdminCellText(value).toLowerCase().includes(search)
+    )
+  );
+  pane.total = pane.filteredRows.length;
+  if (pane.offset >= pane.total) pane.offset = 0;
+  pane.rows = pane.filteredRows.slice(pane.offset, pane.offset + DB_ADMIN_PAGE_SIZE);
+  status.textContent = search ? '検索完了：' + pane.total + '件' : pane.total + '件';
+  status.className = 'op-status ok';
+  dbAdminRenderPane(side);
 }
 
 function dbAdminCellText(value) {
@@ -164,7 +176,7 @@ function dbAdminMovePage(side, direction) {
   const next = pane.offset + direction * DB_ADMIN_PAGE_SIZE;
   if (next < 0 || next >= pane.total) return;
   pane.offset = next;
-  dbAdminLoadPane(side);
+  dbAdminApplyFilter(side);
 }
 
 function dbAdminOpenEditor(side, index) {
