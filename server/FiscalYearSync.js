@@ -112,6 +112,8 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     const baseName = sheetName.replace(/[A-E]+級$/, '');
     const applicationDeadline = fiscalSyncDate_(calendarRow[5]);
     if (!applicationDeadline) errors.push(sheetName + ': 申込期限が未設定です。');
+    const feeResult = taikaiGradeFeesFromSheetData_(data, sheetName, currentFiscalGrades);
+    errors.push.apply(errors, feeResult.errors);
 
     const schedules = [];
     currentFiscalGrades.forEach(grade => {
@@ -122,6 +124,9 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
         application_deadline: applicationDeadline,
         payment_deadline: fiscalSyncDate_(calendarRow[10]) || null,
         payment_timing: null,
+        participation_fee_yen: Object.prototype.hasOwnProperty.call(feeResult.fees, grade)
+          ? feeResult.fees[grade]
+          : null,
         lottery_result_date: fiscalSyncDate_(calendarRow[7]) || null,
         venue: null,
         reception_ends_at: null,

@@ -282,6 +282,42 @@ function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned) {
   return schedules.length;
 }
 
+function taikaiGradeFeesFromSheetData_(data, sheetName, grades) {
+  const fees = {};
+  const errors = [];
+  (grades || []).forEach(grade => {
+    const matches = [];
+    (data || []).forEach((row, index) => {
+      if (String(row[0] || '').trim().toUpperCase() === grade) {
+        matches.push({ row: row, rowNumber: index + 1 });
+      }
+    });
+    if (!matches.length) {
+      errors.push(sheetName + ': ' + grade + '級の参加費設定行が見つかりません。');
+      return;
+    }
+    if (matches.length > 1) {
+      errors.push(
+        sheetName + ': ' + grade + '級の参加費設定行が重複しています（'
+        + matches.map(item => item.rowNumber + '行目').join(' / ') + '）。'
+      );
+      return;
+    }
+    const match = matches[0];
+    const fee = match.row[1];
+    if (typeof fee !== 'number' || !Number.isFinite(fee) ||
+        !Number.isInteger(fee) || fee < 0) {
+      errors.push(
+        sheetName + ': ' + grade + '級の参加費が不正です（'
+        + match.rowNumber + '行目B列）。0以上の整数を入力してください。'
+      );
+      return;
+    }
+    fees[grade] = fee;
+  });
+  return { fees: fees, errors: errors };
+}
+
 function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const calendar = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
@@ -294,17 +330,21 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const calendarRow = calendarRows.slice(2).find(row => String(row[0]) === sheetName);
   if (!calendarRow) throw new Error('カレンダーに大会情報がありません: ' + sheetName);
 
-  const header = tournamentSheet.getRange(1, 1, 1, tournamentSheet.getLastColumn()).getValues()[0];
-  const registerIndex = tournamentSheet.getDataRange().getValues().findIndex(row => String(row[0]).trim() === 'registerDatabase');
+  const tournamentData = tournamentSheet.getDataRange().getValues();
+  const registerIndex = tournamentData.findIndex(row => String(row[0]).trim() === 'registerDatabase');
   const isSanctioned = registerIndex < 0 || String(tournamentSheet.getRange(registerIndex + 2, 2).getValue()).trim() === '';
   const applicationDeadline = taikaiFormatDate_(calendarRow[5]);
   if (!applicationDeadline) throw new Error('申込期限が未設定のため、APIへ日程を登録できません。');
   const paymentDeadline = taikaiFormatDate_(calendarRow[10]) || null;
   const lotteryDate = taikaiFormatDate_(calendarRow[7]) || null;
+  const targetGrades = Object.keys(gradeDates || {}).filter(grade =>
+    Boolean(taikaiFormatDate_(gradeDates[grade]))
+  );
+  const feeResult = taikaiGradeFeesFromSheetData_(tournamentData, sheetName, targetGrades);
+  if (feeResult.errors.length) throw new Error(feeResult.errors.join('\n'));
 
-  Object.keys(gradeDates || {}).forEach(grade => {
+  targetGrades.forEach(grade => {
     const heldOn = taikaiFormatDate_(gradeDates[grade]);
-    if (!heldOn) return;
     const schedules = taikaiApiRequest_('GET', '/schedules', null, {
       tournament_id: tournament.id,
       grade: grade,
@@ -317,6 +357,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       payment_deadline: paymentDeadline,
       lottery_result_date: lotteryDate,
       payment_timing: null,
+      participation_fee_yen: feeResult.fees[grade],
       venue: null,
       reception_ends_at: null,
       is_sanctioned: isSanctioned,
