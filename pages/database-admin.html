@@ -2,44 +2,76 @@
 <div id="page-database-admin" class="page">
   <div class="list-page">
     <div class="page-title">DB管理</div>
+    <p class="db-admin-warning">
+      DBへ反映される管理画面です。左右で別々のテーブルを検索できます。
+      更新・削除は元に戻せない場合があります。
+    </p>
 
-    <div class="panel db-admin-panel">
-      <div class="panel-header">DBテーブル表示</div>
-      <div class="panel-body">
-        <p class="db-admin-warning">
-          DBへ反映される管理画面です。更新・削除は元に戻せない場合があります。
-        </p>
-
-        <div class="db-admin-table-toolbar">
-          <label>
-            表示するテーブル
-            <select id="db-admin-resource" class="me-select" onchange="dbAdminLoadTable()">
-              <option value="tournaments">大会（tournaments）</option>
-              <option value="schedules">日程（tournament_schedules）</option>
-              <option value="players">選手（players）</option>
-              <option value="entries">申込（entries）</option>
-              <option value="announcements">案内（announcements）</option>
-              <option value="recipient-groups">宛先グループ（recipient_groups）</option>
-              <option value="email-jobs">メールジョブ（email_jobs）</option>
-              <option value="email-deliveries">配信履歴（email_deliveries）</option>
+    <div class="db-admin-split">
+      <div class="panel db-admin-pane" id="db-admin-pane-left">
+        <div class="panel-header">左画面</div>
+        <div class="panel-body">
+          <div class="db-admin-pane-controls">
+            <select id="db-admin-resource-left" class="me-select" onchange="dbAdminChangeResource('left')">
+              <option value="tournaments">大会</option>
+              <option value="schedules">日程</option>
+              <option value="players">選手</option>
+              <option value="entries">申込</option>
+              <option value="announcements">案内</option>
+              <option value="recipient-groups">宛先グループ</option>
+              <option value="email-jobs">メールジョブ</option>
+              <option value="email-deliveries">配信履歴</option>
             </select>
-          </label>
-          <label>
-            表内検索
-            <input id="db-admin-filter" class="fc-text-input" placeholder="表示中のデータを絞り込み"
-                   oninput="dbAdminRenderTable()">
-          </label>
-          <button id="db-admin-reload" type="button" onclick="dbAdminLoadTable()">再読込</button>
+            <input id="db-admin-filter-left" class="fc-text-input" placeholder="DBを検索"
+                   oninput="dbAdminScheduleSearch('left')">
+            <button id="db-admin-reload-left" type="button" onclick="dbAdminLoadPane('left')">再読込</button>
+          </div>
+          <div id="db-admin-status-left" class="op-status"></div>
+          <div class="db-admin-pane-table-wrap">
+            <table class="sheet-table" id="db-admin-table-left" style="display:none;">
+              <thead id="db-admin-thead-left"></thead>
+              <tbody id="db-admin-tbody-left"></tbody>
+            </table>
+          </div>
+          <div class="db-admin-pagination">
+            <button id="db-admin-prev-left" onclick="dbAdminMovePage('left',-1)">← 前へ</button>
+            <span id="db-admin-page-left">0件</span>
+            <button id="db-admin-next-left" onclick="dbAdminMovePage('left',1)">次へ →</button>
+          </div>
         </div>
+      </div>
 
-        <div id="db-admin-table-status" class="op-status"></div>
-        <div class="table-wrap db-admin-table-wrap">
-          <table class="sheet-table" id="db-admin-table" style="display:none;">
-            <thead id="db-admin-thead"></thead>
-            <tbody id="db-admin-tbody"></tbody>
-          </table>
+      <div class="panel db-admin-pane" id="db-admin-pane-right">
+        <div class="panel-header">右画面</div>
+        <div class="panel-body">
+          <div class="db-admin-pane-controls">
+            <select id="db-admin-resource-right" class="me-select" onchange="dbAdminChangeResource('right')">
+              <option value="tournaments">大会</option>
+              <option value="schedules">日程</option>
+              <option value="players" selected>選手</option>
+              <option value="entries">申込</option>
+              <option value="announcements">案内</option>
+              <option value="recipient-groups">宛先グループ</option>
+              <option value="email-jobs">メールジョブ</option>
+              <option value="email-deliveries">配信履歴</option>
+            </select>
+            <input id="db-admin-filter-right" class="fc-text-input" placeholder="DBを検索"
+                   oninput="dbAdminScheduleSearch('right')">
+            <button id="db-admin-reload-right" type="button" onclick="dbAdminLoadPane('right')">再読込</button>
+          </div>
+          <div id="db-admin-status-right" class="op-status"></div>
+          <div class="db-admin-pane-table-wrap">
+            <table class="sheet-table" id="db-admin-table-right" style="display:none;">
+              <thead id="db-admin-thead-right"></thead>
+              <tbody id="db-admin-tbody-right"></tbody>
+            </table>
+          </div>
+          <div class="db-admin-pagination">
+            <button id="db-admin-prev-right" onclick="dbAdminMovePage('right',-1)">← 前へ</button>
+            <span id="db-admin-page-right">0件</span>
+            <button id="db-admin-next-right" onclick="dbAdminMovePage('right',1)">次へ →</button>
+          </div>
         </div>
-        <p class="db-admin-table-note">編集できる行はクリックできます。Query JSONの入力は不要です。</p>
       </div>
     </div>
 
@@ -62,29 +94,18 @@
     <details class="panel db-admin-panel db-admin-advanced">
       <summary class="panel-header">詳細操作（APIコンソール）</summary>
       <div class="panel-body">
-        <p>通常は上の表だけで閲覧・編集できます。新規登録や特殊な更新を行う場合に使用します。</p>
+        <p>通常は上の2画面だけで検索・閲覧・編集できます。新規登録や特殊な更新に使用します。</p>
         <div class="db-admin-request-row">
           <select id="db-admin-method" class="me-select" onchange="dbAdminMethodChanged()">
-            <option>GET</option>
-            <option>POST</option>
-            <option>PATCH</option>
-            <option>PUT</option>
-            <option>DELETE</option>
+            <option>GET</option><option>POST</option><option>PATCH</option>
+            <option>PUT</option><option>DELETE</option>
           </select>
-          <input id="db-admin-path" class="fc-text-input" value="/tournaments"
-                 placeholder="/tournaments または /players/123">
-          <button id="db-admin-run" class="login-submit-btn" type="button"
-                  onclick="dbAdminExecute()">実行</button>
+          <input id="db-admin-path" class="fc-text-input" value="/tournaments">
+          <button id="db-admin-run" class="login-submit-btn" type="button" onclick="dbAdminExecute()">実行</button>
         </div>
         <div class="db-admin-editors">
-          <label>
-            絞り込み（Query JSON・空欄可）
-            <textarea id="db-admin-query" spellcheck="false"></textarea>
-          </label>
-          <label id="db-admin-body-wrap">
-            登録・更新内容（Body JSON）
-            <textarea id="db-admin-body" spellcheck="false">{}</textarea>
-          </label>
+          <label>絞り込み（空欄可）<textarea id="db-admin-query" spellcheck="false"></textarea></label>
+          <label id="db-admin-body-wrap">登録・更新内容<textarea id="db-admin-body" spellcheck="false">{}</textarea></label>
         </div>
         <div id="db-admin-status" class="op-status"></div>
         <pre id="db-admin-response">詳細操作の結果がここに表示されます。</pre>

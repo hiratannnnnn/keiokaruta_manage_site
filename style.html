@@ -193,6 +193,60 @@
     resize: vertical;
   }
   .db-admin-result-header { display: flex; align-items: center; justify-content: space-between; }
+  .db-admin-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .db-admin-pane { min-width: 0; }
+  .db-admin-pane-controls {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.8fr) minmax(150px, 1.2fr) auto;
+    gap: 7px;
+  }
+  .db-admin-pane-controls button, .db-admin-pagination button {
+    padding: 7px 11px;
+    border: 1px solid #c4ced8;
+    border-radius: 5px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .db-admin-pane-controls button:disabled, .db-admin-pagination button:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+  .db-admin-pane-table-wrap {
+    min-height: 330px;
+    max-height: 560px;
+    margin-top: 7px;
+    overflow: auto;
+    border: 1px solid #e0e5ea;
+    border-radius: 5px;
+  }
+  .db-admin-pane-table-wrap table { min-width: max-content; }
+  .db-admin-pane-table-wrap th { position: sticky; top: 0; z-index: 1; }
+  .db-admin-pane-table-wrap td { max-width: 280px; overflow-wrap: anywhere; }
+  .db-admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
+    margin-top: 9px;
+    font-size: 0.8rem;
+  }
+  .db-admin-searching::before {
+    content: "";
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin-right: 6px;
+    border: 2px solid #b8c4ce;
+    border-top-color: #315b7d;
+    border-radius: 50%;
+    vertical-align: -1px;
+    animation: spin 0.75s linear infinite;
+  }
   .db-admin-table-toolbar {
     display: grid;
     grid-template-columns: minmax(230px, 1fr) minmax(240px, 1fr) auto;
@@ -258,6 +312,8 @@
     overflow-wrap: anywhere;
   }
   @media (max-width: 720px) {
+    .db-admin-split { grid-template-columns: 1fr; }
+    .db-admin-pane-controls { grid-template-columns: 1fr; }
     .db-admin-table-toolbar { grid-template-columns: 1fr; }
     .db-admin-request-row { grid-template-columns: 90px 1fr; }
     .db-admin-request-row button { grid-column: 1 / -1; }

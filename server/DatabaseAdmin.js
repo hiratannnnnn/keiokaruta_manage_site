@@ -5,6 +5,7 @@
 function databaseAdminAllowedPath_(method, path) {
   const rules = {
     GET: [
+      /^\/admin\/database\/[a-z-]+$/,
       /^\/tournaments$/,
       /^\/tournaments\/\d+$/,
       /^\/tournaments\/\d+\/schedules$/,
