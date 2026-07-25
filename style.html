@@ -945,8 +945,39 @@
   .pay-btn:disabled { background: #95a5a6; cursor: default; }
   .pay-btn-cancel { background: #e67e22; }
   .pay-btn-cancel:hover { background: #ca6f1e; }
+  .pay-btn-cancel-before { background: #2980b9; }
+  .pay-btn-cancel-before:hover { background: #21618c; }
+  .pay-btn-cancel-after { background: #c0392b; }
+  .pay-btn-cancel-after:hover { background: #922b21; }
   .pay-btn-clear { background: #7f8c8d; }
   .pay-btn-clear:hover { background: #6c7a7d; }
+  .cancellation-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin: 7px 0;
+    color: #555;
+    font-size: 0.76rem;
+  }
+  .cancel-status {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .cancel-status-cell {
+    font-weight: 700;
+  }
+  .cancel-status-before {
+    background: #d9edf7 !important;
+    color: #1b4f72;
+  }
+  .cancel-status-after {
+    background: #f8d7da !important;
+    color: #721c24;
+  }
 
   /* 権限設定テーブル */
   .perm-table { border-collapse: collapse; width: 100%; }
