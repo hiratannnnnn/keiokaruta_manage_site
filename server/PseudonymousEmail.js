@@ -24,7 +24,7 @@ function normalizePrivateEmail_(email) {
 }
 
 function isPseudonymousEmail_(email) {
-  return /^v1-[0-9a-f]{64}@example\.invalid$/i.test(String(email || '').trim());
+  return /^v1-[0-9a-f]{60}@example\.invalid$/i.test(String(email || '').trim());
 }
 
 function pseudonymousEmailFor_(realEmail) {
@@ -39,7 +39,8 @@ function pseudonymousEmailFor_(realEmail) {
     const unsigned = value < 0 ? value + 256 : value;
     return ('0' + unsigned.toString(16)).slice(-2);
   }).join('');
-  return 'v1-' + hex + '@example.invalid';
+  // メールのローカル部上限64文字に収める（v1- + 60桁 = 63文字）。
+  return 'v1-' + hex.slice(0, 60) + '@example.invalid';
 }
 
 function emailMapSheet_(createIfMissing) {
@@ -144,4 +145,97 @@ function rememberSnapshotEmailMappings_(snapshot) {
     }
   });
   if (rows.length) sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+}
+
+function playerEmailMigrationPlan_() {
+  let offset = 0;
+  let total = 0;
+  const players = [];
+  do {
+    const page = taikaiApiRequest_(
+      'GET', '/admin/database/players', null, { limit: 100, offset: offset }
+    );
+    total = Number(page.total || 0);
+    players.push.apply(players, page.rows || []);
+    offset += (page.rows || []).length;
+    if (!(page.rows || []).length) break;
+  } while (offset < total);
+
+  const mappings = [];
+  const targets = [];
+  let alreadyMigrated = 0;
+  players.forEach(player => {
+    const currentEmail = String(player.email || '').trim().toLowerCase();
+    if (isPseudonymousEmail_(currentEmail)) {
+      alreadyMigrated++;
+      return;
+    }
+    const real = normalizePrivateEmail_(currentEmail);
+    const pseudo = pseudonymousEmailFor_(real);
+    targets.push({
+      player_id: String(player.id),
+      pseudonymous_email: pseudo,
+    });
+    mappings.push({
+      real_email: real,
+      family_name: String(player.family_name || ''),
+      given_name: String(player.given_name || ''),
+    });
+  });
+  if (targets.length > 1000) {
+    throw new Error('移行対象が1000件を超えています。APIの分割移行対応が必要です。');
+  }
+  return {
+    total: total,
+    already_migrated: alreadyMigrated,
+    targets: targets,
+    mappings: mappings,
+  };
+}
+
+function previewPlayerEmailMigration(password) {
+  try {
+    databaseAdminAuthenticate_(password);
+    const plan = playerEmailMigrationPlan_();
+    const result = plan.targets.length ? taikaiApiRequest_(
+      'POST',
+      '/admin/player-email-migration',
+      { dry_run: true, players: plan.targets }
+    ) : { dry_run: true, checked_count: 0, updated_count: 0 };
+    return JSON.stringify({
+      ok: true,
+      total: plan.total,
+      migration_count: plan.targets.length,
+      already_migrated: plan.already_migrated,
+      result: result,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function migratePlayerEmails(password) {
+  try {
+    databaseAdminAuthenticate_(password);
+    const plan = playerEmailMigrationPlan_();
+    if (!plan.targets.length) {
+      return JSON.stringify({ ok: true, total: plan.total, updated_count: 0 });
+    }
+    // DB更新に成功してから、実メールとの対応表をローカルに保存する。
+    const result = taikaiApiRequest_(
+      'POST',
+      '/admin/player-email-migration',
+      { dry_run: false, players: plan.targets }
+    );
+    rememberSnapshotEmailMappings_({
+      tournaments: [{ entries: plan.mappings }],
+    });
+    return JSON.stringify({
+      ok: true,
+      total: plan.total,
+      updated_count: Number(result.updated_count || 0),
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
 }

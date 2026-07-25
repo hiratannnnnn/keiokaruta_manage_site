@@ -8,6 +8,22 @@
     </p>
 
     <div class="panel db-admin-panel">
+      <div class="panel-header">実メール → DB用疑似メール移行</div>
+      <div class="panel-body">
+        <p class="db-admin-sync-description">
+          DB内の選手メールを疑似メールへ一括置換します。最初に検査を行い、
+          問題がない場合だけ移行してください。秘密鍵はDBへ送信されません。
+        </p>
+        <div class="db-admin-sync-actions">
+          <button id="db-admin-email-preview-btn" onclick="dbAdminPreviewEmailMigration()">移行内容を検査</button>
+          <button id="db-admin-email-run-btn" class="db-admin-delete-button"
+                  onclick="dbAdminRunEmailMigration()" disabled>検査した内容で移行</button>
+          <span id="db-admin-email-status" class="op-status"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel db-admin-panel">
       <div class="panel-header">今年度のシート → DB完全同期</div>
       <div class="panel-body">
         <p class="db-admin-sync-description">

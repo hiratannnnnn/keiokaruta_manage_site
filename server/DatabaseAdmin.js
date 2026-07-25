@@ -28,6 +28,7 @@ function databaseAdminAllowedPath_(method, path) {
     ],
     POST: [
       /^\/admin\/fiscal-year-sync$/,
+      /^\/admin\/player-email-migration$/,
       /^\/tournaments$/,
       /^\/tournaments\/\d+\/schedules$/,
       /^\/players$/,

@@ -58,10 +58,29 @@ function taikaiRecordApiDebug_(method, path, status, text) {
       method: String(method).toUpperCase(),
       path: path,
       status: status,
-      body: String(text || '').slice(0, 90000),
+      body: taikaiRedactApiDebug_(text).slice(0, 90000),
     }), 600);
   } catch (e) {
     // デバッグログの失敗で本来のAPI処理を失敗させない。
+  }
+}
+
+function taikaiRedactApiDebug_(text) {
+  try {
+    const redact = value => {
+      if (Array.isArray(value)) return value.map(redact);
+      if (!value || typeof value !== 'object') return value;
+      const clean = {};
+      Object.keys(value).forEach(key => {
+        const item = value[key];
+        clean[key] = /email/i.test(key) && typeof item === 'string'
+          && !isPseudonymousEmail_(item) ? '[redacted]' : redact(item);
+      });
+      return clean;
+    };
+    return JSON.stringify(redact(JSON.parse(String(text || ''))));
+  } catch (e) {
+    return '[API response omitted: invalid JSON]';
   }
 }
 

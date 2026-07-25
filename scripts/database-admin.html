@@ -40,6 +40,64 @@ let dbAdminFiscalPreviewValid = false;
 let dbAdminFiscalProgressTimer = null;
 let dbAdminFiscalElapsedTimer = null;
 let dbAdminFiscalStartedAt = 0;
+let dbAdminEmailPreviewValid = false;
+
+function dbAdminPreviewEmailMigration() {
+  const status = document.getElementById('db-admin-email-status');
+  const button = document.getElementById('db-admin-email-run-btn');
+  status.textContent = 'DB内の選手を検査中...';
+  status.className = 'op-status db-admin-searching';
+  button.disabled = true;
+  dbAdminEmailPreviewValid = false;
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      dbAdminEmailPreviewValid = true;
+      button.disabled = data.migration_count === 0;
+      status.textContent = '全' + data.total + '人中、移行対象' + data.migration_count
+        + '人、移行済み' + data.already_migrated + '人';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .previewPlayerEmailMigration(dbAdminPassword());
+}
+
+function dbAdminRunEmailMigration() {
+  if (!dbAdminEmailPreviewValid) return;
+  if (!confirm('検査済みの選手メールを疑似メールへ移行します。よろしいですか？')) return;
+  const status = document.getElementById('db-admin-email-status');
+  const button = document.getElementById('db-admin-email-run-btn');
+  button.disabled = true;
+  dbAdminEmailPreviewValid = false;
+  status.textContent = '疑似メールへ移行中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      status.textContent = data.updated_count + '人を移行しました。';
+      status.className = 'op-status ok';
+      dbAdminLoadPane('left');
+      dbAdminLoadPane('right');
+    })
+    .withFailureHandler(error => {
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .migratePlayerEmails(dbAdminPassword());
+}
 
 function initDatabaseAdmin() {
   dbAdminMethodChanged();
