@@ -31,16 +31,6 @@ const DB_ADMIN_RESOURCES = {
 };
 
 const DB_ADMIN_PAGE_SIZE = 25;
-const DB_ADMIN_SEARCH_HINTS = {
-  'tournaments': '大会名で検索',
-  'schedules': '大会名・会場・級・日付で検索',
-  'players': '氏名・ふりがな・メール・所属で検索',
-  'entries': '選手名・メール・大会名・級で検索',
-  'announcements': '件名で検索',
-  'recipient-groups': 'グループ名で検索',
-  'email-jobs': 'メール種別・件名・グループ名で検索',
-  'email-deliveries': '選手名・メール・大会名・エラーで検索',
-};
 const dbAdminPanes = {
   left:  { rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
   right: { rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
@@ -50,8 +40,6 @@ let dbAdminSelected = null;
 function initDatabaseAdmin() {
   dbAdminMethodChanged();
   if (!document.getElementById('db-admin-table-left').dataset.loaded) {
-    dbAdminUpdateSearchHint('left');
-    dbAdminUpdateSearchHint('right');
     dbAdminLoadPane('left');
     dbAdminLoadPane('right');
   }
@@ -77,14 +65,7 @@ function dbAdminChangeResource(side) {
   const pane = dbAdminPanes[side];
   pane.offset = 0;
   document.getElementById('db-admin-filter-' + side).value = '';
-  dbAdminUpdateSearchHint(side);
   dbAdminLoadPane(side);
-}
-
-function dbAdminUpdateSearchHint(side) {
-  const key = document.getElementById('db-admin-resource-' + side).value;
-  document.getElementById('db-admin-filter-' + side).placeholder =
-    DB_ADMIN_SEARCH_HINTS[key] || '日本語で検索';
 }
 
 function dbAdminScheduleSearch(side) {

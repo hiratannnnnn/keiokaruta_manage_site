@@ -12,18 +12,24 @@
         <div class="panel-header">左画面</div>
         <div class="panel-body">
           <div class="db-admin-pane-controls">
-            <select id="db-admin-resource-left" class="me-select" onchange="dbAdminChangeResource('left')">
-              <option value="tournaments">大会</option>
-              <option value="schedules">日程</option>
-              <option value="players">選手</option>
-              <option value="entries">申込</option>
-              <option value="announcements">案内</option>
-              <option value="recipient-groups">宛先グループ</option>
-              <option value="email-jobs">メールジョブ</option>
-              <option value="email-deliveries">配信履歴</option>
-            </select>
-            <input id="db-admin-filter-left" class="fc-text-input" placeholder="DBを検索"
-                   oninput="dbAdminScheduleSearch('left')">
+            <label>
+              表示するテーブル
+              <select id="db-admin-resource-left" class="me-select" onchange="dbAdminChangeResource('left')">
+                <option value="tournaments">大会（tournaments）</option>
+                <option value="schedules">日程（tournament_schedules）</option>
+                <option value="players">選手（players）</option>
+                <option value="entries">申込（entries）</option>
+                <option value="announcements">案内（announcements）</option>
+                <option value="recipient-groups">宛先グループ（recipient_groups）</option>
+                <option value="email-jobs">メールジョブ（email_jobs）</option>
+                <option value="email-deliveries">配信履歴（email_deliveries）</option>
+              </select>
+            </label>
+            <label>
+              表内検索
+              <input id="db-admin-filter-left" class="fc-text-input" placeholder="表示中のデータを絞り込み"
+                     oninput="dbAdminScheduleSearch('left')">
+            </label>
             <button id="db-admin-reload-left" type="button" onclick="dbAdminLoadPane('left')">再読込</button>
           </div>
           <div id="db-admin-status-left" class="op-status"></div>
@@ -45,18 +51,24 @@
         <div class="panel-header">右画面</div>
         <div class="panel-body">
           <div class="db-admin-pane-controls">
-            <select id="db-admin-resource-right" class="me-select" onchange="dbAdminChangeResource('right')">
-              <option value="tournaments">大会</option>
-              <option value="schedules">日程</option>
-              <option value="players" selected>選手</option>
-              <option value="entries">申込</option>
-              <option value="announcements">案内</option>
-              <option value="recipient-groups">宛先グループ</option>
-              <option value="email-jobs">メールジョブ</option>
-              <option value="email-deliveries">配信履歴</option>
-            </select>
-            <input id="db-admin-filter-right" class="fc-text-input" placeholder="DBを検索"
-                   oninput="dbAdminScheduleSearch('right')">
+            <label>
+              表示するテーブル
+              <select id="db-admin-resource-right" class="me-select" onchange="dbAdminChangeResource('right')">
+                <option value="tournaments">大会（tournaments）</option>
+                <option value="schedules">日程（tournament_schedules）</option>
+                <option value="players" selected>選手（players）</option>
+                <option value="entries">申込（entries）</option>
+                <option value="announcements">案内（announcements）</option>
+                <option value="recipient-groups">宛先グループ（recipient_groups）</option>
+                <option value="email-jobs">メールジョブ（email_jobs）</option>
+                <option value="email-deliveries">配信履歴（email_deliveries）</option>
+              </select>
+            </label>
+            <label>
+              表内検索
+              <input id="db-admin-filter-right" class="fc-text-input" placeholder="表示中のデータを絞り込み"
+                     oninput="dbAdminScheduleSearch('right')">
+            </label>
             <button id="db-admin-reload-right" type="button" onclick="dbAdminLoadPane('right')">再読込</button>
           </div>
           <div id="db-admin-status-right" class="op-status"></div>
