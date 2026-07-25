@@ -1,0 +1,81 @@
+<!-- ========== DB管理 ========== -->
+<div id="page-database-admin" class="page">
+  <div class="list-page">
+    <div class="page-title">DB管理</div>
+
+    <div class="panel db-admin-panel">
+      <div class="panel-header">taikai_manage APIコンソール</div>
+      <div class="panel-body">
+        <p class="db-admin-warning">
+          DBへ反映される管理操作です。更新・削除は元に戻せない場合があります。
+          任意SQLや許可されていないAPIは実行できません。
+        </p>
+
+        <div class="db-admin-presets">
+          <button type="button" onclick="dbAdminPreset('GET','/tournaments')">大会</button>
+          <button type="button" onclick="dbAdminPreset('GET','/schedules')">日程</button>
+          <button type="button" onclick="dbAdminPreset('GET','/players')">選手</button>
+          <button type="button" onclick="dbAdminPreset('GET','/entries')">申込</button>
+          <button type="button" onclick="dbAdminPreset('GET','/announcements')">案内</button>
+          <button type="button" onclick="dbAdminPreset('GET','/email-jobs')">メールジョブ</button>
+          <button type="button" onclick="dbAdminPreset('GET','/email-deliveries')">配信履歴</button>
+        </div>
+
+        <div class="db-admin-request-row">
+          <select id="db-admin-method" class="me-select" onchange="dbAdminMethodChanged()">
+            <option>GET</option>
+            <option>POST</option>
+            <option>PATCH</option>
+            <option>PUT</option>
+            <option>DELETE</option>
+          </select>
+          <input id="db-admin-path" class="fc-text-input" value="/tournaments"
+                 placeholder="/tournaments または /players/123">
+          <button id="db-admin-run" class="login-submit-btn" type="button"
+                  onclick="dbAdminExecute()">実行</button>
+        </div>
+
+        <div class="db-admin-editors">
+          <label>
+            Query JSON
+            <textarea id="db-admin-query" spellcheck="false">{}</textarea>
+          </label>
+          <label id="db-admin-body-wrap">
+            Body JSON
+            <textarea id="db-admin-body" spellcheck="false">{}</textarea>
+          </label>
+        </div>
+
+        <div id="db-admin-status" class="op-status"></div>
+
+        <details class="db-admin-help">
+          <summary>操作例と利用可能な更新</summary>
+          <div>
+            <code>PATCH /players/123</code>
+            <pre>{"family_name":"山田","given_name":"太郎","email":"taro@example.com"}</pre>
+            <code>PATCH /schedules/45</code>
+            <pre>{"payment_deadline":"2026-08-01","venue":"会場名"}</pre>
+            <code>PUT /entries/67/payment</code>
+            <pre>{"is_paid":true}</pre>
+            <code>POST /tournaments</code>
+            <pre>{"name":"大会名","registration_completed":false,"payment_completed":false}</pre>
+            <p>
+              ID付きの大会・日程・選手・申込・案内・宛先グループ・メールジョブは
+              PATCHで編集できます。DELETEは大会のみ許可され、関連データも削除されます。
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="panel db-admin-panel">
+      <div class="panel-header db-admin-result-header">
+        <span>APIレスポンス</span>
+        <button type="button" onclick="dbAdminCopyResponse()">コピー</button>
+      </div>
+      <div class="panel-body">
+        <pre id="db-admin-response">「実行」を押すと、ここに結果が表示されます。</pre>
+      </div>
+    </div>
+  </div>
+</div>

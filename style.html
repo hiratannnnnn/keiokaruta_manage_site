@@ -160,6 +160,68 @@
   body.role-president { --role-color: #8e44ad; --role-color-dark: #6c3483; }
 
   body[class*="role-"] nav button.active       { border-bottom-color: var(--role-color); }
+
+  .db-admin-panel { max-width: 980px; margin-bottom: 16px; }
+  .db-admin-warning {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    color: #8a4b08;
+    background: #fff4df;
+    border: 1px solid #f2cf91;
+    border-radius: 6px;
+    line-height: 1.55;
+  }
+  .db-admin-presets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+  .db-admin-presets button, .db-admin-result-header button {
+    padding: 6px 11px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .db-admin-request-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 8px; }
+  .db-admin-request-row .login-submit-btn { width: auto; margin: 0; padding: 8px 22px; }
+  .db-admin-request-row .db-admin-danger { background: #c0392b; }
+  .db-admin-editors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .db-admin-editors label { display: flex; flex-direction: column; gap: 5px; font-size: 0.85rem; }
+  .db-admin-editors textarea {
+    min-height: 130px;
+    padding: 9px;
+    border: 1px solid #ccd4dc;
+    border-radius: 5px;
+    font: 13px/1.5 monospace;
+    resize: vertical;
+  }
+  .db-admin-result-header { display: flex; align-items: center; justify-content: space-between; }
+  .db-admin-help { margin-top: 14px; font-size: 0.86rem; }
+  .db-admin-help summary { cursor: pointer; color: #315b7d; }
+  .db-admin-help > div { margin-top: 9px; }
+  .db-admin-help code { display: inline-block; margin-top: 7px; font-weight: 600; }
+  .db-admin-help pre {
+    margin: 4px 0;
+    padding: 7px 9px;
+    border-radius: 4px;
+    background: #f3f6f8;
+    white-space: pre-wrap;
+  }
+  #db-admin-response {
+    min-height: 220px;
+    max-height: 560px;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: #15202b;
+    color: #dbeafe;
+    font: 13px/1.55 monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 720px) {
+    .db-admin-request-row { grid-template-columns: 90px 1fr; }
+    .db-admin-request-row button { grid-column: 1 / -1; }
+    .db-admin-editors { grid-template-columns: 1fr; }
+  }
   body[class*="role-"] .panel-header           { background: var(--role-color-dark); }
   body[class*="role-"] .list-page .page-title  { border-bottom-color: var(--role-color); }
   body[class*="role-"] .me-type-btn:hover      { border-color: var(--role-color); background: color-mix(in srgb, var(--role-color) 10%, #fff); color: var(--role-color-dark); }

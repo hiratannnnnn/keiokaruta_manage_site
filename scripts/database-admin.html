@@ -1,0 +1,93 @@
+<script>
+function initDatabaseAdmin() {
+  dbAdminMethodChanged();
+  if (!document.getElementById('db-admin-response').dataset.loaded) {
+    dbAdminPreset('GET', '/tournaments');
+  }
+}
+
+function dbAdminPreset(method, path) {
+  document.getElementById('db-admin-method').value = method;
+  document.getElementById('db-admin-path').value = path;
+  document.getElementById('db-admin-query').value = '{}';
+  document.getElementById('db-admin-body').value = '{}';
+  dbAdminMethodChanged();
+  dbAdminExecute();
+}
+
+function dbAdminMethodChanged() {
+  const method = document.getElementById('db-admin-method').value;
+  document.getElementById('db-admin-body-wrap').style.display =
+    method === 'GET' || method === 'DELETE' ? 'none' : 'flex';
+  const run = document.getElementById('db-admin-run');
+  run.textContent = method === 'GET' ? '取得' : '実行';
+  run.classList.toggle('db-admin-danger', method === 'DELETE');
+}
+
+function dbAdminParseJson(id, emptyValue) {
+  const text = document.getElementById(id).value.trim();
+  if (!text) return emptyValue;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(id === 'db-admin-query' ? 'Query JSONが不正です。' : 'Body JSONが不正です。');
+  }
+}
+
+function dbAdminExecute() {
+  const method = document.getElementById('db-admin-method').value;
+  const path = document.getElementById('db-admin-path').value.trim();
+  const status = document.getElementById('db-admin-status');
+  const output = document.getElementById('db-admin-response');
+  let query;
+  let body;
+  try {
+    query = dbAdminParseJson('db-admin-query', {});
+    body = dbAdminParseJson('db-admin-body', {});
+  } catch (e) {
+    status.textContent = e.message;
+    status.className = 'op-status error';
+    return;
+  }
+
+  if (method !== 'GET') {
+    const message = method === 'DELETE'
+      ? `${path} を削除します。関連データも削除される場合があります。実行しますか？`
+      : `${method} ${path} をDBへ反映します。実行しますか？`;
+    if (!window.confirm(message)) return;
+  }
+
+  const password = localStorage.getItem('karuta_pw') || '';
+  const button = document.getElementById('db-admin-run');
+  button.disabled = true;
+  status.textContent = '実行中...';
+  status.className = 'op-status';
+
+  google.script.run
+    .withSuccessHandler(json => {
+      button.disabled = false;
+      const response = JSON.parse(json);
+      output.dataset.loaded = 'true';
+      output.textContent = JSON.stringify(response.error ? response : response.data, null, 2);
+      if (response.error) {
+        status.textContent = 'エラー: ' + response.error;
+        status.className = 'op-status error';
+      } else {
+        status.textContent = '完了';
+        status.className = 'op-status ok';
+      }
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+      output.textContent = error.message;
+    })
+    .databaseAdminRequest(JSON.stringify({ password, method, path, query, body }));
+}
+
+function dbAdminCopyResponse() {
+  const text = document.getElementById('db-admin-response').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(text);
+}
+</script>

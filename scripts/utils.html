@@ -93,6 +93,7 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (page === 'make-email' && !makeEmailLoaded) { initMakeEmail(null); makeEmailLoaded = true; }
     if (page === 'mail-management') initMailManagement();
     if (page === 'suitou') initSuitou();
+    if (page === 'database-admin') initDatabaseAdmin();
     if (page === 'settings') { renderPermTable(); loadRoleNamesSettings(); }
   });
 });
@@ -117,6 +118,8 @@ function initApp() {
   startApiDebugPolling();
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('nav-settings-btn').style.display =
+    currentRole === '会長副会長' ? 'inline-block' : 'none';
+  document.getElementById('nav-database-admin-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
   const isAnnouncer = currentRole === '案内係' || currentRole === '会長副会長';
   document.getElementById('nav-form-create-btn').style.display = isAnnouncer ? 'inline-block' : 'none';
