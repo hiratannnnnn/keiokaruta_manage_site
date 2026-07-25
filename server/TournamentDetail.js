@@ -88,8 +88,10 @@ function toggleOfficialStatus(name) {
     for (let i = 1; i < data.length - 1; i++) {
       if (String(data[i][0]).trim() === 'registerDatabase') {
         const isCurrentlyOfficial = String(data[i + 1][1]) === '';
+        const newIsOfficial = !isCurrentlyOfficial;
+        taikaiSetTournamentSanctioned_(String(name).replace(/[A-E]+級$/, ''), newIsOfficial);
         sheet.getRange(i + 2, 2).setValue(isCurrentlyOfficial ? '非公認' : '');
-        return JSON.stringify({ ok: true, isOfficial: !isCurrentlyOfficial });
+        return JSON.stringify({ ok: true, isOfficial: newIsOfficial });
       }
     }
     return JSON.stringify({ error: '"registerDatabase" 行が見つかりません' });
@@ -140,6 +142,8 @@ function getTournamentKeyValue(sheetName, key) {
 // 大会詳細シートの振込み済みか列（col N+2）を書き換える
 function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
   try {
+    const isPaid = value === '済' || value === '繰越' || value === 'くりこし';
+    taikaiSetPaymentByPlayer_(String(sheetName).replace(/[A-E]+級$/, ''), playerName, isPaid);
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
@@ -266,6 +270,9 @@ function saveTournamentDates(sheetName, gradeDatesJson) {
         sheet.getRange(i + 1, count + 3).setValue(new Date(gradeDates[grade]));
       }
     }
+
+    // シートはフォーム・表示用に残すが、運用上の大会日程は新DBへ同期する。
+    taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates);
     return JSON.stringify({ ok: true });
   } catch (e) {
     return JSON.stringify({ error: e.message });

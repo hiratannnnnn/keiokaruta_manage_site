@@ -2,24 +2,17 @@
 // 出場回数カウント
 // ============================================================
 
-// 外部 API から選手の出場履歴を取得し filterMatches を適用して返す
+// taikai_manage API から選手の出場履歴を取得し filterMatches を適用して返す
 // beforeDate : 大会前日（この日より前の試合のみ対象）
 // 返り値     : "date：location：raffleDate" 形式の文字列配列
 function fetchCountMatches_(playerName, beforeDate) {
-  const url = CONFIG.KARUTA_SEARCH_URL
-    + '?name=' + encodeURIComponent(playerName.replace('　', ' '))
-    + '&date=' + encodeURIComponent(Utilities.formatDate(beforeDate, 'JST', 'yyyy-MM-dd'));
   try {
-    const res     = UrlFetchApp.fetch(url, { method: 'get', muteHttpExceptions: true });
-    const results = JSON.parse(res.getContentText());
-    if (!Array.isArray(results)) return [];
-
     const y           = beforeDate.getFullYear();
     const fiscalYear  = (beforeDate.getMonth() + 1) < 4 ? y - 1 : y;
     const fiscalStart = new Date(fiscalYear,     3,  1);
     const fiscalEnd   = new Date(fiscalYear + 1, 2, 31);
 
-    return results
+    return taikaiGetParticipations_(String(playerName).replace(/　/g, ' '), beforeDate)
       .filter(item => {
         const d   = new Date(item.date);
         const loc = String(item.location || '');

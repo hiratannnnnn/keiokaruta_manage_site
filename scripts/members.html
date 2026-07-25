@@ -15,6 +15,7 @@ function loadMembers() {
 function onMembersLoaded(json) {
   const data = JSON.parse(json);
   if (data.error) { setStatus('members', 'error', data.error); return; }
+  if (!data.length) { setStatus('members', 'empty', 'データがありません'); return; }
   const nameKey = Object.keys(data[0])[0];
   allMembers = data.sort((a, b) =>
     String(a[nameKey]).localeCompare(String(b[nameKey]), 'ja')

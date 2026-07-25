@@ -19,7 +19,4 @@ const CONFIG = {
     SETTINGS: '設定用',
   },
 
-  // 大会結果検索API
-  KARUTA_SEARCH_URL: 'http://keiokarutakai.atwebpages.com/search_results2.php',
-
 };

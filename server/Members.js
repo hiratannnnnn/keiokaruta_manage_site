@@ -2,24 +2,17 @@
 // 名簿関連
 // ============================================================
 
-// 名簿取得（スプレッドシート）
-// シート名「名簿」の 1 行目をヘッダーとして扱う
+// 名簿取得（taikai_manage API）
+// フォーム回答・大会登録で共有する選手マスタをDBから取得する。
 function getMembers() {
   try {
-    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MEMBERS);
-    if (!sheet) throw new Error(`「${CONFIG.SHEET_NAMES.MEMBERS}」シートが見つかりません`);
-
-    const data = sheet.getDataRange().getValues();
-    if (data.length < 2) return JSON.stringify([]);
-
-    const headers = data[0];
-    const members = data.slice(1).map(row => {
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = row[i]; });
-      return obj;
-    });
-
+    const players = taikaiApiRequest_('GET', '/players', null, {}) || [];
+    const members = players.map(player => ({
+      '氏名': String(player.family_name || '') + ' ' + String(player.given_name || ''),
+      'ふりがな': player.ruby || '',
+      'メールアドレス': player.email || '',
+      '所属': player.club || '',
+    }));
     return JSON.stringify(members);
   } catch (e) {
     return JSON.stringify({ error: e.message });

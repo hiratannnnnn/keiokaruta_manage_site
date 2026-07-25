@@ -2,19 +2,9 @@
 // 外部DB登録（keiokarutakai）
 // ============================================================
 
-// 外部 DB への登録リクエスト送信
-function connectDb_(date, tournamentName, playerName, raffleDate) {
-  const url = CONFIG.KARUTA_SEARCH_URL.replace('search_results2.php', 'register_match.php');
-  UrlFetchApp.fetch(url, {
-    method:             'post',
-    payload: {
-      'register-date':     date,
-      'register-location': tournamentName,
-      'register-name':     playerName,
-      'raffle-date':       raffleDate,
-    },
-    muteHttpExceptions: true,
-  });
+// taikai_manage APIへ出場登録する
+function connectDb_(date, tournamentName, playerName, email, grade) {
+  return taikaiRegisterEntry_(tournamentName, grade, date, playerName, email);
 }
 
 // 大会をデータベースに登録する
@@ -68,11 +58,9 @@ function runRegisterDatabase(name, kounin) {
       if (gradeRegex.test(String(row[0]))) dates[row[0]] = row[count + 2];
     });
 
-    // 大会名整形（末尾の「〇〇級」を除去、非公認なら「（非公認）」付与）
-    const baseName      = name.replace(/[A-Z]+級$/, '');
-    const tournamentLabel = kounin ? baseName : baseName + '（非公認）';
-
-    const raffleDateStr = Utilities.formatDate(raffleDate, 'JST', 'yyyy-MM-dd');
+    // 大会名はAPI上の大会名（級表記なし）を使う。
+    // 公認・非公認は級別日程の is_sanctioned で管理する。
+    const baseName = name.replace(/[A-Z]+級$/, '');
     for (const row of playerRows) {
       const payStatus  = String(row[count + 2]);
       const isTarget   = payStatus === '' || payStatus === '済' ||
@@ -88,7 +76,9 @@ function runRegisterDatabase(name, kounin) {
         (gradeDate instanceof Date) ? gradeDate : new Date(String(gradeDate)),
         'JST', 'yyyy-MM-dd'
       );
-      connectDb_(gradeDateStr, tournamentLabel, String(row[2]), raffleDateStr);
+      const email = String(row[1] || '').trim();
+      if (!email) throw new Error(`メールアドレスがないため登録できません: ${row[2]}`);
+      connectDb_(gradeDateStr, baseName, String(row[2]), email, grade);
     }
 
     // "registerDatabase" 直下セルに登録結果を書き込む

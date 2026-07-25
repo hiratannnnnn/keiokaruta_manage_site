@@ -89,6 +89,10 @@ function createFormFromWeb(paramsJson) {
     const raffle         = raffleStr   ? new Date(raffleStr)   : null;
     const huriDead       = huriDeadStr ? new Date(huriDeadStr) : null;
 
+    // フォーム作成だけは回答シートを作る必要があるが、大会本体は先に新DBへ登録する。
+    // 級別日程は開催日が確定するまで作成できないため、後のsaveTournamentDatesで登録する。
+    taikaiEnsureTournament_(title);
+
     const ss            = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const calendarSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
     const formTitle     = title + grades + '\u3000参加表明フォーム';
@@ -116,6 +120,7 @@ function createFormFromWeb(paramsJson) {
 
     DriveApp.getFileById(formId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
+    ensureDatabaseFormSubmitTrigger_();
 
     Utilities.sleep(2000);
     SpreadsheetApp.flush();

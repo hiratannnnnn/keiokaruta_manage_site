@@ -1142,7 +1142,7 @@ function showCalendarList() {
 }
 
 function goToPlayerSearch(name) {
-  document.getElementById('modal-player-name').textContent = name + ' の大会結果';
+  document.getElementById('modal-player-name').textContent = name + ' の出場大会';
   document.getElementById('modal-result-name').value = name;
   document.getElementById('modal-result-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('modal-results-status').className = 'status';

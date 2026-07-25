@@ -3,7 +3,25 @@
 このドキュメントは、`keiokaruta_manage_site` を、近年更新された
 `taikai_manage` のDB・API構成へ対応させるための変更予定をまとめたものです。
 
-現段階では設計・作業分解のみを記載し、実装や既存機能の切り替えは行いません。
+初版のAPI接続実装を反映済みです。残りの段階は、API側に保持されていない
+フォーム回答の詳細項目やメール運用を含むため、引き続き段階的に切り替えます。
+
+## 実装済み（初版）
+
+- `server/TaikaiApi.js` にBearer認証付きの共通APIクライアントを追加
+- `server/Results.js` を出場大会履歴APIへ切り替え
+- `server/CountMatches.js` を同APIへ切り替え
+- `server/RegisterDatabase.js` と旧メニュー入口を新API登録へ集約
+- フォーム回答のインストール型トリガーから`/registrations`へ登録
+- フォーム作成時に大会を作成し、開催日保存時に級別日程を同期
+- 振込状態・公認状態の操作をAPI更新後にシートへ反映
+
+利用前にScript Propertiesへ次を設定します。
+
+- `TAIKAI_API_BASE_URL`（例: `https://example.com/api/v1`）
+- `TAIKAI_API_TOKEN`
+
+未設定のままフォーム作成・登録・履歴検索を実行すると、処理はエラーになります。
 
 ## 1. 現状
 
