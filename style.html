@@ -171,6 +171,29 @@
     border-radius: 6px;
     line-height: 1.55;
   }
+  .db-admin-sync-description { margin: 0; line-height: 1.6; }
+  .db-admin-sync-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+  .db-admin-sync-actions button {
+    padding: 8px 15px;
+    border: 0;
+    border-radius: 5px;
+    background: #315b7d;
+    color: #fff;
+    cursor: pointer;
+  }
+  .db-admin-sync-actions button.db-admin-delete-button { background: #c0392b; }
+  .db-admin-sync-actions button:disabled { cursor: default; opacity: 0.45; }
+  #db-admin-sync-preview {
+    max-height: 440px;
+    overflow: auto;
+    margin: 0;
+    padding: 10px;
+    border-radius: 5px;
+    background: #15202b;
+    color: #dbeafe;
+    font: 12px/1.5 monospace;
+    white-space: pre-wrap;
+  }
   .db-admin-presets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
   .db-admin-presets button, .db-admin-result-header button {
     padding: 6px 11px;

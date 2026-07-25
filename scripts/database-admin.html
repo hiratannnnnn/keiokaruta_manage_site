@@ -36,6 +36,7 @@ const dbAdminPanes = {
   right: { allRows: [], filteredRows: [], rows: [], total: 0, offset: 0, timer: null, requestId: 0 },
 };
 let dbAdminSelected = null;
+let dbAdminFiscalPreviewValid = false;
 
 function initDatabaseAdmin() {
   dbAdminMethodChanged();
@@ -47,6 +48,79 @@ function initDatabaseAdmin() {
 
 function dbAdminPassword() {
   return localStorage.getItem('karuta_pw') || '';
+}
+
+function dbAdminPreviewFiscalSync() {
+  const status = document.getElementById('db-admin-sync-status');
+  const output = document.getElementById('db-admin-sync-preview');
+  const runButton = document.getElementById('db-admin-sync-run-btn');
+  dbAdminFiscalPreviewValid = false;
+  runButton.disabled = true;
+  status.textContent = 'シートを検査中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      output.style.display = '';
+      output.textContent = JSON.stringify(data, null, 2);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      if ((data.errors || []).length) {
+        status.textContent = '同期できません：' + data.errors.length + '件の検証エラー';
+        status.className = 'op-status error';
+        return;
+      }
+      dbAdminFiscalPreviewValid = true;
+      runButton.disabled = false;
+      status.textContent = data.fiscal_year + '年度：大会'
+        + data.summary.tournament_count + '件、日程' + data.summary.schedule_count
+        + '件、申込' + data.summary.entry_count + '件';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .previewFiscalYearDatabaseSync(dbAdminPassword());
+}
+
+function dbAdminRunFiscalSync() {
+  if (!dbAdminFiscalPreviewValid) return;
+  if (!window.confirm(
+    'プレビューにない同一年度のDB日程・申込を削除し、シートの状態で再構築します。'
+    + 'この操作は元に戻せません。実行しますか？'
+  )) return;
+  const status = document.getElementById('db-admin-sync-status');
+  const button = document.getElementById('db-admin-sync-run-btn');
+  button.disabled = true;
+  status.textContent = '完全同期中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        button.disabled = false;
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      dbAdminFiscalPreviewValid = false;
+      status.textContent = '完全同期しました';
+      status.className = 'op-status ok';
+      document.getElementById('db-admin-sync-preview').textContent =
+        JSON.stringify(data, null, 2);
+      dbAdminLoadPane('left');
+      dbAdminLoadPane('right');
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .syncFiscalYearDatabase(dbAdminPassword());
 }
 
 function dbAdminCall(request, onSuccess, onFailure) {

@@ -7,6 +7,23 @@
       更新・削除は元に戻せない場合があります。
     </p>
 
+    <div class="panel db-admin-panel">
+      <div class="panel-header">今年度のシート → DB完全同期</div>
+      <div class="panel-body">
+        <p class="db-admin-sync-description">
+          カレンダーM列が「完了」ではない今年度大会だけを正としてDBを再構築します。
+          DBにある同一年度のそれ以外の日程・申込は削除されます。
+        </p>
+        <div class="db-admin-sync-actions">
+          <button id="db-admin-sync-preview-btn" onclick="dbAdminPreviewFiscalSync()">同期内容を確認</button>
+          <button id="db-admin-sync-run-btn" class="db-admin-delete-button"
+                  onclick="dbAdminRunFiscalSync()" disabled>確認した内容で完全同期</button>
+          <span id="db-admin-sync-status" class="op-status"></span>
+        </div>
+        <pre id="db-admin-sync-preview" style="display:none;"></pre>
+      </div>
+    </div>
+
     <div class="db-admin-split">
       <div class="panel db-admin-pane" id="db-admin-pane-left">
         <div class="panel-header">左画面</div>
