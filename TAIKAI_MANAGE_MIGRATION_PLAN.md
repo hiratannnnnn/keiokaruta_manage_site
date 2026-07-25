@@ -8,7 +8,12 @@
 ## 1. 現状
 
 このプロジェクトは、Google Apps Script（GAS）とスプレッドシートを中心に動作し、
-大会結果・出場履歴・大会登録について旧PHP APIへ直接アクセスしています。
+出場大会履歴・大会登録について旧PHP APIへ直接アクセスしています。
+
+なお、画面上の表示名は「大会結果」ですが、現在の`Results.js`が呼び出す
+`search_results2.php`は、対戦ごとの勝敗ではなく、選手が出場した大会の履歴を返します。
+対戦単位の結果検索（`search_results.php`）は、このプロジェクトの現在のGAS画面では
+使用していません。
 
 主な関連箇所:
 
@@ -17,7 +22,7 @@
 | `server/config.js` | 旧API URLなどの固定設定 | 新APIのURL・設定プロパティ参照へ変更 |
 | `server/RegisterDatabase.js` | 大会・参加者の一括登録 | 新APIの大会・日程・出場登録へ置換 |
 | `server/CountMatches.js` | 選手の出場履歴・公認大会回数 | `/players/{id}/participations`へ置換 |
-| `server/Results.js` | 大会結果検索 | 当面はレガシー機能として維持 |
+| `server/Results.js` | 出場大会履歴検索（画面表示名は「大会結果」） | 新APIの出場履歴へ移行 |
 | `server/FormCreate.js` | フォーム・回答シート作成 | 大会・級別日程のAPI登録情報を保持できるよう拡張 |
 | `server/TournamentDetail.js` | 大会シートの参加者・振込管理 | APIのentry状態との同期対象 |
 | `server/Calendar.js` | 大会一覧・完了処理 | API上の大会状態との関係を整理 |
@@ -45,7 +50,7 @@ HTTPSを必須とし、APIエラーは利用者向けの安全なメッセージ
 | 級別日程作成・照合 | `GET/POST /schedules` | A〜E級の日付・公認状態 |
 | 選手照合 | `GET /players` | 氏名・メールアドレスによる特定 |
 | 出場登録 | `POST /registrations` | `RegisterDatabase.js`の一括登録 |
-| 出場履歴 | `GET /players/{id}/participations` | `CountMatches.js` |
+| 出場履歴 | `GET /players/{id}/participations` | `Results.js`、`CountMatches.js` |
 | 振込確認 | `PUT /entries/{entry_id}/payment` | 大会詳細・振込管理 |
 | キャンセル | `PUT /entries/{entry_id}/cancellation` | 将来のキャンセル処理 |
 
@@ -63,15 +68,19 @@ HTTPSを必須とし、APIエラーは利用者向けの安全なメッセージ
 
 この段階では、旧API呼び出しは残します。
 
-### Phase 2: 出場履歴の読み取り移行
+### Phase 2: 出場大会履歴の読み取り移行
 
-`server/CountMatches.js`の読み取り処理を新APIへ切り替えます。
+`server/Results.js`と`server/CountMatches.js`の読み取り処理を新APIへ切り替えます。
 
 - 氏名またはメールアドレスで選手を照合
 - 同姓同名の場合は自動決定せずエラーにする
 - `participations`を現在の`date：location：raffleDate`形式へ変換
 - 公認・非公認、団体・職域などの既存フィルタを維持
 - 旧APIとの結果比較期間を設けてから切り替える
+
+`Results.js`では、現在の画面が期待するレスポンス形式（開催日・大会名など）へ
+互換変換して返します。画面の「大会結果」というラベルは、実態に合わせて
+「出場大会」または「出場履歴」へ変更する候補とします。
 
 ### Phase 3: 大会・級別日程の登録
 
@@ -124,18 +133,19 @@ HTTPSを必須とし、APIエラーは利用者向けの安全なメッセージ
 - リマインダー・振込確認のAPI連携は別フェーズで設計
 - 新API側のメールジョブと二重送信しないよう、移行期間は片方だけを有効化
 
-## 5. 移行しないもの
+## 5. 初期移行の対象外
 
 以下は初期移行の対象外です。
 
-- `server/Results.js`の大会結果検索
-- 旧大会結果PHPのテーブル・エンドポイント
+- 対戦単位の結果検索（旧`search_results.php`）
+- 対戦結果用の旧DBテーブル・登録画面
 - スプレッドシートを即時に廃止すること
 - メール機能全体の一括置換
 - 過去データの無検証な一括投入
 
-大会結果関連は、`taikai_manage`側でもレガシー機能として扱われているため、
-新参加管理APIとは分離して維持します。
+対戦単位の結果機能は、`taikai_manage`側でもレガシー機能として扱われているため、
+新参加管理APIとは分離して維持します。一方、出場大会履歴は新APIの
+`/players/{id}/participations`へ移行します。
 
 ## 6. データ移行・検証方針
 
@@ -156,5 +166,4 @@ HTTPSを必須とし、APIエラーは利用者向けの安全なメッセージ
 - 出場履歴表示と公認大会回数が従来と一致する
 - 再実行による重複登録が発生しない
 - API障害時に既存シートの状態が不整合にならない
-- 旧APIを停止しても、結果検索以外の主要運用が継続できる
-
+- 旧APIを停止しても、対戦結果検索を除く主要運用が継続できる
