@@ -101,6 +101,51 @@ function taikaiEnsureTournament_(name) {
   });
 }
 
+function taikaiDeleteTournament_(name) {
+  const tournament = taikaiFindTournament_(name);
+  return taikaiApiRequest_(
+    'DELETE',
+    '/tournaments/' + encodeURIComponent(String(tournament.id))
+  );
+}
+
+function taikaiJstDateTime_(value) {
+  const text = String(value || '').trim().replace('T', ' ');
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})[ ](\d{2}:\d{2})(?::(\d{2}))?$/);
+  if (!match) throw new Error('送信予定日時の形式が正しくありません。');
+  return match[1] + 'T' + match[2] + ':' + (match[3] || '00') + '+09:00';
+}
+
+function taikaiRegisterPaymentEmailJob_(tournamentName, grades, sendDateTime, paymentDeadline) {
+  const deadline = taikaiFormatDate_(paymentDeadline);
+  if (!deadline) throw new Error('振込期限を入力してください。');
+
+  const tournament = taikaiFindTournament_(tournamentName);
+  const gradeSet = String(grades || '').replace(/級/g, '').toUpperCase().split('').filter(Boolean);
+  const schedules = taikaiApiRequest_(
+    'GET',
+    '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules'
+  ) || [];
+  const targets = schedules.filter(schedule => gradeSet.includes(String(schedule.grade).toUpperCase()));
+  if (!targets.length) {
+    throw new Error('対象級の大会日程がDBに登録されていません。');
+  }
+
+  targets.forEach(schedule => {
+    taikaiApiRequest_('PATCH', '/schedules/' + encodeURIComponent(String(schedule.id)), {
+      payment_deadline: deadline,
+    });
+  });
+
+  return taikaiApiRequest_('POST', '/email-jobs', {
+    scheduled_at: taikaiJstDateTime_(sendDateTime),
+    mail_type: 'payment_confirmation',
+    announcement_id: null,
+    recipient_group_id: null,
+    schedule_ids: targets.map(schedule => String(schedule.id)),
+  });
+}
+
 function taikaiFindSchedule_(tournamentName, grade, heldOn) {
   const tournament = taikaiFindTournament_(tournamentName);
   const schedules = taikaiApiRequest_('GET', '/schedules', null, {

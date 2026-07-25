@@ -29,6 +29,11 @@ function deleteTournament(name) {
     const formId = String(sheet.getRange(1, count + 4).getValue());
     if (!formId) throw new Error('フォームIDが取得できません');
 
+    // シート名末尾の「ABC級」を除いた大会名がAPI上の大会名。
+    // API削除が失敗した場合は、フォーム・シートを残して再試行できるようにする。
+    const tournamentName = String(name).replace(/[A-E]+級$/, '');
+    const deletedDatabase = taikaiDeleteTournament_(tournamentName);
+
     // フォームをゴミ箱へ移動
     const form = FormApp.openById(formId);
     DriveApp.getFileById(formId).setTrashed(true);
@@ -52,7 +57,7 @@ function deleteTournament(name) {
       }
     }
 
-    return JSON.stringify({ ok: true });
+    return JSON.stringify({ ok: true, database: deletedDatabase });
   } catch (err) {
     return JSON.stringify({ error: err.message });
   }

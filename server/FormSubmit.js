@@ -46,26 +46,3 @@ function registerFormResponseToDatabase(e) {
     },
   });
 }
-
-// フォーム作成時に一度だけ、回答先スプレッドシートの送信トリガーを登録する。
-function ensureDatabaseFormSubmitTrigger_() {
-  const exists = ScriptApp.getProjectTriggers().some(trigger =>
-    trigger.getHandlerFunction() === 'registerFormResponseToDatabase'
-  );
-  if (!exists) {
-    ScriptApp.newTrigger('registerFormResponseToDatabase')
-      .forSpreadsheet(CONFIG.SPREADSHEET_ID)
-      .onFormSubmit()
-      .create();
-  }
-}
-
-// 既存フォームへ移行する際に、GASエディタから一度実行するための公開入口。
-function setupDatabaseFormSubmitTrigger() {
-  try {
-    ensureDatabaseFormSubmitTrigger_();
-    return JSON.stringify({ ok: true });
-  } catch (e) {
-    return JSON.stringify({ error: e.message });
-  }
-}

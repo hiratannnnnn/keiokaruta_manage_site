@@ -18,8 +18,11 @@ let fcQuestions = [
 ];
 
 function fcSyncTournamentQuestion() {
-  fcQuestions[7].inc = fcQuestions[6].inc;
-  fcQuestions[7].req = fcQuestions[6].inc;
+  const countQuestion = fcQuestions.find(q => q.name.includes('公認大会出場回数'));
+  const tournamentQuestion = fcQuestions.find(q => q.name === FC_TOURNAMENTS_QUESTION);
+  if (!countQuestion || !tournamentQuestion) return;
+  tournamentQuestion.inc = countQuestion.inc;
+  tournamentQuestion.req = countQuestion.inc;
 }
 
 // DOM から現在値を fcQuestions に同期する（再描画前に呼ぶ）

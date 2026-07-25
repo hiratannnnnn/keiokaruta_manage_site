@@ -33,15 +33,6 @@ function runRegisterDatabase(name, kounin) {
 
     const data2 = sheet.getDataRange().getValues();
 
-    // 登録済みチェック
-    for (let i = 0; i < data2.length - 1; i++) {
-      if (String(data2[i][0]) === 'registerDatabase') {
-        const status = String(data2[i + 1][0]);
-        if (status.includes('登録済み')) return JSON.stringify({ already: true, message: status });
-        break;
-      }
-    }
-
     // 抽選日を取得（col[N+3]="抽選日" の行の col[N+4]）
     let raffleDate = null;
     sheet.getRange(1, count + 4, sheet.getLastRow(), 2).getValues().forEach(row => {
@@ -61,6 +52,8 @@ function runRegisterDatabase(name, kounin) {
     // 大会名はAPI上の大会名（級表記なし）を使う。
     // 公認・非公認は級別日程の is_sanctioned で管理する。
     const baseName = name.replace(/[A-Z]+級$/, '');
+    const registered = [];
+    const failed = [];
     for (const row of playerRows) {
       const payStatus  = String(row[count + 2]);
       const isTarget   = payStatus === '' || payStatus === '済' ||
@@ -70,26 +63,45 @@ function runRegisterDatabase(name, kounin) {
 
       const grade     = String(row[4]);
       const gradeDate = dates[grade];
-      if (!gradeDate) continue;
+      if (!gradeDate) {
+        failed.push({ name: String(row[2]), error: grade + '級の日程が未設定です' });
+        continue;
+      }
 
       const gradeDateStr = Utilities.formatDate(
         (gradeDate instanceof Date) ? gradeDate : new Date(String(gradeDate)),
         'JST', 'yyyy-MM-dd'
       );
       const email = String(row[1] || '').trim();
-      if (!email) throw new Error(`メールアドレスがないため登録できません: ${row[2]}`);
-      connectDb_(gradeDateStr, baseName, String(row[2]), email, grade);
+      if (!email) {
+        failed.push({ name: String(row[2]), error: 'メールアドレスがありません' });
+        continue;
+      }
+      try {
+        connectDb_(gradeDateStr, baseName, String(row[2]), email, grade);
+        registered.push(String(row[2]));
+      } catch (entryError) {
+        failed.push({ name: String(row[2]), error: entryError.message });
+      }
     }
 
     // "registerDatabase" 直下セルに登録結果を書き込む
     for (let i = 0; i < data2.length; i++) {
       if (String(data2[i][0]) === 'registerDatabase') {
-        sheet.getRange(i + 2, 1).setValue(kounin ? '公認大会として登録済み' : '非公認大会として登録済み');
+        const status = failed.length
+          ? 'DB同期失敗: ' + failed.map(item => item.name + '（' + item.error + '）').join('、')
+          : (kounin ? '公認大会として登録済み' : '非公認大会として登録済み');
+        sheet.getRange(i + 2, 1).setValue(status);
         break;
       }
     }
 
-    return JSON.stringify({ ok: true });
+    return JSON.stringify({
+      ok: failed.length === 0,
+      registered: registered,
+      failed: failed,
+      error: failed.length ? failed.length + '件のDB同期に失敗しました。再実行できます。' : '',
+    });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }

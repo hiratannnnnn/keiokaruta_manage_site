@@ -119,15 +119,29 @@ function createFormFromWeb(paramsJson) {
     const editUrl = form.getEditUrl();
 
     DriveApp.getFileById(formId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const existingSheetIds = {};
+    ss.getSheets().forEach(sheet => {
+      existingSheetIds[String(sheet.getSheetId())] = true;
+    });
     form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
-    ensureDatabaseFormSubmitTrigger_();
 
-    Utilities.sleep(2000);
-    SpreadsheetApp.flush();
-
-    // 新規作成されたフォーム回答シートを設定
-    const firstSheet = ss.getSheets()[0];
-    firstSheet.setName(title + grades);
+    // setDestination で追加されたシートだけを特定する。シート順には依存しない。
+    let responseSheet = null;
+    for (let attempt = 0; attempt < 8 && !responseSheet; attempt++) {
+      Utilities.sleep(500);
+      SpreadsheetApp.flush();
+      const addedSheets = ss.getSheets().filter(sheet =>
+        !existingSheetIds[String(sheet.getSheetId())]
+      );
+      if (addedSheets.length > 1) {
+        throw new Error('フォーム回答シートが複数作成されたため特定できません。');
+      }
+      responseSheet = addedSheets[0] || null;
+    }
+    if (!responseSheet) {
+      throw new Error('新しく作成されたフォーム回答シートを特定できません。');
+    }
+    responseSheet.setName(title + grades);
 
     // メール管理シートへ書き込み
     const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
@@ -139,55 +153,55 @@ function createFormFromWeb(paramsJson) {
       mailSheet.getRange(2, 3).setValue(nextRow);
     }
 
-    firstSheet.getRange(1, count + 6).setValue(count).setBackground('#D3D3D3');
-    if (count > 2) firstSheet.hideColumns(4, count - 2);
-    firstSheet.getRange(1, count + 3, 1, 3).setValues([['振込み済みか', formId, editUrl]]);
-    firstSheet.getRange(4, count + 4, 3, 2).setValues([
+    responseSheet.getRange(1, count + 6).setValue(count).setBackground('#D3D3D3');
+    if (count > 2) responseSheet.hideColumns(4, count - 2);
+    responseSheet.getRange(1, count + 3, 1, 3).setValues([['振込み済みか', formId, editUrl]]);
+    responseSheet.getRange(4, count + 4, 3, 2).setValues([
       ['催促メール設定（「☆大会フォーム」から）', '↓送信予定日時（yyyy-MM-dd HH:mm:ss）'],
       ['未設定', ''],
       ['後納制の場合は→に何か文字を', ''],
     ]).setBackground('#D3D3D3');
-    firstSheet.getRange(2, count + 6, 5, 1).setValues(
+    responseSheet.getRange(2, count + 6, 5, 1).setValues(
       [['setPaymentReminders'], [''], ['moveToDone'], [''], ['deleteSheet']]
     );
-    firstSheet.hideColumns(count + 6);
-    firstSheet.getRange(5, count + 5).setBackground('#FFF2CC');
-    firstSheet.getRange(6, count + 5).setBackground('#FFF2CC');
-    firstSheet.getRange(1, count + 3).setBackground('#FFF2CC');
-    firstSheet.getRange(12, 1, 4, 3).setValues([
+    responseSheet.hideColumns(count + 6);
+    responseSheet.getRange(5, count + 5).setBackground('#FFF2CC');
+    responseSheet.getRange(6, count + 5).setBackground('#FFF2CC');
+    responseSheet.getRange(1, count + 3).setBackground('#FFF2CC');
+    responseSheet.getRange(12, 1, 4, 3).setValues([
       ['registerDatabase', '非公認の場合は下に文字', '↓振込先'],
       ['', '', ''],
       ['countMatches', '申し込みのときに回数数える', ''],
       ['', '', ''],
     ]).setBackground('#d3d3d3');
 
-    if (isKoen) firstSheet.getRange(13, 2).setValue('非公認');
+    if (isKoen) responseSheet.getRange(13, 2).setValue('非公認');
 
-    firstSheet.getRange(13, 1, 1, 3).setBackground('#FFF2CC');
-    firstSheet.getRange(15, 1).setBackground('#FFF2CC');
-    firstSheet.getRange(14, 2, 2, 1).setBackground('#FFFFFF');
-    firstSheet.getRange(14, 3, 4, 1).setBackground('#FFF2CC');
+    responseSheet.getRange(13, 1, 1, 3).setBackground('#FFF2CC');
+    responseSheet.getRange(15, 1).setBackground('#FFF2CC');
+    responseSheet.getRange(14, 2, 2, 1).setBackground('#FFFFFF');
+    responseSheet.getRange(14, 3, 4, 1).setBackground('#FFF2CC');
 
     const grades2 = ['A', 'B', 'C', 'D', 'E'];
     for (let i = 0; i < grades2.length; i++) {
-      firstSheet.getRange(4 + i, 1).setValue(grades2[i]);
+      responseSheet.getRange(4 + i, 1).setValue(grades2[i]);
       const col = count + 3;
       const formula =
         '=COUNTIFS(E$1:E, "' + grades2[i] + '", INDIRECT("R1C" & (' + col + ') & ":R" & ROWS(E:E) & "C" & (' + col + '), FALSE), "済")' +
         ' + COUNTIFS(E$1:E, "' + grades2[i] + '", INDIRECT("R1C" & (' + col + ') & ":R" & ROWS(E:E) & "C" & (' + col + '), FALSE), "*繰*越*")';
-      firstSheet.getRange(4 + i, 3).setFormula(formula);
-      firstSheet.getRange(4 + i, count + 2).setFormula('=MULTIPLY(B' + (4 + i) + ',C' + (4 + i) + ')');
+      responseSheet.getRange(4 + i, 3).setFormula(formula);
+      responseSheet.getRange(4 + i, count + 2).setFormula('=MULTIPLY(B' + (4 + i) + ',C' + (4 + i) + ')');
     }
-    firstSheet.getRange(4, 1, 5, 1).setHorizontalAlignment('right');
+    responseSheet.getRange(4, 1, 5, 1).setHorizontalAlignment('right');
 
     const cd = title.includes('鳳玉') ? 3000 : 2000;
     const e  = title.includes('鳳玉') ? 2500 : 1500;
-    firstSheet.getRange('B4:B5').setValue(2500);
-    firstSheet.getRange('B6:B7').setValue(cd);
-    firstSheet.getRange('B8').setValue(e);
-    firstSheet.getRange(9, 3).setFormula('=SUM($C4:$C8)');
-    firstSheet.getRange(9, count + 2).setFormula('=SUMPRODUCT(B4:B8, C4:C8)');
-    firstSheet.getRange(10, 1, 2, 3).setValues([
+    responseSheet.getRange('B4:B5').setValue(2500);
+    responseSheet.getRange('B6:B7').setValue(cd);
+    responseSheet.getRange('B8').setValue(e);
+    responseSheet.getRange(9, 3).setFormula('=SUM($C4:$C8)');
+    responseSheet.getRange(9, count + 2).setFormula('=SUMPRODUCT(B4:B8, C4:C8)');
+    responseSheet.getRange(10, 1, 2, 3).setValues([
       ['原則として、振込が確認出来たら「済」と入れる。', '', ''],
       ['何らかの理由ですでに振込がある分から回す場合は「繰り越し」と入れる。', '', ''],
     ]).setBackground('#d3d3d3');
@@ -203,7 +217,10 @@ function createFormFromWeb(paramsJson) {
     const announceSheet = ss.getSheetByName('案内メール作成');
     if (announceSheet) {
       announceSheet.getRange(3, 2, 2, 1).setValues([[title], [grades]]);
-      const showMoshikomi = (questionsData[6] && questionsData[6][1] === 1)
+      const tournamentQuestion = questionsData.find(question =>
+        question[0] === '出場大会を全てお書きください。（略称等で構いません）'
+      );
+      const showMoshikomi = (tournamentQuestion && tournamentQuestion[1] === 1)
         ? Utilities.formatDate(moshikomiStart, 'JST', 'y/M/d')
         : '';
       announceSheet.getRange(28, 2).setValue(showMoshikomi);

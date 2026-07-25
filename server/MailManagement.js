@@ -52,6 +52,16 @@ function deleteMailManagementRow(rowNum) {
 function addMailManagementRow(json) {
   try {
     const d     = JSON.parse(json);
+    let emailJob = null;
+    if (d.mailType === '振込確認') {
+      // DB登録に失敗した場合はシートへ成功行を作らず、同じ入力で再試行できるようにする。
+      emailJob = taikaiRegisterPaymentEmailJob_(
+        d.tournamentName,
+        d.grades,
+        d.sendDateTime,
+        d.paymentDeadline
+      );
+    }
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
     const lastRow = Math.max(sheet.getLastRow(), 5);
@@ -87,7 +97,7 @@ function addMailManagementRow(json) {
       }
     }
 
-    return JSON.stringify({ ok: true });
+    return JSON.stringify({ ok: true, emailJob: emailJob });
   } catch(e) {
     return JSON.stringify({ error: e.message });
   }
@@ -150,11 +160,24 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
 function quoteEmail_(subject) {
   if (!subject) return '';
   try {
-    const threads = GmailApp.search('subject:"' + subject + '"', 0, 1);
-    if (threads.length === 0) return '';
-    const messages = threads[0].getMessages();
-    const body = messages[messages.length - 1].getPlainBody();
-    return body.split('\n').map(l => '> ' + l).join('\n');
+    const normalizeSubject = value => String(value || '')
+      .replace(/^(?:(?:Fwd|Re):\s*)+/i, '')
+      .replace(/【[^】]*】/g, '')
+      .replace(/(?:　案内|の案内)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const expected = normalizeSubject(subject);
+    const searchText = expected.replace(/"/g, '');
+    const threads = GmailApp.search('subject:"' + searchText + '"', 0, 20);
+    for (let i = 0; i < threads.length; i++) {
+      const messages = threads[i].getMessages();
+      const mentioned = messages.find(message =>
+        normalizeSubject(message.getSubject()) === expected
+      );
+      if (!mentioned) continue;
+      return mentioned.getPlainBody().split('\n').map(line => '> ' + line).join('\n');
+    }
+    return '';
   } catch(e) {
     return '';
   }

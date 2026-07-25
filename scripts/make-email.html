@@ -240,8 +240,11 @@ function initMakeEmail(data) {
   if (data.formUrl)       document.getElementById('me-form-url').value       = data.formUrl;
 
   if (data.questionsData) {
+    const tournamentQuestion = data.questionsData.find(question =>
+      question[0] === '出場大会を全てお書きください。（略称等で構いません）'
+    );
     document.getElementById('me-include-kounin').checked =
-      !!(data.questionsData[6] && data.questionsData[6][1] === 1);
+      !!(tournamentQuestion && tournamentQuestion[1] === 1);
   }
 
   meApplyFeeDefaults(data.title);
@@ -407,12 +410,13 @@ function meGoToReminder() {
 }
 
 function meGoToPaymentConfirm(title, grades, threadTitle) {
+  const paymentDeadline = document.getElementById('me-pay-real')?.value || '';
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector('[data-page="mail-management"]').classList.add('active');
   document.getElementById('page-mail-management').classList.add('active');
   initMailManagement();
-  mmShowAddModalPrefilled(title, grades, '振込確認', threadTitle);
+  mmShowAddModalPrefilled(title, grades, '振込確認', threadTitle, paymentDeadline);
 }
 
 function meCopyText() {

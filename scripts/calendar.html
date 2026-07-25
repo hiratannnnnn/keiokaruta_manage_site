@@ -728,10 +728,11 @@ function triggerRegisterDatabase() {
         status.className   = 'op-status ok';
         btn.classList.add('op-btn-done');
       } else if (r.error) {
-        status.textContent = 'エラー: ' + r.error;
+        const details = (r.failed || []).map(item => item.name + '：' + item.error).join(' / ');
+        status.textContent = 'エラー: ' + r.error + (details ? ' ' + details : '');
         status.className   = 'op-status error';
       } else {
-        status.textContent = '完了';
+        status.textContent = '完了（' + (r.registered || []).length + '件）';
         status.className   = 'op-status ok';
         btn.classList.add('op-btn-done');
       }
@@ -785,7 +786,7 @@ function triggerDeleteTournament() {
   const statusEl = document.getElementById('delete-status');
 
   showConfirmModal(
-    `「${name}」のシートとGoogleフォームをゴミ箱に移動します。\nこの操作は取り消せません。\n\n※通常は大会一覧の「完了」ボタンをご利用ください。`,
+    `「${name}」のDB上の大会データを削除し、シートとGoogleフォームをゴミ箱に移動します。\nDB上の大会・日程・申込データは復元できません。\n\n※通常は大会一覧の「完了」ボタンをご利用ください。`,
     () => {
       btn.disabled       = true;
       statusEl.textContent = '削除中...';
