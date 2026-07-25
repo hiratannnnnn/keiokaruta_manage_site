@@ -59,3 +59,13 @@ function ensureDatabaseFormSubmitTrigger_() {
       .create();
   }
 }
+
+// 既存フォームへ移行する際に、GASエディタから一度実行するための公開入口。
+function setupDatabaseFormSubmitTrigger() {
+  try {
+    ensureDatabaseFormSubmitTrigger_();
+    return JSON.stringify({ ok: true });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
