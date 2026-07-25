@@ -34,6 +34,7 @@ function taikaiApiRequest_(method, path, body, query) {
   const response = UrlFetchApp.fetch(url, options);
   const status = response.getResponseCode();
   const text = response.getContentText();
+  taikaiRecordApiDebug_(method, path, status, text);
   let parsed = null;
   try { parsed = text ? JSON.parse(text) : null; } catch (e) {
     throw new Error('taikai_manage APIから不正なJSON応答を受信しました。');
@@ -44,6 +45,33 @@ function taikaiApiRequest_(method, path, body, query) {
     throw new Error(message + ' (HTTP ' + status + ')');
   }
   return parsed && Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
+}
+
+// 開発用: 直近のAPI生レスポンスをユーザー単位の一時キャッシュへ保存する。
+// 認証情報は現在送信していないが、将来復旧してもヘッダーは保存しない。
+function taikaiRecordApiDebug_(method, path, status, text) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (String(props.getProperty('TAIKAI_API_DEBUG_LOG') || 'true').toLowerCase() === 'false') return;
+    CacheService.getUserCache().put('taikai_api_debug_last', JSON.stringify({
+      at: Utilities.formatDate(new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"),
+      method: String(method).toUpperCase(),
+      path: path,
+      status: status,
+      body: String(text || '').slice(0, 90000),
+    }), 600);
+  } catch (e) {
+    // デバッグログの失敗で本来のAPI処理を失敗させない。
+  }
+}
+
+function getTaikaiApiDebugLog() {
+  try {
+    const raw = CacheService.getUserCache().get('taikai_api_debug_last');
+    return raw || JSON.stringify({ message: 'APIレスポンスはまだありません。' });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
 }
 
 function taikaiFindPlayer_(name, email) {

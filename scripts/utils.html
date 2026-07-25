@@ -114,6 +114,7 @@ function initApp() {
   loadAndApplyPermissions();
   loadMembers();
   loadCalendar();
+  startApiDebugPolling();
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('nav-settings-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';

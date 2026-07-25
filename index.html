@@ -58,6 +58,15 @@
 <?!= include('pages/board') ?>
 <?!= include('pages/settings') ?>
 
+<!-- ========== 開発用APIレスポンスログ ========== -->
+<section id="api-debug-panel" class="api-debug-panel">
+  <div class="api-debug-header">
+    <span>開発用 APIレスポンス</span>
+    <button type="button" onclick="loadApiDebugLog()">再読込</button>
+  </div>
+  <pre id="api-debug-output">APIレスポンスを待機しています。</pre>
+</section>
+
 <!-- ========== 完了モーダル ========== -->
 <div id="completion-modal" class="modal-overlay" style="display:none;" onclick="onCompletionOverlayClick(event)">
   <div class="modal-box">
@@ -92,6 +101,7 @@
 <?!= include('scripts/help') ?>
 <?!= include('scripts/board') ?>
 <?!= include('scripts/settings') ?>
+<?!= include('scripts/api-debug') ?>
 
 </body>
 </html>

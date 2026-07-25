@@ -424,6 +424,39 @@
   }
   .status.error { color: #e74c3c; }
 
+  .api-debug-panel {
+    margin: 18px 12px 24px;
+    border: 1px solid #d8a83e;
+    border-radius: 6px;
+    background: #fffdf3;
+    color: #333;
+  }
+  .api-debug-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid #ead9a6;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .api-debug-header button {
+    border: 1px solid #c79b2c;
+    border-radius: 4px;
+    background: #fff;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  #api-debug-output {
+    max-height: 320px;
+    overflow: auto;
+    margin: 0;
+    padding: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
   /* 詳細ビュー：左右レイアウト */
   .detail-columns {
     display: flex;

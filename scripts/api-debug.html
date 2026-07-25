@@ -1,0 +1,34 @@
+<script>
+// ------------------------------------------------------------
+// 開発用APIレスポンス表示
+// ------------------------------------------------------------
+let apiDebugTimer = null;
+
+function loadApiDebugLog() {
+  google.script.run
+    .withSuccessHandler(raw => {
+      const output = document.getElementById('api-debug-output');
+      if (!output) return;
+      try {
+        const data = JSON.parse(raw);
+        output.textContent = data.body !== undefined
+          ? JSON.stringify(data, null, 2)
+          : String(data.message || data.error || raw);
+      } catch (e) {
+        output.textContent = raw;
+      }
+    })
+    .withFailureHandler(err => {
+      const output = document.getElementById('api-debug-output');
+      if (output) output.textContent = 'ログ取得エラー: ' + err.message;
+    })
+    .getTaikaiApiDebugLog();
+}
+
+function startApiDebugPolling() {
+  loadApiDebugLog();
+  if (apiDebugTimer === null) {
+    apiDebugTimer = setInterval(loadApiDebugLog, 2000);
+  }
+}
+</script>
