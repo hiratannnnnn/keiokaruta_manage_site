@@ -5,12 +5,9 @@
 function taikaiApiConfig_() {
   const props = PropertiesService.getScriptProperties();
   const baseUrl = String(props.getProperty('TAIKAI_API_BASE_URL') || '').replace(/\/+$/, '');
-  const token = String(props.getProperty('TAIKAI_API_TOKEN') || '');
   if (!baseUrl) throw new Error('TAIKAI_API_BASE_URL が設定されていません。');
-  if (!token && !/^http:\/\//i.test(baseUrl)) {
-    throw new Error('taikai_manage APIはHTTPSで設定してください。');
-  }
-  return { baseUrl, token };
+  // 暫定運用: API側のBearer認証が安定するまで、認証ヘッダーを送らない。
+  return { baseUrl };
 }
 
 function taikaiApiQuery_(query) {
@@ -28,7 +25,6 @@ function taikaiApiRequest_(method, path, body, query) {
     muteHttpExceptions: true,
     headers: {},
   };
-  if (config.token) options.headers.Authorization = 'Bearer ' + config.token;
   if (body !== undefined && body !== null) {
     options.contentType = 'application/json';
     options.payload = JSON.stringify(body);

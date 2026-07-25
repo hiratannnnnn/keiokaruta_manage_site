@@ -8,7 +8,7 @@
 
 ## 実装済み（初版）
 
-- `server/TaikaiApi.js` にBearer認証付きの共通APIクライアントを追加
+- `server/TaikaiApi.js` に共通APIクライアントを追加（暫定的に認証ヘッダーなし）
 - `server/Results.js` を出場大会履歴APIへ切り替え
 - `server/CountMatches.js` を同APIへ切り替え
 - `server/RegisterDatabase.js` と旧メニュー入口を新API登録へ集約
@@ -19,9 +19,13 @@
 利用前にScript Propertiesへ次を設定します。
 
 - `TAIKAI_API_BASE_URL`（例: `https://example.com/api/v1`）
-- `TAIKAI_API_TOKEN`
+- `TAIKAI_API_TOKEN`は現時点では使用しません。
 
-未設定のままフォーム作成・登録・履歴検索を実行すると、処理はエラーになります。
+暫定的にAPIへ認証ヘッダーを付けずに接続します。公開環境での利用は避け、
+API側のBearer認証を復旧した後に、クライアントとサーバーを同時に再有効化します。
+
+`TAIKAI_API_BASE_URL`が未設定のままフォーム作成・登録・履歴検索を実行すると、
+処理はエラーになります。
 
 既存フォームについては、GASエディタで`setupDatabaseFormSubmitTrigger()`を一度実行して
 回答トリガーを登録します。今後新しく作成するフォームでは、フォーム作成処理が自動で
@@ -56,13 +60,13 @@
 
 ### 認証・設定
 
-GASのScript Propertiesから次を読み込みます。
+GASのScript PropertiesからAPI URLを読み込みます。
 
 - `TAIKAI_API_BASE_URL`
-- `TAIKAI_API_TOKEN`
 
-トークンはソースコード、スプレッドシート、Gitへ保存しません。
-HTTPSを必須とし、APIエラーは利用者向けの安全なメッセージへ変換します。
+暫定運用ではBearerトークンを使用しません。認証を再有効化する際は、トークンを
+ソースコード、スプレッドシート、Gitへ保存せず、Script Propertiesへ戻します。
+APIエラーは利用者向けの安全なメッセージへ変換します。
 
 ### 主なAPI対応
 
