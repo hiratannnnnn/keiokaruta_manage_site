@@ -7,6 +7,7 @@
 // moshikomiStart: Date オブジェクト（公認大会出場回数タイトル計算用）
 // grades        : 例 "ABCDE級"
 function addQuestionsToForm(formId, questionsData, moshikomiStart, grades) {
+  const TOURNAMENTS_QUESTION = '出場大会を全てお書きください。（略称等で構いません）';
   const form = FormApp.openById(formId);
 
   // テンプレートの既存項目をすべて削除
@@ -29,6 +30,7 @@ function addQuestionsToForm(formId, questionsData, moshikomiStart, grades) {
     if (!inc) return;
     questionCount++;
     const isKounin    = name.includes('公認大会出場回数');
+    const isTournamentList = name === TOURNAMENTS_QUESTION;
     const actualTitle = isKounin ? kouninTitle : name;
 
     if (name === '級') {
@@ -38,6 +40,9 @@ function addQuestionsToForm(formId, questionsData, moshikomiStart, grades) {
     } else if (name === '段位') {
       const item = form.addMultipleChoiceItem();
       item.setTitle(actualTitle).setRequired(req === 1).setChoiceValues(DANKAI);
+    } else if (isTournamentList) {
+      const item = form.addParagraphTextItem();
+      item.setTitle(actualTitle).setRequired(true);
     } else {
       const item = form.addTextItem();
       item.setTitle(actualTitle).setRequired(req === 1);
