@@ -20,12 +20,21 @@ function getParticipationMatrix() {
       }
     });
 
-    const entryKeySet = {};
+    // 同一選手・同一大会に複数登録がある場合は、後から登録された
+    // entry（IDが最大のもの）だけを現在の状態として採用する。
+    const latestEntries = {};
     entries.forEach(entry => {
-      if (entry.canceled_at) return;
       const tournamentId = scheduleTournament[String(entry.schedule_id)];
       if (!tournamentId) return;
-      entryKeySet[String(entry.player_id) + ':' + tournamentId] = true;
+      const key = String(entry.player_id) + ':' + tournamentId;
+      const current = latestEntries[key];
+      if (!current || compareTaikaiIds_(entry.id, current.id) > 0) {
+        latestEntries[key] = entry;
+      }
+    });
+    const entryKeySet = {};
+    Object.keys(latestEntries).forEach(key => {
+      if (!latestEntries[key].canceled_at) entryKeySet[key] = true;
     });
 
     const visibleTournaments = tournaments.map(tournament => ({
@@ -55,4 +64,13 @@ function getParticipationMatrix() {
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
+}
+
+function compareTaikaiIds_(left, right) {
+  const leftText = String(left === undefined || left === null ? '' : left);
+  const rightText = String(right === undefined || right === null ? '' : right);
+  if (/^\d+$/.test(leftText) && /^\d+$/.test(rightText)) {
+    if (leftText.length !== rightText.length) return leftText.length - rightText.length;
+  }
+  return leftText.localeCompare(rightText);
 }
