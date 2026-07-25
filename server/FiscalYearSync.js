@@ -71,7 +71,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       total: calendarRows.length,
       current: sheetName || '空行',
     });
-    if (!sheetName || String(calendarRow[12] || '').trim() === '完了') return;
+    if (!sheetName) return;
 
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) {
