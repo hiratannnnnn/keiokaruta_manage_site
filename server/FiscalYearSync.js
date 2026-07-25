@@ -102,27 +102,19 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 
     const sheetGradesMatch = sheetName.match(/([A-E]+)級$/);
     const declaredGrades = sheetGradesMatch ? sheetGradesMatch[1].split('') : Object.keys(gradeDates);
-    const hasCurrentSchedule = declaredGrades.some(grade =>
+    const currentFiscalGrades = declaredGrades.filter(grade =>
       fiscalSyncInYear_(gradeDates[grade], fiscalYear)
     );
-    const startsThisYear = fiscalSyncInYear_(calendarRow[2], fiscalYear);
-    if (!hasCurrentSchedule && !startsThisYear) return;
+    // 年度判定に使うのは開催日だけ。申込・抽選・振込期限は年度をまたいでよい。
+    if (!currentFiscalGrades.length) return;
 
     const baseName = sheetName.replace(/[A-E]+級$/, '');
     const applicationDeadline = fiscalSyncDate_(calendarRow[5]);
     if (!applicationDeadline) errors.push(sheetName + ': 申込期限が未設定です。');
 
     const schedules = [];
-    declaredGrades.forEach(grade => {
+    currentFiscalGrades.forEach(grade => {
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
-      if (!heldOn) {
-        errors.push(sheetName + ': ' + grade + '級の開催日が未設定です。');
-        return;
-      }
-      if (!fiscalSyncInYear_(gradeDates[grade], fiscalYear)) {
-        errors.push(sheetName + ': ' + grade + '級の開催日が今年度外です。');
-        return;
-      }
       schedules.push({
         held_on: heldOn,
         grade: grade,
@@ -154,6 +146,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 
       const email = String(row[1] || '').trim();
       const grade = String(row[4] || '').replace(/級/g, '').trim().toUpperCase();
+      if (!currentFiscalGrades.includes(grade)) continue;
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       if (!email) {
         errors.push(sheetName + ': ' + playerName + 'のメールアドレスがありません。');
