@@ -1,0 +1,37 @@
+<!-- ========== 選手別出場一覧 ========== -->
+<div id="page-participation-matrix" class="page">
+  <div class="list-page">
+    <div class="page-title">選手別 出場大会一覧</div>
+
+    <div class="panel participation-matrix-panel">
+      <div class="panel-header">
+        選手 × 大会
+        <span id="participation-matrix-count" class="count-badge" style="display:none;"></span>
+      </div>
+      <div class="panel-body">
+        <div class="participation-matrix-controls">
+          <input id="participation-matrix-player-filter" type="text"
+                 placeholder="選手名・ふりがなで絞り込み"
+                 oninput="filterParticipationMatrix()">
+          <input id="participation-matrix-tournament-filter" type="text"
+                 placeholder="大会名で絞り込み"
+                 oninput="filterParticipationMatrix()">
+          <button id="participation-matrix-reload" type="button"
+                  onclick="loadParticipationMatrix(true)">再読込</button>
+        </div>
+        <p class="participation-matrix-note">
+          キャンセル済みの申込は空欄です。大会名の下には、その大会で最も早い開催日を表示します。
+        </p>
+        <div id="participation-matrix-status" class="status">
+          ページを開くと一覧を読み込みます。
+        </div>
+        <div id="participation-matrix-wrap" class="participation-matrix-wrap" style="display:none;">
+          <table id="participation-matrix-table" class="participation-matrix-table">
+            <thead id="participation-matrix-thead"></thead>
+            <tbody id="participation-matrix-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -80,6 +80,7 @@ function loadAndApplyPermissions(callback) {
 // ------------------------------------------------------------
 let calendarLoaded    = false;
 let makeEmailLoaded   = false;
+let participationMatrixLoaded = false;
 
 document.querySelectorAll('nav button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -89,6 +90,10 @@ document.querySelectorAll('nav button').forEach(btn => {
     const page = btn.dataset.page;
     document.getElementById('page-' + page).classList.add('active');
     if (page === 'calendar' && !calendarLoaded) loadCalendar();
+    if (page === 'participation-matrix' && !participationMatrixLoaded) {
+      loadParticipationMatrix();
+      participationMatrixLoaded = true;
+    }
     if (page === 'board') initBoard();
     if (page === 'make-email' && !makeEmailLoaded) { initMakeEmail(null); makeEmailLoaded = true; }
     if (page === 'mail-management') initMailManagement();

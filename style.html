@@ -469,6 +469,104 @@
   }
   .search-bar button:hover { background: #2980b9; }
 
+  /* 選手 × 大会 出場一覧 */
+  .participation-matrix-panel .panel-body {
+    min-height: 0;
+  }
+  .participation-matrix-controls {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .participation-matrix-controls input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.88rem;
+  }
+  .participation-matrix-controls button {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 4px;
+    background: #3498db;
+    color: #fff;
+    cursor: pointer;
+  }
+  .participation-matrix-controls button:disabled {
+    background: #95a5a6;
+    cursor: default;
+  }
+  .participation-matrix-note {
+    margin: 4px 0 9px;
+    color: #777;
+    font-size: 0.78rem;
+  }
+  .participation-matrix-wrap {
+    max-height: calc(100vh - 265px);
+    overflow: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  .participation-matrix-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .participation-matrix-table th,
+  .participation-matrix-table td {
+    border-right: 1px solid #e5e5e5;
+    border-bottom: 1px solid #e5e5e5;
+    text-align: center;
+  }
+  .participation-matrix-table thead th {
+    top: 0;
+    z-index: 3;
+    min-width: 88px;
+    max-width: 140px;
+    white-space: normal;
+    line-height: 1.35;
+  }
+  .participation-tournament-column small {
+    display: block;
+    margin-top: 3px;
+    color: #dbe6ed;
+    font-size: 0.68rem;
+    font-weight: 400;
+  }
+  .participation-matrix-table .participation-player-column {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 145px;
+    max-width: 220px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .participation-matrix-table thead .participation-player-column {
+    z-index: 4;
+    background: #34495e;
+  }
+  .participation-matrix-table tbody .participation-player-column {
+    background: #fff;
+    color: #333;
+  }
+  .participation-matrix-table tbody tr:nth-child(even) .participation-player-column {
+    background: #fafafa;
+  }
+  .participation-matrix-table td {
+    min-width: 88px;
+    font-size: 1.05rem;
+  }
+  .participation-matrix-table td.participation-yes {
+    background: #d4edda;
+    color: #155724;
+    font-weight: 700;
+  }
+
   /* テーブル共通 */
   .table-wrap {
     flex: 1;

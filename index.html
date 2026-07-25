@@ -40,6 +40,7 @@
   <nav>
     <button class="active" data-page="calendar">大会一覧</button>
     <button data-page="player">選手大会照会</button>
+    <button data-page="participation-matrix">出場一覧</button>
     <button data-page="form-create" id="nav-form-create-btn" style="display:none;">フォーム作成</button>
     <button data-page="make-email" id="nav-make-email-btn" style="display:none;">案内作成</button>
     <button data-page="mail-management" id="nav-mail-management-btn" style="display:none;">メール管理</button>
@@ -51,6 +52,7 @@
 </div>
 
 <?!= include('pages/player') ?>
+<?!= include('pages/participation-matrix') ?>
 <?!= include('pages/calendar') ?>
 <?!= include('pages/form-create') ?>
 <?!= include('pages/make-email') ?>
@@ -95,6 +97,7 @@
 <?!= include('scripts/utils') ?>
 <?!= include('scripts/members') ?>
 <?!= include('scripts/results') ?>
+<?!= include('scripts/participation-matrix') ?>
 <?!= include('scripts/calendar') ?>
 <?!= include('scripts/form-create') ?>
 <?!= include('scripts/make-email') ?>
