@@ -83,6 +83,12 @@ function createFormFromWeb(paramsJson) {
     const p = JSON.parse(paramsJson);
     const { title, grades, questionsData,
             moshikomiStartStr, moshiDeadStr, raffleStr, huriDeadStr, isKoen } = p;
+    const hasEditionNumber = /第\s*[0-9０-９一二三四五六七八九十百千〇零]+\s*回/.test(String(title || ''));
+    if (!hasEditionNumber && p.allowNonUniqueTitle !== true) {
+      throw new Error(
+        '大会名に「第〇回」がありません。例外として作成する場合は、警告欄で明示的に確認してください。'
+      );
+    }
 
     const moshikomiStart = new Date(moshikomiStartStr);
     const moshiDead      = new Date(moshiDeadStr);

@@ -100,10 +100,26 @@ function initFormCreate() {
   const applyStartEl = document.getElementById('fc-apply-start');
   if (applyStartEl) applyStartEl.value = new Date().toISOString().slice(0, 10);
 
-  document.getElementById('fc-title')?.addEventListener('input', fcRenderPreview);
+  document.getElementById('fc-title')?.addEventListener('input', () => {
+    const override = document.getElementById('fc-allow-nonunique-title');
+    if (override) override.checked = false;
+    fcUpdateTitleUniquenessWarning();
+    fcRenderPreview();
+  });
   applyStartEl?.addEventListener('change', fcRenderPreview);
 
   fcRenderPreview();
+  fcUpdateTitleUniquenessWarning();
+}
+
+function fcTitleHasEditionNumber(title) {
+  return /第\s*[0-9０-９一二三四五六七八九十百千〇零]+\s*回/.test(String(title || ''));
+}
+
+function fcUpdateTitleUniquenessWarning() {
+  const title = document.getElementById('fc-title')?.value?.trim() || '';
+  const warning = document.getElementById('fc-title-uniqueness-warning');
+  if (warning) warning.style.display = title && !fcTitleHasEditionNumber(title) ? '' : 'none';
 }
 
 function fcOnIncludeChange(i) {
@@ -333,8 +349,23 @@ function submitFormCreate() {
   if (!grades)        { statusEl.textContent = '少なくとも1つの級を選択してください'; statusEl.className = 'fc-status error'; return; }
   if (!applyStartStr) { statusEl.textContent = '申込開始日を入力してください'; statusEl.className = 'fc-status error'; return; }
   if (!applyDeadStr)  { statusEl.textContent = '本申込期限を入力してください'; statusEl.className = 'fc-status error'; return; }
+  const hasEditionNumber = fcTitleHasEditionNumber(title);
+  const allowNonUniqueTitle = document.getElementById('fc-allow-nonunique-title').checked;
+  if (!hasEditionNumber && !allowNonUniqueTitle) {
+    statusEl.textContent =
+      '大会名に「第〇回」を含めてください。例外の場合は、警告欄の確認にチェックしてください。';
+    statusEl.className = 'fc-status error';
+    document.getElementById('fc-title-uniqueness-warning').scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
+    return;
+  }
 
-  const confirmText = fcBuildConfirmText(title, grades, questionsData, applyDeadStr, payDeadStr);
+  const uniquenessWarning = hasEditionNumber ? '' :
+    '【重要】この大会名には「第〇回」がありません。例外として作成します。\n\n';
+  const confirmText = uniquenessWarning
+    + fcBuildConfirmText(title, grades, questionsData, applyDeadStr, payDeadStr);
 
   showConfirmModal(confirmText, () => {
     fcShowProgressModal();
@@ -373,6 +404,7 @@ function submitFormCreate() {
         raffleStr:         lotteryStr,
         huriDeadStr:       payDeadStr,
         isKoen,
+        allowNonUniqueTitle,
       }));
   });
 }

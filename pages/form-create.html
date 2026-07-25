@@ -14,7 +14,18 @@
             <label class="fc-label">大会名 <span class="fc-required-mark">*</span></label>
             <input type="text" id="fc-title" class="fc-text-input"
                    placeholder="例: 第27回全国競技かるた◯◯大会（「◯◯級」は不要）">
-            <p class="fc-hint">💡 一意性を保つため「第〇回」を入れることをお勧めします。名前は短くても構いません。</p>
+            <p class="fc-hint">大会名の一意性を保つため、原則として「第〇回」を必ず含めてください。</p>
+            <div id="fc-title-uniqueness-warning" class="fc-title-uniqueness-warning" style="display:none;">
+              <strong>⚠️ 大会名を一意にできない可能性があります</strong>
+              <p>
+                「第〇回」がない大会名は、翌年度以降の同名大会と区別できず、
+                DB登録や出場履歴に影響する可能性があります。
+              </p>
+              <label>
+                <input type="checkbox" id="fc-allow-nonunique-title">
+                例外的な大会名であることを確認し、「第〇回」なしで作成する
+              </label>
+            </div>
           </div>
 
           <!-- 級 -->
