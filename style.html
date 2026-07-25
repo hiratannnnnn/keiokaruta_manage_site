@@ -194,6 +194,33 @@
     font: 12px/1.5 monospace;
     white-space: pre-wrap;
   }
+  .db-admin-sync-progress { display: flex; align-items: center; gap: 10px; }
+  .db-admin-sync-progress-track {
+    width: min(360px, 45%);
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #dfe7ed;
+  }
+  #db-admin-sync-progress-bar {
+    width: 0;
+    height: 100%;
+    background: #315b7d;
+    transition: width 0.2s ease;
+  }
+  #db-admin-sync-progress-text { color: #536474; font-size: 0.84rem; }
+  .db-admin-sync-errors {
+    max-height: 260px;
+    overflow: auto;
+    margin: 0;
+    padding: 10px 10px 10px 30px;
+    border: 1px solid #e6a5a0;
+    border-radius: 5px;
+    background: #fff0ef;
+    color: #9f2f26;
+    line-height: 1.55;
+    font-size: 0.87rem;
+  }
   .db-admin-presets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
   .db-admin-presets button, .db-admin-result-header button {
     padding: 6px 11px;

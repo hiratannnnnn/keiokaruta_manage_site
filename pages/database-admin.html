@@ -13,6 +13,7 @@
         <p class="db-admin-sync-description">
           カレンダーM列が「完了」ではない今年度大会だけを正としてDBを再構築します。
           DBにある同一年度のそれ以外の日程・申込は削除されます。
+          検査時間の目安は通常30秒〜3分程度です。大会・参加者が多い場合はさらにかかります。
         </p>
         <div class="db-admin-sync-actions">
           <button id="db-admin-sync-preview-btn" onclick="dbAdminPreviewFiscalSync()">同期内容を確認</button>
@@ -20,6 +21,13 @@
                   onclick="dbAdminRunFiscalSync()" disabled>確認した内容で完全同期</button>
           <span id="db-admin-sync-status" class="op-status"></span>
         </div>
+        <div id="db-admin-sync-progress" class="db-admin-sync-progress" style="display:none;">
+          <div class="db-admin-sync-progress-track">
+            <div id="db-admin-sync-progress-bar"></div>
+          </div>
+          <span id="db-admin-sync-progress-text"></span>
+        </div>
+        <ul id="db-admin-sync-errors" class="db-admin-sync-errors" style="display:none;"></ul>
         <pre id="db-admin-sync-preview" style="display:none;"></pre>
       </div>
     </div>

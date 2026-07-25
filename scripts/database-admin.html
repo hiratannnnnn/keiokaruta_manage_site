@@ -37,6 +37,9 @@ const dbAdminPanes = {
 };
 let dbAdminSelected = null;
 let dbAdminFiscalPreviewValid = false;
+let dbAdminFiscalProgressTimer = null;
+let dbAdminFiscalElapsedTimer = null;
+let dbAdminFiscalStartedAt = 0;
 
 function initDatabaseAdmin() {
   dbAdminMethodChanged();
@@ -54,12 +57,20 @@ function dbAdminPreviewFiscalSync() {
   const status = document.getElementById('db-admin-sync-status');
   const output = document.getElementById('db-admin-sync-preview');
   const runButton = document.getElementById('db-admin-sync-run-btn');
+  const errors = document.getElementById('db-admin-sync-errors');
+  const operationId = Date.now() + '-' + Math.random().toString(36).slice(2);
   dbAdminFiscalPreviewValid = false;
   runButton.disabled = true;
-  status.textContent = 'シートを検査中...';
+  errors.style.display = 'none';
+  errors.innerHTML = '';
+  document.getElementById('db-admin-sync-progress').style.display = '';
+  document.getElementById('db-admin-sync-progress-bar').style.width = '0%';
+  status.textContent = 'シートを検査中...（通常30秒〜3分程度）';
   status.className = 'op-status db-admin-searching';
+  dbAdminStartFiscalProgress(operationId);
   google.script.run
     .withSuccessHandler(json => {
+      dbAdminStopFiscalProgress();
       const data = JSON.parse(json);
       output.style.display = '';
       output.textContent = JSON.stringify(data, null, 2);
@@ -71,6 +82,8 @@ function dbAdminPreviewFiscalSync() {
       if ((data.errors || []).length) {
         status.textContent = '同期できません：' + data.errors.length + '件の検証エラー';
         status.className = 'op-status error';
+        errors.innerHTML = data.errors.map(error => '<li>' + escHtml(error) + '</li>').join('');
+        errors.style.display = '';
         return;
       }
       dbAdminFiscalPreviewValid = true;
@@ -81,10 +94,54 @@ function dbAdminPreviewFiscalSync() {
       status.className = 'op-status ok';
     })
     .withFailureHandler(error => {
+      dbAdminStopFiscalProgress();
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .previewFiscalYearDatabaseSync(dbAdminPassword());
+    .previewFiscalYearDatabaseSync(dbAdminPassword(), operationId);
+}
+
+function dbAdminStartFiscalProgress(operationId) {
+  dbAdminStopFiscalProgress();
+  dbAdminFiscalStartedAt = Date.now();
+  const updateElapsed = () => {
+    const seconds = Math.floor((Date.now() - dbAdminFiscalStartedAt) / 1000);
+    const text = document.getElementById('db-admin-sync-progress-text');
+    if (text && !text.dataset.serverText) text.textContent = '準備中… 経過' + seconds + '秒';
+  };
+  updateElapsed();
+  dbAdminFiscalElapsedTimer = setInterval(updateElapsed, 1000);
+
+  const poll = () => {
+    google.script.run
+      .withSuccessHandler(json => {
+        const data = JSON.parse(json);
+        if (data.error) return;
+        const total = Number(data.total || 0);
+        const processed = Number(data.processed || 0);
+        const percent = total ? Math.min(100, Math.round(processed / total * 100)) : 0;
+        document.getElementById('db-admin-sync-progress-bar').style.width = percent + '%';
+        const seconds = Math.floor((Date.now() - dbAdminFiscalStartedAt) / 1000);
+        const text = document.getElementById('db-admin-sync-progress-text');
+        text.dataset.serverText = 'true';
+        text.textContent = total
+          ? processed + ' / ' + total + '行を検査済み — ' + (data.current || '')
+            + '（経過' + seconds + '秒）'
+          : '準備中…（経過' + seconds + '秒）';
+      })
+      .getFiscalYearSyncProgress(operationId, dbAdminPassword());
+  };
+  poll();
+  dbAdminFiscalProgressTimer = setInterval(poll, 1000);
+}
+
+function dbAdminStopFiscalProgress() {
+  if (dbAdminFiscalProgressTimer) clearInterval(dbAdminFiscalProgressTimer);
+  if (dbAdminFiscalElapsedTimer) clearInterval(dbAdminFiscalElapsedTimer);
+  dbAdminFiscalProgressTimer = null;
+  dbAdminFiscalElapsedTimer = null;
+  const text = document.getElementById('db-admin-sync-progress-text');
+  if (text) delete text.dataset.serverText;
 }
 
 function dbAdminRunFiscalSync() {

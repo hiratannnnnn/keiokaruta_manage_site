@@ -23,7 +23,30 @@ function fiscalSyncPlayer_(name) {
   return { family_name: parts.shift(), given_name: parts.join(' ') };
 }
 
-function buildFiscalYearDatabaseSnapshot_() {
+function fiscalSyncProgressKey_(operationId) {
+  return 'fiscal_sync_progress_' + String(operationId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function fiscalSyncSetProgress_(operationId, progress) {
+  if (!operationId) return;
+  CacheService.getUserCache().put(
+    fiscalSyncProgressKey_(operationId),
+    JSON.stringify(progress),
+    600
+  );
+}
+
+function getFiscalYearSyncProgress(operationId, password) {
+  try {
+    databaseAdminAuthenticate_(password);
+    const raw = CacheService.getUserCache().get(fiscalSyncProgressKey_(operationId));
+    return raw || JSON.stringify({ phase: 'starting', processed: 0, total: 0 });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function buildFiscalYearDatabaseSnapshot_(operationId) {
   const now = new Date();
   const fiscalYear = fiscalYearForDate_(now);
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -33,9 +56,21 @@ function buildFiscalYearDatabaseSnapshot_() {
   const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues().slice(2);
   const grouped = {};
   const errors = [];
+  fiscalSyncSetProgress_(operationId, {
+    phase: 'scanning',
+    processed: 0,
+    total: calendarRows.length,
+    current: 'カレンダーを読み込みました',
+  });
 
   calendarRows.forEach((calendarRow, rowIndex) => {
     const sheetName = String(calendarRow[0] || '').trim();
+    fiscalSyncSetProgress_(operationId, {
+      phase: 'scanning',
+      processed: rowIndex,
+      total: calendarRows.length,
+      current: sheetName || '空行',
+    });
     if (!sheetName || String(calendarRow[12] || '').trim() === '完了') return;
 
     const sheet = ss.getSheetByName(sheetName);
@@ -141,6 +176,8 @@ function buildFiscalYearDatabaseSnapshot_() {
           is_paid: payStatus === '済'
             || (payStatus.includes('繰') && payStatus.includes('越'))
             || payStatus === 'くりこし',
+          source_sheet: sheetName,
+          source_row: i + 1,
         });
       } catch (e) {
         errors.push(sheetName + ': ' + e.message);
@@ -181,10 +218,22 @@ function buildFiscalYearDatabaseSnapshot_() {
     tournament.entries.forEach(entry => {
       const key = entry.email.toLowerCase() + '|' + entry.grade + '|' + entry.held_on;
       if (entryKeys[key]) {
-        errors.push(tournament.name + ': 同じ選手・日程の申込が重複しています（' + entry.email + '）。');
+        const former = entryKeys[key];
+        errors.push(
+          tournament.name + ': 同じ選手・日程の申込が重複しています（'
+          + entry.email + '、' + entry.grade + '級、' + entry.held_on + '）。'
+          + former.source_sheet + ' ' + former.source_row + '行目 / '
+          + entry.source_sheet + ' ' + entry.source_row + '行目'
+        );
       }
-      entryKeys[key] = true;
+      entryKeys[key] = entry;
     });
+  });
+  fiscalSyncSetProgress_(operationId, {
+    phase: 'complete',
+    processed: calendarRows.length,
+    total: calendarRows.length,
+    current: '検査完了',
   });
   return {
     fiscal_year: fiscalYear,
@@ -200,10 +249,10 @@ function buildFiscalYearDatabaseSnapshot_() {
   };
 }
 
-function previewFiscalYearDatabaseSync(password) {
+function previewFiscalYearDatabaseSync(password, operationId) {
   try {
     databaseAdminAuthenticate_(password);
-    return JSON.stringify(buildFiscalYearDatabaseSnapshot_());
+    return JSON.stringify(buildFiscalYearDatabaseSnapshot_(operationId));
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
