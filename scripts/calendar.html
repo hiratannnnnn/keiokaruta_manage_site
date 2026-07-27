@@ -514,7 +514,7 @@ function filterCalendar() {
 // 大会詳細
 // ------------------------------------------------------------
 let detailColsHidden = false;
-let detailN = 6;
+let detailPaymentStatusIndex = 8;
 
 function openTournamentDetail(name) {
   document.getElementById('calendar-list-view').style.display = 'none';
@@ -583,14 +583,16 @@ function onDetailLoaded(json) {
   }
 
   statusEl.style.display = 'none';
-  detailN = res.N || 6;
+  detailPaymentStatusIndex = Number.isInteger(res.paymentStatusIndex)
+    ? res.paymentStatusIndex
+    : 8;
 
   // グレードサマリー
   const gradeSummary = res.gradeSummary || [];
   renderGradeSummary(gradeSummary);
 
   // 参加者一覧
-  const payColIdx   = detailN + 2;
+  const payColIdx = detailPaymentStatusIndex;
   const showPayBtns = hasPermission('payDetailButtons');
   document.getElementById('detail-person-thead').innerHTML =
     '<tr>' + res.personHeaders.map((h, i) => {
@@ -657,9 +659,9 @@ function showOfficialBadge(isUnofficial) {
   }
 }
 
-// 詳細列: col 0,1（タイムスタンプ・メール）および col 3〜N（ふりがな〜その他の直前）
+// 詳細列: タイムスタンプ・メールと、氏名・級以外のフォーム回答列
 function isDetailCol(i) {
-  return i <= 1 || (i >= 3 && i <= detailN);
+  return i <= 1 || (i >= 3 && i <= detailPaymentStatusIndex - 2);
 }
 
 function applyDetailColsState() {
@@ -853,7 +855,7 @@ function renderPayButtonsTd(value, playerName) {
 }
 
 function updateDetailPayCell(playerName, value) {
-  const payColIdx   = detailN + 2;
+  const payColIdx = detailPaymentStatusIndex;
   const showPayBtns = hasPermission('payDetailButtons');
   for (const row of document.getElementById('detail-person-tbody').querySelectorAll('tr')) {
     const cells = row.querySelectorAll('td');

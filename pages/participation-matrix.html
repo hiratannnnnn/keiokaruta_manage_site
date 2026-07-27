@@ -20,8 +20,12 @@
                   onclick="loadParticipationMatrix(true)">再読込</button>
         </div>
         <p class="participation-matrix-note">
-          キャンセル済みの申込は空欄です。大会名の下には、その大会で最も早い開催日を表示します。
+          ○ 公認大会／△ 非公認大会／○△ 公認・非公認の両方。キャンセル済みは空欄です。
+          合計は公認大会の出場回数です。
+          選手行を選ぶと、同姓同名の行もまとめてハイライトします。
         </p>
+        <div id="participation-matrix-selection" class="participation-matrix-selection"
+             style="display:none;"></div>
         <div id="participation-matrix-status" class="status">
           ページを開くと一覧を読み込みます。
         </div>

@@ -35,6 +35,499 @@ function getMailManagement() {
   }
 }
 
+function mailManagementSyncDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const parsed = new Date(text.replace(' ', 'T'));
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function mailManagementSyncDateTime_(value) {
+  const date = mailManagementSyncDate_(value);
+  return date ? Utilities.formatDate(date, 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX") : '';
+}
+
+function mailManagementScheduleIds_(tournament, grades, schedules) {
+  const gradeList = String(grades || '').replace(/級/g, '').replace(/\s+/g, '')
+    .toUpperCase().split('').filter(Boolean);
+  if (!gradeList.length || gradeList.some(grade => !/^[A-E]$/.test(grade))) {
+    throw new Error('級をA〜Eで特定できません。');
+  }
+  const ids = [];
+  gradeList.forEach(grade => {
+    const matches = schedules.filter(schedule =>
+      String(schedule.tournament_id) === String(tournament.id)
+      && String(schedule.grade || '').toUpperCase() === grade
+    );
+    if (matches.length !== 1) {
+      throw new Error(
+        grade + '級の日程が' + matches.length + '件あり、一意に特定できません。'
+      );
+    }
+    ids.push(String(matches[0].id));
+  });
+  return ids.sort((left, right) => taikaiCompareIds_(left, right));
+}
+
+function buildMailManagementDatabaseSyncPlan_() {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
+  if (!sheet) throw new Error('メール管理シートが見つかりません。');
+
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 6 ? [] : sheet.getRange(6, 1, lastRow - 5, 9).getValues();
+  const tournaments = taikaiApiRequest_('GET', '/tournaments', null, {}) || [];
+  const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
+  const now = new Date();
+  const candidates = [];
+  const skipped = [];
+  const errors = [];
+
+  rows.forEach((row, index) => {
+    const rowNum = index + 6;
+    const tournamentName = String(row[0] || '').trim();
+    if (!tournamentName) return;
+    const sent = String(row[7] || '').trim();
+    if (sent.includes('済')) {
+      skipped.push({ row: rowNum, reason: '送信済み' });
+      return;
+    }
+    const scheduledDate = mailManagementSyncDate_(row[2]);
+    const scheduledAt = mailManagementSyncDateTime_(scheduledDate);
+    if (!scheduledAt) {
+      skipped.push({ row: rowNum, reason: '送信予定日時が未設定または日付ではありません' });
+      return;
+    }
+    if (scheduledDate.getTime() <= now.getTime()) {
+      skipped.push({ row: rowNum, reason: '送信予定日時が過去です' });
+      return;
+    }
+
+    const mailTypeText = String(row[3] || '').trim();
+    const mailType = mailTypeText === 'リマインダー'
+      ? 'reminder'
+      : (mailTypeText === '振込確認' ? 'payment_confirmation' : '');
+    if (!mailType) {
+      errors.push({ row: rowNum, reason: 'メール種別を特定できません' });
+      return;
+    }
+
+    const tournamentMatches = tournaments.filter(tournament =>
+      String(tournament.name || '').trim() === tournamentName
+    );
+    if (tournamentMatches.length !== 1) {
+      errors.push({
+        row: rowNum,
+        reason: '大会が' + tournamentMatches.length + '件あり、一意に特定できません',
+      });
+      return;
+    }
+
+    try {
+      const scheduleIds = mailManagementScheduleIds_(
+        tournamentMatches[0],
+        String(row[1] || ''),
+        schedules
+      );
+      candidates.push({
+        row: rowNum,
+        tournament_name: tournamentName,
+        grades: String(row[1] || '').trim(),
+        scheduled_at: scheduledAt,
+        mail_type: mailType,
+        subject: String(row[4] || '').trim()
+          || tournamentName + String(row[1] || '').trim() + '\u3000案内',
+        form_url: String(row[5] || '').trim() || null,
+        schedule_ids: scheduleIds,
+      });
+    } catch (e) {
+      errors.push({ row: rowNum, reason: e.message });
+    }
+  });
+
+  return {
+    candidates: candidates,
+    skipped: skipped,
+    errors: errors,
+    summary: {
+      candidate_count: candidates.length,
+      skipped_count: skipped.length,
+      error_count: errors.length,
+    },
+  };
+}
+
+function buildMailManagementSnapshotSyncPlan_(snapshot) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
+  if (!sheet) throw new Error('メール管理シートが見つかりません。');
+
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 6 ? [] : sheet.getRange(6, 1, lastRow - 5, 9).getValues();
+  const now = new Date();
+  const candidates = [];
+  const skipped = [];
+  const errors = [];
+  const tournaments = snapshot.tournaments || [];
+
+  rows.forEach((row, index) => {
+    const rowNum = index + 6;
+    const tournamentName = String(row[0] || '').trim();
+    if (!tournamentName) return;
+    if (String(row[7] || '').trim().includes('済')) {
+      skipped.push({ row: rowNum, reason: '送信済み' });
+      return;
+    }
+    const scheduledDate = mailManagementSyncDate_(row[2]);
+    const scheduledAt = mailManagementSyncDateTime_(scheduledDate);
+    if (!scheduledAt) {
+      skipped.push({ row: rowNum, reason: '送信予定日時が未設定または日付ではありません' });
+      return;
+    }
+    if (scheduledDate.getTime() <= now.getTime()) {
+      skipped.push({ row: rowNum, reason: '送信予定日時が過去です' });
+      return;
+    }
+
+    const mailTypeText = String(row[3] || '').trim();
+    const mailType = mailTypeText === 'リマインダー'
+      ? 'reminder'
+      : (mailTypeText === '振込確認' ? 'payment_confirmation' : '');
+    if (!mailType) {
+      errors.push({ row: rowNum, reason: 'メール種別を特定できません' });
+      return;
+    }
+    const tournamentMatches = tournaments.filter(item =>
+      String(item.name || '').trim() === tournamentName
+    );
+    if (tournamentMatches.length !== 1) {
+      errors.push({
+        row: rowNum,
+        reason: '同期スナップショット内の大会が' + tournamentMatches.length
+          + '件あり、一意に特定できません',
+      });
+      return;
+    }
+    const grades = String(row[1] || '').replace(/級/g, '').replace(/\s+/g, '')
+      .toUpperCase().split('').filter(Boolean);
+    if (!grades.length || grades.some(grade => !/^[A-E]$/.test(grade))) {
+      errors.push({ row: rowNum, reason: '級をA〜Eで特定できません' });
+      return;
+    }
+    const targets = [];
+    grades.forEach(grade => {
+      const matches = (tournamentMatches[0].schedules || []).filter(schedule =>
+        String(schedule.grade || '').toUpperCase() === grade
+      );
+      if (matches.length !== 1) {
+        errors.push({
+          row: rowNum,
+          reason: grade + '級の日程が' + matches.length + '件あり、一意に特定できません',
+        });
+        return;
+      }
+      targets.push({ grade: grade, held_on: String(matches[0].held_on || '') });
+    });
+    if (targets.length !== grades.length) return;
+
+    const subject = String(row[4] || '').trim()
+      || tournamentName + String(row[1] || '').trim() + '\u3000案内';
+    candidates.push({
+      row: rowNum,
+      tournament_name: tournamentName,
+      grades: String(row[1] || '').trim(),
+      scheduled_at: scheduledAt,
+      mail_type: mailType,
+      subject: subject,
+      form_url: String(row[5] || '').trim() || null,
+      targets: targets,
+    });
+  });
+
+  return {
+    candidates: candidates,
+    skipped: skipped,
+    errors: errors,
+    summary: {
+      candidate_count: candidates.length,
+      skipped_count: skipped.length,
+      error_count: errors.length,
+    },
+  };
+}
+
+function resolveMailManagementSnapshotPlan_(snapshotPlan) {
+  const resolved = {
+    candidates: [],
+    skipped: snapshotPlan.skipped || [],
+    errors: [],
+  };
+  (snapshotPlan.candidates || []).forEach(item => {
+    const tournaments = taikaiApiRequest_('GET', '/tournaments', null, {
+      name: item.tournament_name,
+    }) || [];
+    const exact = tournaments.filter(tournament =>
+      String(tournament.name || '').trim() === item.tournament_name
+    );
+    if (exact.length !== 1) {
+      resolved.errors.push({
+        row: item.row,
+        reason: '同期後の大会が' + exact.length + '件あり、一意に特定できません',
+      });
+      return;
+    }
+    const schedules = taikaiApiRequest_(
+      'GET',
+      '/tournaments/' + encodeURIComponent(String(exact[0].id)) + '/schedules'
+    ) || [];
+    const scheduleIds = [];
+    (item.targets || []).forEach(target => {
+      const matches = schedules.filter(schedule =>
+        String(schedule.grade || '').toUpperCase() === target.grade
+        && String(schedule.held_on || '') === target.held_on
+      );
+      if (matches.length !== 1) {
+        resolved.errors.push({
+          row: item.row,
+          reason: target.grade + '級・' + target.held_on + 'の日程が'
+            + matches.length + '件あり、一意に特定できません',
+        });
+        return;
+      }
+      scheduleIds.push(String(matches[0].id));
+    });
+    if (scheduleIds.length !== (item.targets || []).length) return;
+    resolved.candidates.push(Object.assign({}, item, {
+      schedule_ids: scheduleIds.sort((left, right) => taikaiCompareIds_(left, right)),
+    }));
+  });
+  resolved.summary = {
+    candidate_count: resolved.candidates.length,
+    skipped_count: resolved.skipped.length,
+    error_count: resolved.errors.length,
+  };
+  return resolved;
+}
+
+function mailManagementSameIds_(left, right) {
+  const normalize = values => (values || []).map(String)
+    .sort((a, b) => taikaiCompareIds_(a, b)).join(',');
+  return normalize(left) === normalize(right);
+}
+
+function ensureMailManagementAnnouncement_(item) {
+  const found = taikaiApiRequest_('GET', '/announcements', null, {
+    subject: item.subject,
+  }) || [];
+  const exact = found.filter(announcement =>
+    String(announcement.subject || '') === item.subject
+  );
+  if (exact.length > 1) {
+    throw new Error('同じ件名の案内が複数あります。');
+  }
+  if (!exact.length) {
+    return taikaiApiRequest_('POST', '/announcements', {
+      subject: item.subject,
+      form_url: item.form_url,
+      gmail_message_id: null,
+      schedule_ids: item.schedule_ids,
+    });
+  }
+
+  let announcement = exact[0];
+  if (String(announcement.form_url || '') !== String(item.form_url || '')) {
+    announcement = taikaiApiRequest_(
+      'PATCH',
+      '/announcements/' + encodeURIComponent(String(announcement.id)),
+      { form_url: item.form_url }
+    );
+  }
+  if (!mailManagementSameIds_(announcement.schedule_ids, item.schedule_ids)) {
+    announcement = taikaiApiRequest_(
+      'PUT',
+      '/announcements/' + encodeURIComponent(String(announcement.id)) + '/targets',
+      { schedule_ids: item.schedule_ids }
+    );
+  }
+  return announcement;
+}
+
+function previewMailManagementDatabaseSync() {
+  try {
+    return JSON.stringify(buildMailManagementDatabaseSyncPlan_());
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function executeMailManagementDatabaseSyncPlan_(plan) {
+  if (plan.errors.length) {
+    throw new Error('同期前検証でエラーがあります。プレビューを確認してください。');
+  }
+  const results = [];
+  plan.candidates.forEach(item => {
+      const announcement = item.mail_type === 'reminder'
+        ? ensureMailManagementAnnouncement_(item)
+        : null;
+      const job = taikaiApiRequest_('POST', '/email-jobs', {
+        scheduled_at: item.scheduled_at,
+        mail_type: item.mail_type,
+        announcement_id: announcement ? String(announcement.id) : null,
+        schedule_ids: item.schedule_ids,
+      });
+      results.push({
+        row: item.row,
+        job_id: String(job.id),
+        mail_type: item.mail_type,
+        schedule_count: item.schedule_ids.length,
+      });
+  });
+  return {
+    ok: true,
+    created_or_existing_count: results.length,
+    skipped_count: plan.skipped.length,
+    results: results,
+  };
+}
+
+function syncMailManagementDatabase() {
+  try {
+    const plan = buildMailManagementDatabaseSyncPlan_();
+    const result = executeMailManagementDatabaseSyncPlan_(plan);
+    return JSON.stringify({
+      ok: result.ok,
+      created_or_existing_count: result.created_or_existing_count,
+      skipped_count: result.skipped_count,
+      results: result.results,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function mailManagementEscapeGmailQuery_(text) {
+  return String(text || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function mailManagementAnnouncementMessages_(announcement) {
+  const subject = String(announcement.subject || '').trim();
+  if (!subject) return [];
+  const threads = GmailApp.search(
+    'in:sent subject:"' + mailManagementEscapeGmailQuery_(subject) + '"',
+    0,
+    50
+  );
+  const matches = {};
+  threads.forEach(thread => {
+    thread.getMessages().forEach(message => {
+      if (String(message.getSubject() || '') !== subject) return;
+      const formUrl = String(announcement.form_url || '').trim();
+      if (formUrl) {
+        const plain = String(message.getPlainBody ? message.getPlainBody() : '');
+        const html = String(message.getBody ? message.getBody() : '');
+        if (!plain.includes(formUrl) && !html.includes(formUrl)) return;
+      }
+      matches[String(message.getId())] = message;
+    });
+  });
+  return Object.keys(matches).map(id => matches[id]);
+}
+
+function buildAnnouncementGmailLinkPlan_() {
+  const announcements = taikaiApiRequest_('GET', '/announcements', null, {}) || [];
+  const candidates = [];
+  const skipped = [];
+  const errors = [];
+  announcements.forEach(announcement => {
+    const id = String(announcement.id);
+    const subject = String(announcement.subject || '').trim();
+    if (announcement.gmail_message_id) {
+      skipped.push({ announcement_id: id, subject: subject, reason: '紐付け済み' });
+      return;
+    }
+    const messages = mailManagementAnnouncementMessages_(announcement);
+    if (messages.length !== 1) {
+      errors.push({
+        announcement_id: id,
+        subject: subject,
+        reason: messages.length
+          ? '一致する送信済みGmailが複数あります'
+          : '一致する送信済みGmailが見つかりません',
+        match_count: messages.length,
+      });
+      return;
+    }
+    candidates.push({
+      announcement_id: id,
+      subject: subject,
+      gmail_message_id: String(messages[0].getId()),
+    });
+  });
+  return {
+    candidates: candidates,
+    skipped: skipped,
+    errors: errors,
+    summary: {
+      candidate_count: candidates.length,
+      skipped_count: skipped.length,
+      error_count: errors.length,
+    },
+  };
+}
+
+function announcementGmailLinkPublicPlan_(plan) {
+  return {
+    candidates: plan.candidates.map(item => ({
+      announcement_id: item.announcement_id,
+      subject: item.subject,
+      match_count: 1,
+    })),
+    skipped: plan.skipped,
+    errors: plan.errors,
+    summary: plan.summary,
+  };
+}
+
+function previewAnnouncementGmailLinks() {
+  try {
+    return JSON.stringify(
+      announcementGmailLinkPublicPlan_(buildAnnouncementGmailLinkPlan_())
+    );
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function linkAnnouncementGmailMessages() {
+  try {
+    const plan = buildAnnouncementGmailLinkPlan_();
+    if (plan.errors.length) {
+      throw new Error('紐付け前検証でエラーがあります。プレビューを確認してください。');
+    }
+    const results = plan.candidates.map(item => {
+      taikaiApiRequest_(
+        'PATCH',
+        '/announcements/' + encodeURIComponent(item.announcement_id),
+        { gmail_message_id: item.gmail_message_id }
+      );
+      return {
+        announcement_id: item.announcement_id,
+        subject: item.subject,
+        linked: true,
+      };
+    });
+    return JSON.stringify({
+      ok: true,
+      linked_count: results.length,
+      already_linked_count: plan.skipped.length,
+      results: results,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
 // メール管理シートの行を削除
 function deleteMailManagementRow(rowNum) {
   try {
@@ -111,16 +604,15 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   const sheet = ss.getSheetByName(tournamentName + grades);
   if (!sheet) return '（シートが見つかりません）\n';
 
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const count = headerRow.find(c => typeof c === 'number' && Number.isFinite(c));
-  if (count == null) return '（N が取得できません）\n';
-
-  const allRows = sheet.getDataRange().getValues();
-  let formEndIdx = 1;
-  for (let i = 1; i < allRows.length; i++) {
-    if (String(allRows[i][0] || '').trim() === '') break;
-    formEndIdx = i + 1;
+  let structure;
+  try {
+    structure = tournamentSheetStructure_(sheet, false);
+  } catch (e) {
+    return '（大会シート構造を特定できません）\n';
   }
+  const allRows = structure.data;
+  const formEndIdx = structure.response_end_index;
+  const paymentStatusIndex = structure.layout.payment_status_column - 1;
   const data = latestFormRowsByPlayer_(allRows.slice(1, formEndIdx))
     .filter(row => row[2] !== '');
 
@@ -132,7 +624,7 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   data.forEach(row => {
     const name      = String(row[2]).replace('　', ' ');
     const gradeStr  = String(row[4]);
-    const isPaid    = String(row[count + 2]).trim() === '済';
+    const isPaid    = String(row[paymentStatusIndex] || '').trim() === '済';
 
     if (isPaid && !paidList.includes(name)) paidList.push(name);
 
@@ -287,17 +779,16 @@ function setReminderTrigger(json) {
 
         const tSheet = ss.getSheetByName(tournamentName + grades);
         if (tSheet) {
-          const headerRow = tSheet.getRange(1, 1, 1, tSheet.getLastColumn()).getValues()[0];
-          const count = headerRow.find(c => typeof c === 'number' && Number.isFinite(c));
-          if (count != null) {
-            const formId = String(tSheet.getRange(1, count + 4).getValue());
-            FormApp.openById(formId).setDescription(
-              'こちらは' + tournamentName + grades + 'の参加表明フォームです。\n' +
-              '該当項目に回答の上、送信してください。\n' +
-              'このフォームの回答期限は【' + tomorrowStr + '】の23:59までです。\n' +
-              '回答が正しく送信されている場合、入力いただいたメールアドレスに回答のコピーが届きますのでご確認ください。'
-            );
-          }
+          const layout = tournamentSheetLayout_(tSheet);
+          const formId = String(
+            tSheet.getRange(1, layout.form_id_column).getValue()
+          ).trim();
+          FormApp.openById(formId).setDescription(
+            'こちらは' + tournamentName + grades + 'の参加表明フォームです。\n' +
+            '該当項目に回答の上、送信してください。\n' +
+            'このフォームの回答期限は【' + tomorrowStr + '】の23:59までです。\n' +
+            '回答が正しく送信されている場合、入力いただいたメールアドレスに回答のコピーが届きますのでご確認ください。'
+          );
         }
 
         const calSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);

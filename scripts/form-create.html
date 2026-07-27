@@ -287,7 +287,7 @@ function fcUpdateProgressUI(pct, msg) {
   document.getElementById('fc-prog-message').textContent = msg;
 }
 
-function fcCompleteProgress(tournamentName) {
+function fcCompleteProgress(tournamentName, dbSyncPending, warning) {
   clearTimeout(_fcProgTimer);
   fcUpdateProgressUI(100, '完了！');
   setTimeout(() => {
@@ -295,10 +295,16 @@ function fcCompleteProgress(tournamentName) {
     showCompletionModal(
       '✅ フォームを作成しました',
       `<p>「${escHtml(tournamentName)}　参加表明フォーム」を作成しました。</p>` +
+      (dbSyncPending
+        ? `<p style="color:#b45309;font-weight:bold;">⚠ ${escHtml(warning)}</p>`
+        : '') +
       `<p class="completion-next-label">次のステップ</p>` +
       `<ul class="completion-next-list">` +
       `<li>大会詳細ページで内容を確認できます</li>` +
       `<li>続けて案内メールを作成しましょう</li>` +
+      (dbSyncPending
+        ? `<li>API復旧後にDB管理から今年度の完全同期を実行してください</li>`
+        : '') +
       `</ul>`,
       [
         { label: '閉じる', action: null },
@@ -386,9 +392,12 @@ function submitFormCreate() {
           lottery:       lotteryStr,
           payDeadline:   payDeadStr,
           formUrl:       r.formUrl,
+          dbSyncPending: r.db_sync_pending === true,
           questionsData,
         };
-        fcCompleteProgress(title + grades);
+        fcCompleteProgress(
+          title + grades, r.db_sync_pending === true, r.warning || ''
+        );
       })
       .withFailureHandler(e => {
         fcHideProgressModal();

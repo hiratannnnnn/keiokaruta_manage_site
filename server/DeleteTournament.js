@@ -20,13 +20,8 @@ function deleteTournament(name) {
     const sheet = ss.getSheetByName(name);
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
-    // ヘッダー行から N(count) を取得
-    const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const count = headerRow.find(c => typeof c === 'number');
-    if (count == null) throw new Error('カラム数 (N) が取得できません');
-
-    // col count+4 (1-indexed) からフォームID を取得
-    const formId = String(sheet.getRange(1, count + 4).getValue());
+    const layout = tournamentSheetLayout_(sheet);
+    const formId = String(sheet.getRange(1, layout.form_id_column).getValue()).trim();
     if (!formId) throw new Error('フォームIDが取得できません');
 
     // シート名末尾の「ABC級」を除いた大会名がAPI上の大会名。

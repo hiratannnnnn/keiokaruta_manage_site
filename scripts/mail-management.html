@@ -6,6 +6,8 @@
 let _mmCurrentRowNum = null;
 let _mmShowAll = false;
 let _mmAllData = [];
+let _mmDatabaseSyncPreviewValid = false;
+let _mmGmailLinkPreviewValid = false;
 
 // ---- 初期化 ----
 function initMailManagement() {
@@ -19,6 +21,173 @@ function loadMailManagement() {
     .withSuccessHandler(mmOnLoaded)
     .withFailureHandler(e => setStatus('mail-management', 'error', e.message))
     .getMailManagement();
+}
+
+function mmPreviewDatabaseSync() {
+  const output = document.getElementById('mm-db-sync-preview');
+  const details = document.getElementById('mm-db-sync-details');
+  const status = document.getElementById('mm-db-sync-status');
+  const runButton = document.getElementById('mm-db-sync-run');
+  _mmDatabaseSyncPreviewValid = false;
+  runButton.disabled = true;
+  details.style.display = '';
+  output.textContent = 'メール管理シートとDBを検査中...';
+  status.textContent = '検査中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      output.textContent = JSON.stringify(data, null, 2);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      const summary = data.summary || {};
+      if ((data.errors || []).length) {
+        status.textContent = '同期できません：候補' + Number(summary.candidate_count || 0)
+          + '件、対象外' + Number(summary.skipped_count || 0)
+          + '件、エラー' + Number(summary.error_count || 0) + '件';
+        status.className = 'op-status error';
+        details.open = true;
+        return;
+      }
+      _mmDatabaseSyncPreviewValid = true;
+      runButton.disabled = !data.summary || data.summary.candidate_count === 0;
+      status.textContent = '検査完了：同期候補' + Number(summary.candidate_count || 0)
+        + '件、対象外' + Number(summary.skipped_count || 0) + '件';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      output.textContent = 'エラー: ' + error.message;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .previewMailManagementDatabaseSync();
+}
+
+function mmRunDatabaseSync() {
+  if (!_mmDatabaseSyncPreviewValid) return;
+  if (!window.confirm(
+    '検査済みの未送信・未来日時のメール予定をDBへ同期します。'
+    + 'この操作だけではGmailを送信しません。実行しますか？'
+  )) return;
+  const output = document.getElementById('mm-db-sync-preview');
+  const details = document.getElementById('mm-db-sync-details');
+  const status = document.getElementById('mm-db-sync-status');
+  const runButton = document.getElementById('mm-db-sync-run');
+  runButton.disabled = true;
+  _mmDatabaseSyncPreviewValid = false;
+  details.style.display = '';
+  output.textContent = 'DBへ同期中...';
+  status.textContent = 'DBへ同期中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      output.textContent = JSON.stringify(data, null, 2);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        details.open = true;
+        return;
+      }
+      status.textContent = Number(data.created_or_existing_count || 0)
+        + '件のメールジョブをDBへ同期しました。対象外'
+        + Number(data.skipped_count || 0) + '件';
+      status.className = 'op-status ok';
+      loadMailManagement();
+    })
+    .withFailureHandler(error => {
+      output.textContent = 'エラー: ' + error.message;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+      details.open = true;
+    })
+    .syncMailManagementDatabase();
+}
+
+function mmPreviewAnnouncementGmailLinks() {
+  const output = document.getElementById('mm-gmail-link-preview');
+  const details = document.getElementById('mm-gmail-link-details');
+  const status = document.getElementById('mm-gmail-link-status');
+  const runButton = document.getElementById('mm-gmail-link-run');
+  _mmGmailLinkPreviewValid = false;
+  runButton.disabled = true;
+  details.style.display = '';
+  output.textContent = 'DBの案内と送信済みGmailを検査中...';
+  status.textContent = '検査中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      output.textContent = JSON.stringify(data, null, 2);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      const summary = data.summary || {};
+      if ((data.errors || []).length) {
+        status.textContent = '紐付けできません：候補' + Number(summary.candidate_count || 0)
+          + '件、紐付け済み' + Number(summary.skipped_count || 0)
+          + '件、エラー' + Number(summary.error_count || 0) + '件';
+        status.className = 'op-status error';
+        details.open = true;
+        return;
+      }
+      _mmGmailLinkPreviewValid = true;
+      runButton.disabled = Number(summary.candidate_count || 0) === 0;
+      status.textContent = '検査完了：紐付け候補' + Number(summary.candidate_count || 0)
+        + '件、紐付け済み' + Number(summary.skipped_count || 0) + '件';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      output.textContent = 'エラー: ' + error.message;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .previewAnnouncementGmailLinks();
+}
+
+function mmRunAnnouncementGmailLinks() {
+  if (!_mmGmailLinkPreviewValid) return;
+  if (!window.confirm(
+    '検査済みの案内に送信済みGmailのメッセージIDを紐付けます。'
+    + 'この操作ではGmailを送信しません。実行しますか？'
+  )) return;
+  const output = document.getElementById('mm-gmail-link-preview');
+  const details = document.getElementById('mm-gmail-link-details');
+  const status = document.getElementById('mm-gmail-link-status');
+  const runButton = document.getElementById('mm-gmail-link-run');
+  _mmGmailLinkPreviewValid = false;
+  runButton.disabled = true;
+  details.style.display = '';
+  output.textContent = 'Gmail IDを紐付け中...';
+  status.textContent = 'Gmail IDを紐付け中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      output.textContent = JSON.stringify(data, null, 2);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        details.open = true;
+        return;
+      }
+      status.textContent = Number(data.linked_count || 0)
+        + '件の案内にGmail IDを紐付けました。紐付け済み'
+        + Number(data.already_linked_count || 0) + '件';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      output.textContent = 'エラー: ' + error.message;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+      details.open = true;
+    })
+    .linkAnnouncementGmailMessages();
 }
 
 function mmOnLoaded(json) {

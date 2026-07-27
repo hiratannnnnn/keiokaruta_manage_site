@@ -68,18 +68,10 @@ function getLotteryResults(sheetName) {
         : parts[0];
     };
 
-    const allData = sheet.getDataRange().getValues();
-    let N = null;
-    for (const c of allData[0]) {
-      if (typeof c === 'number' && Number.isFinite(c) && c >= 1 && c <= 30) { N = c; break; }
-    }
-    if (N == null) return JSON.stringify({ ok: false, error: 'N が取得できません' });
-
-    let formEndIdx = 1;
-    for (let i = 1; i < allData.length; i++) {
-      if (String(allData[i][0] || '').trim() === '') { formEndIdx = i; break; }
-      formEndIdx = i + 1;
-    }
+    const structure = tournamentSheetStructure_(sheet, false);
+    const allData = structure.data;
+    const formEndIdx = structure.response_end_index;
+    const paymentStatusIndex = structure.layout.payment_status_column - 1;
 
     const stats = {}; // { grade: { winnerNames: [], loserNames: [] } }
     const latestRows = latestFormRowsByPlayer_(allData.slice(1, formEndIdx));
@@ -90,7 +82,7 @@ function getLotteryResults(sheetName) {
         .replace(/[Ａ-Ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
       if (!/^[A-E]$/.test(grade)) return;
       if (!stats[grade]) stats[grade] = { winnerNames: [], loserNames: [] };
-      const pay = String(row[N + 2] || '').trim();
+      const pay = String(row[paymentStatusIndex] || '').trim();
       if (pay === '' || pay === '済') {
         stats[grade].winnerNames.push(dupName(name));
       } else if (pay.includes('キャンセル待ち')) {

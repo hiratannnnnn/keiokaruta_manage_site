@@ -1,0 +1,157 @@
+<script>
+let sheetMigrationExecutionEnabled = false;
+
+function sheetMigrationEscAttr(value) {
+  return escHtml(String(value)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function initSheetMigration() {
+  sheetMigrationPreview();
+}
+
+function sheetMigrationPassword() {
+  return localStorage.getItem('karuta_pw') || '';
+}
+
+function sheetMigrationPreview() {
+  const status = document.getElementById('sheet-migration-status');
+  const run = document.getElementById('sheet-migration-run');
+  run.disabled = true;
+  status.textContent = '検査中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      sheetMigrationExecutionEnabled = data.execution_enabled === true;
+      sheetMigrationRenderPlans(data.plans || []);
+      sheetMigrationRenderHistory(data.history || []);
+      const summary = data.summary || {};
+      status.textContent = '実行可能' + Number(summary.ready || 0)
+        + '件、移行済み' + Number(summary.migrated || 0)
+        + '件、実行不可' + Number(summary.blocked || 0) + '件'
+        + (sheetMigrationExecutionEnabled ? '' : '（安全ゲートにより実行停止中）');
+      status.className = 'op-status ' + (sheetMigrationExecutionEnabled ? 'ok' : '');
+      sheetMigrationUpdateRunButton();
+    })
+    .withFailureHandler(error => {
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .previewTournamentSheetMigrations(sheetMigrationPassword());
+}
+
+function sheetMigrationRenderPlans(plans) {
+  const panel = document.getElementById('sheet-migration-plans');
+  panel.style.display = '';
+  const rows = plans.map(plan => {
+    const ready = plan.status === 'ready';
+    const details = ready
+      ? (plan.delete_start_column + '列目から' + plan.delete_column_count
+        + '列を削除：' + (plan.delete_column_headers || []).join('、'))
+      : (plan.reason || plan.status);
+    const warnings = (plan.warnings || []).join(' / ');
+    return '<tr>'
+      + '<td><input class="sheet-migration-checkbox" type="checkbox" '
+      + 'value="' + sheetMigrationEscAttr(plan.sheet_name) + '" '
+      + (ready ? '' : 'disabled ') + 'onchange="sheetMigrationUpdateRunButton()"></td>'
+      + '<td>' + escHtml(plan.sheet_name) + '</td>'
+      + '<td>' + escHtml(plan.status) + '</td>'
+      + '<td>' + escHtml(details) + '</td>'
+      + '<td>' + escHtml(warnings) + '</td>'
+      + '</tr>';
+  }).join('');
+  panel.innerHTML = '<div class="panel-header">シート別dry-run結果</div>'
+    + '<div class="panel-body"><div class="db-admin-table-wrap"><table class="db-admin-table">'
+    + '<thead><tr><th>選択</th><th>シート</th><th>状態</th>'
+    + '<th>変更予定</th><th>警告</th></tr></thead><tbody>'
+    + rows + '</tbody></table></div></div>';
+}
+
+function sheetMigrationRenderHistory(history) {
+  const panel = document.getElementById('sheet-migration-history');
+  panel.style.display = '';
+  const rows = history.map(item => '<tr>'
+    + '<td>' + escHtml(item.executed_at || '') + '</td>'
+    + '<td>' + escHtml(item.sheet_name) + '</td>'
+    + '<td>' + escHtml(item.status) + '</td>'
+    + '<td>' + Number(item.delete_column_count || 0) + '列</td>'
+    + '<td>' + (item.restorable
+      ? '<button type="button" class="sheet-migration-restore" data-migration-id="'
+        + sheetMigrationEscAttr(item.migration_id) + '">復元</button>'
+      : escHtml(item.restored_at || item.error || '—')) + '</td>'
+    + '</tr>').join('');
+  panel.innerHTML = '<div class="panel-header">実行履歴・復元</div>'
+    + '<div class="panel-body"><div class="db-admin-table-wrap"><table class="db-admin-table">'
+    + '<thead><tr><th>実行日時</th><th>シート</th><th>状態</th>'
+    + '<th>削除列</th><th>復元</th></tr></thead><tbody>'
+    + (rows || '<tr><td colspan="5">実行履歴はありません。</td></tr>')
+    + '</tbody></table></div></div>';
+  panel.querySelectorAll('.sheet-migration-restore').forEach(button => {
+    button.addEventListener('click', () => {
+      sheetMigrationRestore(button.dataset.migrationId);
+    });
+  });
+}
+
+function sheetMigrationSelectedNames() {
+  return Array.from(document.querySelectorAll('.sheet-migration-checkbox:checked'))
+    .map(input => input.value);
+}
+
+function sheetMigrationUpdateRunButton() {
+  document.getElementById('sheet-migration-run').disabled =
+    !sheetMigrationExecutionEnabled || sheetMigrationSelectedNames().length === 0;
+}
+
+function sheetMigrationRun() {
+  const names = sheetMigrationSelectedNames();
+  if (!names.length || !sheetMigrationExecutionEnabled) return;
+  if (!window.confirm(
+    names.length + '件のシートをバックアップ後に移行します。'
+    + '選択したシートだけが対象です。実行しますか？'
+  )) return;
+  document.getElementById('sheet-migration-run').disabled = true;
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        alert('エラー: ' + data.error);
+        return;
+      }
+      const results = data.results || [];
+      const succeeded = results.filter(item => item.status === 'success').length;
+      const skipped = results.filter(item => item.status === 'skipped').length;
+      const failed = results.filter(item => item.status === 'failed').length;
+      alert(
+        '移行結果：成功' + succeeded + '件、スキップ' + skipped
+        + '件、失敗' + failed + '件'
+      );
+      sheetMigrationPreview();
+    })
+    .withFailureHandler(error => alert('エラー: ' + error.message))
+    .executeTournamentSheetMigrations(
+      sheetMigrationPassword(), JSON.stringify(names)
+    );
+}
+
+function sheetMigrationRestore(migrationId) {
+  if (!window.confirm('バックアップから削除列を復元します。実行しますか？')) return;
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        alert('エラー: ' + data.error);
+        return;
+      }
+      alert(data.sheet_name + 'をバックアップから復元しました。');
+      sheetMigrationPreview();
+    })
+    .withFailureHandler(error => alert('エラー: ' + error.message))
+    .restoreTournamentSheetMigration(sheetMigrationPassword(), migrationId);
+}
+</script>

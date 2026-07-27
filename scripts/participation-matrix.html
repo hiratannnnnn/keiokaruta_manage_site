@@ -1,5 +1,19 @@
 <script>
 let participationMatrixData = null;
+let participationMatrixSelectedNameKey = '';
+
+function participationMatrixNormalizeName(name) {
+  return String(name || '').replace(/[ 　]+/g, '').trim().toLowerCase();
+}
+
+function participationMatrixEscAttr(value) {
+  return escHtml(String(value || '')).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function participationMatrixFormatDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? match[1] + '/' + match[2] + '/' + match[3] : String(value || '');
+}
 
 function loadParticipationMatrix(force) {
   if (participationMatrixData && !force) {
@@ -45,7 +59,11 @@ function filterParticipationMatrix() {
     !playerQuery || (player.name + ' ' + player.ruby).toLowerCase().includes(playerQuery)
   );
   const tournaments = participationMatrixData.tournaments.filter(tournament =>
-    !tournamentQuery || tournament.name.toLowerCase().includes(tournamentQuery)
+    !tournamentQuery || [
+      tournament.name,
+      tournament.shortName,
+      (tournament.grades || []).join('') + '級',
+    ].join(' ').toLowerCase().includes(tournamentQuery)
   );
   renderParticipationMatrix(players, tournaments);
 }
@@ -54,7 +72,10 @@ function renderParticipationMatrix(players, tournaments) {
   const status = document.getElementById('participation-matrix-status');
   const wrap = document.getElementById('participation-matrix-wrap');
   const badge = document.getElementById('participation-matrix-count');
-  const entryKeys = new Set(participationMatrixData.entryKeys || []);
+  const participationMap = {};
+  (participationMatrixData.participations || []).forEach(item => {
+    participationMap[String(item.player_id) + ':' + String(item.tournament_id)] = item;
+  });
 
   badge.textContent = players.length + '選手 × ' + tournaments.length + '大会';
   badge.style.display = 'inline-block';
@@ -64,36 +85,105 @@ function renderParticipationMatrix(players, tournaments) {
     status.style.display = 'block';
     status.className = 'status';
     status.textContent = !players.length ? '該当する選手がいません。' : '該当する大会がありません。';
+    document.getElementById('participation-matrix-selection').style.display = 'none';
     return;
   }
 
   document.getElementById('participation-matrix-thead').innerHTML =
-    '<tr><th class="participation-player-column">選手</th>' +
+    '<tr><th class="participation-player-column">選手</th>'
+    + '<th class="participation-total-column" title="公認大会の出場回数">合計</th>' +
     tournaments.map(tournament =>
-      '<th class="participation-tournament-column" title="' + escHtml(tournament.name) + '">' +
-        '<span>' + escHtml(tournament.name) + '</span>' +
-        (tournament.heldOn ? '<small>' + escHtml(tournament.heldOn) + '</small>' : '') +
+      '<th class="participation-tournament-column" title="'
+        + participationMatrixEscAttr(tournament.name) + '">' +
+        '<span>' + escHtml(tournament.shortName || tournament.name) + '</span>' +
+        ((tournament.grades || []).length
+          ? '<small class="participation-grades">'
+            + escHtml(tournament.grades.join('') + '級') + '</small>'
+          : '') +
+        ((tournament.heldOn || []).length
+          ? '<small>' + (tournament.heldOn || []).map(participationMatrixFormatDate)
+            .map(escHtml).join('<br>') + '</small>'
+          : '') +
       '</th>'
     ).join('') + '</tr>';
 
   document.getElementById('participation-matrix-tbody').innerHTML =
-    players.map(player =>
-      '<tr><th class="participation-player-column" title="' + escHtml(player.ruby || '') + '">' +
+    players.map(player => {
+      const nameKey = participationMatrixNormalizeName(player.name);
+      return '<tr class="participation-player-row" tabindex="0" aria-selected="false"'
+        + ' data-player-id="' + participationMatrixEscAttr(player.id) + '"'
+        + ' data-name-key="' + participationMatrixEscAttr(nameKey) + '">'
+        + '<th class="participation-player-column" title="'
+        + participationMatrixEscAttr(player.ruby || '') + '">' +
         escHtml(player.name) +
-      '</th>' +
+      '</th>'
+      + '<td class="participation-total-column" title="公認'
+        + Number(player.sanctionedCount || 0) + '／非公認'
+        + Number(player.unsanctionedCount || 0) + '／混在'
+        + Number(player.mixedCount || 0) + '／全大会'
+        + Number(player.allTournamentCount || 0) + '">'
+        + Number(player.totalCount || 0) + '</td>' +
       tournaments.map(tournament => {
-        const attending = entryKeys.has(String(player.id) + ':' + String(tournament.id));
-        return '<td class="' + (attending ? 'participation-yes' : '') + '">' +
-          (attending ? '〇' : '') +
+        const item = participationMap[String(player.id) + ':' + String(tournament.id)];
+        const mark = item ? item.mark : '';
+        const symbol = mark === 'sanctioned' ? '○'
+          : (mark === 'unsanctioned' ? '△' : (mark === 'mixed' ? '○△' : ''));
+        const title = mark === 'sanctioned' ? '公認大会'
+          : (mark === 'unsanctioned' ? '非公認大会'
+            : (mark === 'mixed' ? '公認・非公認の両方' : ''));
+        return '<td class="' + (mark ? 'participation-' + mark : '') + '"'
+          + (title ? ' title="' + title + '"' : '') + '>' +
+          symbol +
         '</td>';
-      }).join('') + '</tr>'
-    ).join('');
+      }).join('') + '</tr>';
+    }).join('');
+
+  document.querySelectorAll('.participation-player-row').forEach(row => {
+    row.addEventListener('click', () => {
+      participationMatrixToggleSelection(row.dataset.nameKey);
+    });
+    row.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      participationMatrixToggleSelection(row.dataset.nameKey);
+    });
+  });
+  participationMatrixApplySelection();
 
   status.style.display = participationMatrixData.truncated ? 'block' : 'none';
   if (participationMatrixData.truncated) {
     status.className = 'status error';
-    status.textContent = 'APIの一覧上限に達したため、一部のデータが表示されていない可能性があります。';
+    status.textContent =
+      'APIの一覧上限に達したため、一部のデータや合計回数が正確でない可能性があります。';
   }
   wrap.style.display = 'block';
+}
+
+function participationMatrixToggleSelection(nameKey) {
+  participationMatrixSelectedNameKey =
+    participationMatrixSelectedNameKey === nameKey ? '' : nameKey;
+  participationMatrixApplySelection();
+}
+
+function participationMatrixApplySelection() {
+  const rows = Array.from(document.querySelectorAll('.participation-player-row'));
+  let selectedCount = 0;
+  rows.forEach(row => {
+    const selected = participationMatrixSelectedNameKey
+      && row.dataset.nameKey === participationMatrixSelectedNameKey;
+    row.classList.toggle('participation-row-selected', Boolean(selected));
+    row.setAttribute('aria-selected', selected ? 'true' : 'false');
+    if (selected) selectedCount++;
+  });
+  const notice = document.getElementById('participation-matrix-selection');
+  if (!participationMatrixSelectedNameKey || !selectedCount) {
+    notice.style.display = 'none';
+    notice.textContent = '';
+    return;
+  }
+  notice.style.display = '';
+  notice.textContent = selectedCount > 1
+    ? '同姓同名の候補を' + selectedCount + '件ハイライトしています。同一人物とは限りません。'
+    : '選択した選手をハイライトしています。';
 }
 </script>

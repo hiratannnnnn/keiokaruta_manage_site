@@ -17,6 +17,19 @@ function fiscalSyncInYear_(value, fiscalYear) {
   return text >= fiscalYear + '-04-01' && text <= (fiscalYear + 1) + '-03-31';
 }
 
+function fiscalSyncPayment_(value, heldOn) {
+  if (String(value || '').trim() === '当日支払い') {
+    return {
+      payment_deadline: heldOn,
+      payment_timing: 'on_tournament_day',
+    };
+  }
+  return {
+    payment_deadline: fiscalSyncDate_(value) || null,
+    payment_timing: null,
+  };
+}
+
 function fiscalSyncPlayer_(name) {
   const parts = String(name || '').trim().split(/[ 　]+/).filter(Boolean);
   if (parts.length < 2) throw new Error('氏名を名字と名前に分けられません: ' + name);
@@ -56,6 +69,14 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
   const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues().slice(2);
   const grouped = {};
   const errors = [];
+  const warnings = [];
+  const pendingTournaments = taikaiPendingTournaments_();
+  Object.keys(pendingTournaments).forEach(name => {
+    warnings.push(
+      name + ': API障害時に作成されたためDB未同期です。'
+      + '完全同期の成功後にこの状態は解除されます。'
+    );
+  });
   let entrySourceOrder = 0;
   fiscalSyncSetProgress_(operationId, {
     phase: 'scanning',
@@ -82,24 +103,28 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       return;
     }
 
-    const data = sheet.getDataRange().getValues();
-    const count = (data[0] || []).find(value => typeof value === 'number' && Number.isFinite(value));
-    if (count == null) {
-      errors.push(sheetName + ': カラム数Nを取得できません。');
+    let structure;
+    try {
+      structure = tournamentSheetStructure_(sheet, true);
+    } catch (e) {
+      errors.push(sheetName + ': ' + e.message);
       return;
     }
+    const data = structure.data;
+    const paymentStatusIndex = structure.layout.payment_status_column - 1;
 
     const gradeDates = {};
     let isSanctioned = true;
-    data.forEach((row, index) => {
-      const grade = String(row[0] || '').trim();
-      if (/^[A-E]$/.test(grade) && row[count + 2] instanceof Date) {
-        gradeDates[grade] = row[count + 2];
-      }
-      if (String(row[0] || '').trim() === 'registerDatabase' && data[index + 1]) {
-        isSanctioned = String(data[index + 1][1] || '').trim() === '';
+    Object.keys(structure.grade_rows).forEach(grade => {
+      const row = data[structure.grade_rows[grade] - 1] || [];
+      if (row[paymentStatusIndex] instanceof Date) {
+        gradeDates[grade] = row[paymentStatusIndex];
       }
     });
+    if (structure.register_database_row) {
+      const statusRow = data[structure.register_database_row] || [];
+      isSanctioned = String(statusRow[1] || '').trim() === '';
+    }
 
     const sheetGradesMatch = sheetName.match(/([A-E]+)級$/);
     const declaredGrades = sheetGradesMatch ? sheetGradesMatch[1].split('') : Object.keys(gradeDates);
@@ -112,18 +137,27 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     const baseName = sheetName.replace(/[A-E]+級$/, '');
     const applicationDeadline = fiscalSyncDate_(calendarRow[5]);
     if (!applicationDeadline) errors.push(sheetName + ': 申込期限が未設定です。');
+    const paymentDeadline = fiscalSyncDate_(calendarRow[10]);
+    const isTournamentDayPayment = String(calendarRow[10] || '').trim() === '当日支払い';
+    const paymentCompleted = String(calendarRow[11] || '').trim() === '済';
+    if (paymentCompleted && !paymentDeadline && !isTournamentDayPayment) {
+      warnings.push(
+        sheetName + ': 振込完了が「済」ですが、本振込期限が未設定または日付として認識できません。'
+      );
+    }
     const feeResult = taikaiGradeFeesFromSheetData_(data, sheetName, currentFiscalGrades);
     errors.push.apply(errors, feeResult.errors);
 
     const schedules = [];
     currentFiscalGrades.forEach(grade => {
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
+      const payment = fiscalSyncPayment_(calendarRow[10], heldOn);
       schedules.push({
         held_on: heldOn,
         grade: grade,
         application_deadline: applicationDeadline,
-        payment_deadline: fiscalSyncDate_(calendarRow[10]) || null,
-        payment_timing: null,
+        payment_deadline: payment.payment_deadline,
+        payment_timing: payment.payment_timing,
         participation_fee_yen: Object.prototype.hasOwnProperty.call(feeResult.fees, grade)
           ? feeResult.fees[grade]
           : null,
@@ -138,13 +172,12 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     const rubyIndex = header.findIndex(value => String(value || '').includes('ふりがな'));
     const clubIndex = header.findIndex(value => String(value || '').includes('所属'));
     const entries = [];
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 1; i < structure.response_end_index; i++) {
       const row = data[i];
-      if (typeof row[2] === 'number' || String(row[0] || '').trim() === 'registerDatabase') break;
       const playerName = String(row[2] || '').trim();
       if (!playerName || !/[ 　]/.test(playerName)) continue;
 
-      const payStatus = String(row[count + 2] || '').trim();
+      const payStatus = String(row[paymentStatusIndex] || '').trim();
       const isTarget = payStatus === '' || payStatus === '済'
         || (payStatus.includes('繰') && payStatus.includes('越'))
         || payStatus === 'くりこし';
@@ -245,6 +278,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     fiscal_end: (fiscalYear + 1) + '-03-31',
     tournaments: tournaments,
     errors: errors,
+    warnings: warnings,
     summary: {
       tournament_count: tournaments.length,
       schedule_count: tournaments.reduce((sum, item) => sum + item.schedules.length, 0),
@@ -274,6 +308,13 @@ function previewFiscalYearDatabaseSync(password, operationId) {
   try {
     databaseAdminAuthenticate_(password);
     const snapshot = buildFiscalYearDatabaseSnapshot_(operationId);
+    snapshot.mail_sync = buildMailManagementSnapshotSyncPlan_(snapshot);
+    if (snapshot.mail_sync.errors.length) {
+      snapshot.errors.push(
+        'メール管理シートに' + snapshot.mail_sync.errors.length
+        + '件の同期エラーがあります。'
+      );
+    }
     snapshot.tournaments.forEach(tournament => {
       tournament.entries.forEach(entry => { delete entry.real_email; });
     });
@@ -287,6 +328,12 @@ function syncFiscalYearDatabase(password) {
   try {
     databaseAdminAuthenticate_(password);
     const snapshot = buildFiscalYearDatabaseSnapshot_();
+    const mailSnapshotPlan = buildMailManagementSnapshotSyncPlan_(snapshot);
+    if (mailSnapshotPlan.errors.length) {
+      throw new Error(
+        'メール管理シートの同期前検証でエラーがあります。プレビューを確認してください。'
+      );
+    }
     if (snapshot.errors.length) {
       throw new Error('同期前検証でエラーがあります。プレビューを確認してください。');
     }
@@ -304,8 +351,62 @@ function syncFiscalYearDatabase(password) {
           return clean;
         }),
       })),
+    }, null, {
+      operation: '今年度のシート→DB完全同期',
+      outcome: '同期処理を中断',
     });
-    return JSON.stringify({ ok: true, preview: snapshot.summary, result: result });
+    let mailResult;
+    let gmailPlan;
+    let gmailLinked = [];
+    try {
+      const mailPlan = resolveMailManagementSnapshotPlan_(mailSnapshotPlan);
+      mailResult = executeMailManagementDatabaseSyncPlan_(mailPlan);
+      gmailPlan = buildAnnouncementGmailLinkPlan_();
+      gmailPlan.candidates.forEach(item => {
+        taikaiApiRequest_(
+          'PATCH',
+          '/announcements/' + encodeURIComponent(item.announcement_id),
+          { gmail_message_id: item.gmail_message_id }
+        );
+        gmailLinked.push({
+          announcement_id: item.announcement_id,
+          subject: item.subject,
+        });
+      });
+    } catch (mailError) {
+      return JSON.stringify({
+        error: '大会・申込の差分同期は成功しましたが、メール同期に失敗しました。'
+          + '同じ完全同期を再実行してください: ' + mailError.message,
+        partial: true,
+        result: result,
+      });
+    }
+    const pendingCleared = taikaiClearPendingTournaments_(
+      snapshot.tournaments.map(item => item.name)
+    );
+    const warnings = [];
+    if (!pendingCleared) {
+      warnings.push('DB未同期状態の解除に失敗しました。');
+    }
+    if (gmailPlan.errors.length) {
+      warnings.push(
+        'Gmail IDを一意に確認できない案内が'
+        + gmailPlan.errors.length + '件残っています。'
+      );
+    }
+    return JSON.stringify({
+      ok: true,
+      preview: snapshot.summary,
+      result: result,
+      mail_sync: mailResult,
+      gmail_links: {
+        linked_count: gmailLinked.length,
+        already_linked_count: gmailPlan.skipped.length,
+        unresolved_count: gmailPlan.errors.length,
+        unresolved: gmailPlan.errors,
+      },
+      warning: warnings.join(' '),
+    });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }

@@ -121,14 +121,6 @@ const SUITOU_SKIP_SHEETS = new Set([
   '名簿', 'カレンダー', 'メール管理', '出納管理', '残高記録', 'フォーム作成',
 ]);
 
-// 大会シートかどうかの判定（ヘッダー行に有効な N が存在するか）
-function getSuitouN_(headerRow) {
-  for (const c of headerRow) {
-    if (typeof c === 'number' && Number.isFinite(c) && c >= 1 && c <= 30) return c;
-  }
-  return null;
-}
-
 // 名前のスペース正規化（全角スペース → 半角、連続スペース → 1つ）
 function normalizeName_(name) {
   return String(name).replace(/　/g, ' ').replace(/ +/g, ' ').trim();
@@ -137,13 +129,11 @@ function normalizeName_(name) {
 // 大会シートの下部セクションから参加費テーブルを取得
 function getSuitouFeeMap_(allData, formEndIdx) {
   const feeMap = {};
-  for (let i = formEndIdx; i < allData.length; i++) {
-    const c0 = String(allData[i][0] || '').trim();
-    if (/^[A-E]$/.test(c0)) {
-      const fee = allData[i][1];
-      if (typeof fee === 'number' && fee > 0) feeMap[c0] = fee;
-    }
-  }
+  const rows = tournamentSheetGradeRows_(allData, formEndIdx, false);
+  Object.keys(rows).forEach(grade => {
+    const fee = (allData[rows[grade] - 1] || [])[1];
+    if (typeof fee === 'number' && fee > 0) feeMap[grade] = fee;
+  });
   return feeMap;
 }
 
@@ -187,12 +177,7 @@ function removeSuitouNegTxByReason_(ss, reason) {
 
 // 大会シートの参加者終端行インデックスを取得
 function getSuitouFormEndIdx_(allData) {
-  let formEndIdx = 1;
-  for (let i = 1; i < allData.length; i++) {
-    if (String(allData[i][0] || '').trim() === '') { formEndIdx = i; break; }
-    formEndIdx = i + 1;
-  }
-  return formEndIdx;
+  return tournamentSheetResponseEndIndex_(allData);
 }
 
 // 大会名の短縮（残高記録の大会欄用）
@@ -239,24 +224,15 @@ function updateSuitou() {
     const lastCol = sheet.getLastColumn();
     if (lastRow < 2 || lastCol < 5) continue;
 
-    // ヘッダー行から N を取得
-    const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    const N = getSuitouN_(headerRow);
-    if (N == null) continue;
-
-    // 全データ取得（最大 N+5 列）
-    const readCols = Math.min(lastCol, N + 5);
-    const allData  = sheet.getRange(1, 1, lastRow, readCols).getValues();
-
-    // 参加者行の終端を探す（col A が空になった行）
-    let formEndIdx = 1;
-    for (let i = 1; i < allData.length; i++) {
-      if (String(allData[i][0] || '').trim() === '') {
-        formEndIdx = i;
-        break;
-      }
-      formEndIdx = i + 1;
+    let structure;
+    try {
+      structure = tournamentSheetStructure_(sheet, false);
+    } catch (e) {
+      continue;
     }
+    const allData = structure.data;
+    const formEndIdx = structure.response_end_index;
+    const paymentStatusIndex = structure.layout.payment_status_column - 1;
 
     // 下部セクションから参加費テーブルを探す
     // col A (index 0) = A〜E, col B (index 1) = 金額（正の数）
@@ -285,8 +261,7 @@ function updateSuitou() {
       const gradeStr = String(allData[i][4] || '').trim();
       if (!gradeStr) continue;
 
-      // col N+3 (1-indexed) = index N+2 = 振込み済みか
-      const payStatus = String(allData[i][N + 2] || '').trim();
+      const payStatus = String(allData[i][paymentStatusIndex] || '').trim();
       const isPaid = payStatus === '済' || payStatus === '繰越' || payStatus === 'くりこし';
       if (!isPaid) continue;
 

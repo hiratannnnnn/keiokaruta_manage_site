@@ -1,0 +1,23 @@
+<div id="page-sheet-migration" class="page">
+  <div class="list-page">
+    <div class="page-title">大会シート構造移行</div>
+    <div class="panel">
+      <div class="panel-header">旧管理列のdry-run・選択実行</div>
+      <div class="panel-body">
+        <p style="line-height:1.6;margin-top:0;">
+          Googleフォーム編集URLより右側にある旧管理列を検査します。
+          初期状態では何も選択せず、検査だけではシートを変更しません。
+          実行時は対象シートの非表示バックアップを先に作成します。
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button type="button" onclick="sheetMigrationPreview()">移行内容を検査</button>
+          <button id="sheet-migration-run" type="button"
+                  onclick="sheetMigrationRun()" disabled>選択したシートを移行</button>
+          <span id="sheet-migration-status" class="op-status"></span>
+        </div>
+      </div>
+    </div>
+    <div id="sheet-migration-plans" class="panel" style="display:none;"></div>
+    <div id="sheet-migration-history" class="panel" style="display:none;"></div>
+  </div>
+</div>

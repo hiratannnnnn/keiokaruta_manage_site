@@ -17,7 +17,78 @@ function taikaiApiQuery_(query) {
   }).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(String(query[key]))).join('&');
 }
 
-function taikaiApiRequest_(method, path, body, query) {
+function taikaiApiError_(message, details) {
+  const error = new Error(message);
+  const info = details || {};
+  error.taikai_api_error = true;
+  error.transient = info.transient === true;
+  error.http_status = info.http_status || null;
+  error.api_method = String(info.api_method || '');
+  error.api_path = String(info.api_path || '');
+  return error;
+}
+
+function taikaiIsTransientApiError_(error) {
+  return Boolean(error && error.taikai_api_error && error.transient === true);
+}
+
+function taikaiApiAlertKey_(method, path, status) {
+  const normalizedPath = String(path || '')
+    .replace(/\/\d+(?=\/|$)/g, '/:id')
+    .replace(
+      /\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?=\/|$)/ig,
+      '/:id'
+    );
+  const source = [method, normalizedPath, status || 'connection'].join('|');
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    source,
+    Utilities.Charset.UTF_8
+  );
+  return 'taikai_api_alert_' + digest.slice(0, 12).map(value =>
+    ('0' + ((value + 256) % 256).toString(16)).slice(-2)
+  ).join('');
+}
+
+function taikaiNotifyApiFailure_(details) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const recipient = String(props.getProperty('TAIKAI_API_ALERT_EMAIL') || '').trim();
+    if (!recipient) return;
+    const method = String(details.method || '').toUpperCase();
+    const path = String(details.path || '');
+    const status = details.status || '';
+    const cache = CacheService.getScriptCache();
+    const cacheKey = taikaiApiAlertKey_(method, path, status);
+    if (cache.get(cacheKey)) return;
+
+    const lines = [
+      'taikai_manage APIの障害を検出しました。',
+      '',
+      '発生日時: ' + Utilities.formatDate(
+        new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+      ),
+      '処理: ' + String(details.operation || 'API呼び出し'),
+      'API: ' + method + ' ' + path,
+      '状態: ' + (status ? 'HTTP ' + status : '接続エラー'),
+      '概要: ' + String(details.message || '応答を取得できませんでした。'),
+      '対象大会: ' + String(details.tournament_name || '不明'),
+      '処理結果: ' + String(details.outcome || '呼び出し元で中断または再処理'),
+      '',
+      '認証情報・APIレスポンス本文・個人情報はこの通知に含めていません。',
+    ];
+    MailApp.sendEmail({
+      to: recipient,
+      subject: '【要確認】taikai_manage API障害',
+      body: lines.join('\n'),
+    });
+    cache.put(cacheKey, 'sent', 900);
+  } catch (e) {
+    // 障害通知の失敗で、本来の処理やエラー応答を壊さない。
+  }
+}
+
+function taikaiApiRequest_(method, path, body, query, context) {
   const config = taikaiApiConfig_();
   const queryText = taikaiApiQuery_(query);
   const options = {
@@ -31,18 +102,61 @@ function taikaiApiRequest_(method, path, body, query) {
   }
 
   const url = config.baseUrl + path + (queryText ? '?' + queryText : '');
-  const response = UrlFetchApp.fetch(url, options);
+  let response;
+  try {
+    response = UrlFetchApp.fetch(url, options);
+  } catch (e) {
+    const message = 'taikai_manage APIへ接続できませんでした。';
+    taikaiNotifyApiFailure_(Object.assign({}, context || {}, {
+      method: method,
+      path: path,
+      message: message,
+    }));
+    throw taikaiApiError_(message, {
+      transient: true,
+      api_method: method,
+      api_path: path,
+    });
+  }
   const status = response.getResponseCode();
   const text = response.getContentText();
   taikaiRecordApiDebug_(method, path, status, text);
   let parsed = null;
   try { parsed = text ? JSON.parse(text) : null; } catch (e) {
-    throw new Error('taikai_manage APIから不正なJSON応答を受信しました。');
+    const message = 'taikai_manage APIから不正なJSON応答を受信しました。';
+    const transient = status === 408 || status === 429 || status >= 500
+      || (status >= 200 && status < 300);
+    taikaiNotifyApiFailure_(Object.assign({}, context || {}, {
+      method: method,
+      path: path,
+      status: status,
+      message: message,
+    }));
+    throw taikaiApiError_(message, {
+      transient: transient,
+      http_status: status,
+      api_method: method,
+      api_path: path,
+    });
   }
   if (status < 200 || status >= 300) {
     const error = parsed && parsed.error;
     const message = error && error.message ? error.message : 'taikai_manage APIへの接続に失敗しました。';
-    throw new Error(message + ' (HTTP ' + status + ')');
+    const transient = status === 408 || status === 429 || status >= 500;
+    if (transient) {
+      taikaiNotifyApiFailure_(Object.assign({}, context || {}, {
+        method: method,
+        path: path,
+        status: status,
+        message: 'APIがHTTPエラーを返しました。',
+      }));
+    }
+    throw taikaiApiError_(message + ' (HTTP ' + status + ')', {
+      transient: transient,
+      http_status: status,
+      api_method: method,
+      api_path: path,
+    });
   }
   return parsed && Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
 }
@@ -108,8 +222,26 @@ function taikaiFindTournament_(name) {
   return exact[0];
 }
 
-function taikaiEnsureTournament_(name) {
-  const tournaments = taikaiApiRequest_('GET', '/tournaments', null, { name: name }) || [];
+function taikaiEnsureTournament_(name, context) {
+  const requestContext = Object.assign({ tournament_name: name }, context || {});
+  const tournaments = taikaiApiRequest_(
+    'GET', '/tournaments', null, { name: name }, requestContext
+  ) || [];
+  if (!Array.isArray(tournaments)) {
+    const message = 'taikai_manage APIの大会一覧応答形式が不正です。';
+    taikaiNotifyApiFailure_(Object.assign({}, requestContext, {
+      method: 'GET',
+      path: '/tournaments',
+      status: 200,
+      message: message,
+    }));
+    throw taikaiApiError_(message, {
+      transient: true,
+      http_status: 200,
+      api_method: 'GET',
+      api_path: '/tournaments',
+    });
+  }
   const exact = tournaments.filter(item => String(item.name) === String(name));
   if (exact.length > 1) throw new Error('同じ大会名が複数登録されています: ' + name);
   if (exact.length === 1) return exact[0];
@@ -117,7 +249,57 @@ function taikaiEnsureTournament_(name) {
     name: name,
     registration_completed: false,
     payment_completed: false,
-  });
+  }, null, requestContext);
+}
+
+function taikaiPendingTournaments_() {
+  const props = PropertiesService.getScriptProperties();
+  try {
+    const parsed = JSON.parse(props.getProperty('TAIKAI_DB_PENDING_TOURNAMENTS') || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function taikaiMarkTournamentPending_(name, message) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const pending = taikaiPendingTournaments_();
+    pending[String(name)] = {
+      recorded_at: Utilities.formatDate(new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"),
+      reason: String(message || 'API一時障害'),
+    };
+    PropertiesService.getScriptProperties().setProperty(
+      'TAIKAI_DB_PENDING_TOURNAMENTS', JSON.stringify(pending)
+    );
+    return true;
+  } catch (e) {
+    return false;
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+function taikaiClearPendingTournaments_(names) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const pending = taikaiPendingTournaments_();
+    (names || []).forEach(name => { delete pending[String(name)]; });
+    const props = PropertiesService.getScriptProperties();
+    if (Object.keys(pending).length) {
+      props.setProperty('TAIKAI_DB_PENDING_TOURNAMENTS', JSON.stringify(pending));
+    } else {
+      props.deleteProperty('TAIKAI_DB_PENDING_TOURNAMENTS');
+    }
+    return true;
+  } catch (e) {
+    return false;
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
 }
 
 function taikaiDeleteTournament_(name) {
@@ -207,6 +389,19 @@ function taikaiFormatDate_(value) {
   const date = new Date(text);
   if (isNaN(date.getTime())) return '';
   return Utilities.formatDate(date, 'JST', 'yyyy-MM-dd');
+}
+
+function taikaiPaymentSchedule_(value, heldOn) {
+  if (String(value || '').trim() === '当日支払い') {
+    return {
+      payment_deadline: heldOn,
+      payment_timing: 'on_tournament_day',
+    };
+  }
+  return {
+    payment_deadline: taikaiFormatDate_(value) || null,
+    payment_timing: null,
+  };
 }
 
 function taikaiGetParticipations_(name, beforeDate, email) {
@@ -305,31 +500,25 @@ function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned) {
 function taikaiGradeFeesFromSheetData_(data, sheetName, grades) {
   const fees = {};
   const errors = [];
+  let gradeRows = {};
+  try {
+    const responseEndIndex = tournamentSheetResponseEndIndex_(data);
+    gradeRows = tournamentSheetGradeRows_(data, responseEndIndex, false);
+  } catch (e) {
+    errors.push(sheetName + ': ' + e.message);
+  }
   (grades || []).forEach(grade => {
-    const matches = [];
-    (data || []).forEach((row, index) => {
-      if (String(row[0] || '').trim().toUpperCase() === grade) {
-        matches.push({ row: row, rowNumber: index + 1 });
-      }
-    });
-    if (!matches.length) {
+    const rowNumber = gradeRows[grade];
+    if (!rowNumber) {
       errors.push(sheetName + ': ' + grade + '級の参加費設定行が見つかりません。');
       return;
     }
-    if (matches.length > 1) {
-      errors.push(
-        sheetName + ': ' + grade + '級の参加費設定行が重複しています（'
-        + matches.map(item => item.rowNumber + '行目').join(' / ') + '）。'
-      );
-      return;
-    }
-    const match = matches[0];
-    const fee = match.row[1];
+    const fee = (data[rowNumber - 1] || [])[1];
     if (typeof fee !== 'number' || !Number.isFinite(fee) ||
         !Number.isInteger(fee) || fee < 0) {
       errors.push(
         sheetName + ': ' + grade + '級の参加費が不正です（'
-        + match.rowNumber + '行目B列）。0以上の整数を入力してください。'
+        + rowNumber + '行目B列）。0以上の整数を入力してください。'
       );
       return;
     }
@@ -350,12 +539,12 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const calendarRow = calendarRows.slice(2).find(row => String(row[0]) === sheetName);
   if (!calendarRow) throw new Error('カレンダーに大会情報がありません: ' + sheetName);
 
-  const tournamentData = tournamentSheet.getDataRange().getValues();
-  const registerIndex = tournamentData.findIndex(row => String(row[0]).trim() === 'registerDatabase');
-  const isSanctioned = registerIndex < 0 || String(tournamentSheet.getRange(registerIndex + 2, 2).getValue()).trim() === '';
+  const structure = tournamentSheetStructure_(tournamentSheet, true);
+  const tournamentData = structure.data;
+  const isSanctioned = !structure.register_database_row
+    || String((tournamentData[structure.register_database_row] || [])[1] || '').trim() === '';
   const applicationDeadline = taikaiFormatDate_(calendarRow[5]);
   if (!applicationDeadline) throw new Error('申込期限が未設定のため、APIへ日程を登録できません。');
-  const paymentDeadline = taikaiFormatDate_(calendarRow[10]) || null;
   const lotteryDate = taikaiFormatDate_(calendarRow[7]) || null;
   const targetGrades = Object.keys(gradeDates || {}).filter(grade =>
     Boolean(taikaiFormatDate_(gradeDates[grade]))
@@ -365,6 +554,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
 
   targetGrades.forEach(grade => {
     const heldOn = taikaiFormatDate_(gradeDates[grade]);
+    const payment = taikaiPaymentSchedule_(calendarRow[10], heldOn);
     const schedules = taikaiApiRequest_('GET', '/schedules', null, {
       tournament_id: tournament.id,
       grade: grade,
@@ -374,9 +564,9 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       held_on: heldOn,
       grade: grade,
       application_deadline: applicationDeadline,
-      payment_deadline: paymentDeadline,
+      payment_deadline: payment.payment_deadline,
       lottery_result_date: lotteryDate,
-      payment_timing: null,
+      payment_timing: payment.payment_timing,
       participation_fee_yen: feeResult.fees[grade],
       venue: null,
       reception_ends_at: null,

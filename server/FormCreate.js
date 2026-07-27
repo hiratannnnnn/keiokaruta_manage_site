@@ -97,7 +97,20 @@ function createFormFromWeb(paramsJson) {
 
     // フォーム作成だけは回答シートを作る必要があるが、大会本体は先に新DBへ登録する。
     // 級別日程は開催日が確定するまで作成できないため、後のsaveTournamentDatesで登録する。
-    taikaiEnsureTournament_(title);
+    let dbSyncPending = false;
+    let dbSyncWarning = '';
+    try {
+      taikaiEnsureTournament_(title, {
+        operation: 'フォーム作成',
+        outcome: '一時障害の場合はフォーム作成を継続し、DB未同期として記録',
+      });
+    } catch (apiError) {
+      if (!taikaiIsTransientApiError_(apiError)) throw apiError;
+      dbSyncPending = true;
+      dbSyncWarning =
+        'taikai_manage APIの一時障害によりDB登録を保留しました。'
+        + ' API復旧後に「今年度のシート→DB完全同期」を実行してください。';
+    }
 
     const ss            = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const calendarSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
@@ -120,7 +133,7 @@ function createFormFromWeb(paramsJson) {
     form.setLimitOneResponsePerUser(false);
 
     const formId  = form.getId();
-    const count   = addQuestionsToForm(formId, questionsData, moshikomiStart, grades);
+    addQuestionsToForm(formId, questionsData, moshikomiStart, grades);
     const formUrl = form.getPublishedUrl();
     const editUrl = form.getEditUrl();
 
@@ -148,6 +161,8 @@ function createFormFromWeb(paramsJson) {
       throw new Error('新しく作成されたフォーム回答シートを特定できません。');
     }
     responseSheet.setName(title + grades);
+    const responseColumnCount = responseSheet.getLastColumn();
+    const paymentStatusColumn = responseColumnCount + 1;
 
     // メール管理シートへ書き込み
     const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
@@ -159,25 +174,17 @@ function createFormFromWeb(paramsJson) {
       mailSheet.getRange(2, 3).setValue(nextRow);
     }
 
-    responseSheet.getRange(1, count + 6).setValue(count).setBackground('#D3D3D3');
-    if (count > 2) responseSheet.hideColumns(4, count - 2);
-    responseSheet.getRange(1, count + 3, 1, 3).setValues([['振込み済みか', formId, editUrl]]);
-    responseSheet.getRange(4, count + 4, 3, 2).setValues([
-      ['催促メール設定（「☆大会フォーム」から）', '↓送信予定日時（yyyy-MM-dd HH:mm:ss）'],
-      ['未設定', ''],
-      ['後納制の場合は→に何か文字を', ''],
-    ]).setBackground('#D3D3D3');
-    responseSheet.getRange(2, count + 6, 5, 1).setValues(
-      [['setPaymentReminders'], [''], ['moveToDone'], [''], ['deleteSheet']]
-    );
-    responseSheet.hideColumns(count + 6);
-    responseSheet.getRange(5, count + 5).setBackground('#FFF2CC');
-    responseSheet.getRange(6, count + 5).setBackground('#FFF2CC');
-    responseSheet.getRange(1, count + 3).setBackground('#FFF2CC');
+    if (responseColumnCount > 4) {
+      responseSheet.hideColumns(4, responseColumnCount - 4);
+    }
+    responseSheet.getRange(
+      1, paymentStatusColumn, 1, 3
+    ).setValues([['振込み済みか', formId, editUrl]]);
+    responseSheet.getRange(1, paymentStatusColumn).setBackground('#FFF2CC');
     responseSheet.getRange(12, 1, 4, 3).setValues([
       ['registerDatabase', '非公認の場合は下に文字', '↓振込先'],
       ['', '', ''],
-      ['countMatches', '申し込みのときに回数数える', ''],
+      ['', '', ''],
       ['', '', ''],
     ]).setBackground('#d3d3d3');
 
@@ -191,12 +198,19 @@ function createFormFromWeb(paramsJson) {
     const grades2 = ['A', 'B', 'C', 'D', 'E'];
     for (let i = 0; i < grades2.length; i++) {
       responseSheet.getRange(4 + i, 1).setValue(grades2[i]);
-      const col = count + 3;
       const formula =
-        '=COUNTIFS(E$1:E, "' + grades2[i] + '", INDIRECT("R1C" & (' + col + ') & ":R" & ROWS(E:E) & "C" & (' + col + '), FALSE), "済")' +
-        ' + COUNTIFS(E$1:E, "' + grades2[i] + '", INDIRECT("R1C" & (' + col + ') & ":R" & ROWS(E:E) & "C" & (' + col + '), FALSE), "*繰*越*")';
+        '=COUNTIFS(E$1:E, "' + grades2[i]
+        + '", INDIRECT("R1C" & (' + paymentStatusColumn
+        + ') & ":R" & ROWS(E:E) & "C" & (' + paymentStatusColumn
+        + '), FALSE), "済")'
+        + ' + COUNTIFS(E$1:E, "' + grades2[i]
+        + '", INDIRECT("R1C" & (' + paymentStatusColumn
+        + ') & ":R" & ROWS(E:E) & "C" & (' + paymentStatusColumn
+        + '), FALSE), "*繰*越*")';
       responseSheet.getRange(4 + i, 3).setFormula(formula);
-      responseSheet.getRange(4 + i, count + 2).setFormula('=MULTIPLY(B' + (4 + i) + ',C' + (4 + i) + ')');
+      responseSheet.getRange(
+        4 + i, responseColumnCount
+      ).setFormula('=MULTIPLY(B' + (4 + i) + ',C' + (4 + i) + ')');
     }
     responseSheet.getRange(4, 1, 5, 1).setHorizontalAlignment('right');
 
@@ -206,11 +220,15 @@ function createFormFromWeb(paramsJson) {
     responseSheet.getRange('B6:B7').setValue(cd);
     responseSheet.getRange('B8').setValue(e);
     responseSheet.getRange(9, 3).setFormula('=SUM($C4:$C8)');
-    responseSheet.getRange(9, count + 2).setFormula('=SUMPRODUCT(B4:B8, C4:C8)');
+    responseSheet.getRange(
+      9, responseColumnCount
+    ).setFormula('=SUMPRODUCT(B4:B8, C4:C8)');
     responseSheet.getRange(10, 1, 2, 3).setValues([
       ['原則として、振込が確認出来たら「済」と入れる。', '', ''],
       ['何らかの理由ですでに振込がある分から回す場合は「繰り越し」と入れる。', '', ''],
     ]).setBackground('#d3d3d3');
+    // 作成した大会シートが共通構造判定で一意に読めることを検証する。
+    tournamentSheetStructure_(responseSheet, true);
 
     // カレンダーシートへの書き込み
     const rowNum = findFromCalendar(calendarSheet, title + grades);
@@ -236,7 +254,20 @@ function createFormFromWeb(paramsJson) {
       announceSheet.getRange(17, 2).setValue(raffle || '');
     }
 
-    return JSON.stringify({ ok: true, formUrl });
+    if (dbSyncPending) {
+      if (!taikaiMarkTournamentPending_(title, dbSyncWarning)) {
+        dbSyncWarning +=
+          ' なお、DB未同期状態の保存に失敗したため、この警告を控えておいてください。';
+      }
+    } else {
+      taikaiClearPendingTournaments_([title]);
+    }
+    return JSON.stringify({
+      ok: true,
+      formUrl: formUrl,
+      db_sync_pending: dbSyncPending,
+      warning: dbSyncWarning,
+    });
   } catch (err) {
     return JSON.stringify({ error: err.message });
   }

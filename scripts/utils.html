@@ -99,6 +99,7 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (page === 'mail-management') initMailManagement();
     if (page === 'suitou') initSuitou();
     if (page === 'database-admin') initDatabaseAdmin();
+    if (page === 'sheet-migration') initSheetMigration();
     if (page === 'settings') { renderPermTable(); loadRoleNamesSettings(); }
   });
 });
@@ -125,6 +126,8 @@ function initApp() {
   document.getElementById('nav-settings-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
   document.getElementById('nav-database-admin-btn').style.display =
+    currentRole === '会長副会長' ? 'inline-block' : 'none';
+  document.getElementById('nav-sheet-migration-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
   const isAnnouncer = currentRole === '案内係' || currentRole === '会長副会長';
   document.getElementById('nav-form-create-btn').style.display = isAnnouncer ? 'inline-block' : 'none';

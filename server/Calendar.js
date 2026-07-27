@@ -61,22 +61,22 @@ function setCalendarColumn(name, colOneBased, value, skipMinus) {
         if (colOneBased === 12 && value === '済' && !skipMinus) {
           const tournSheet = ss.getSheetByName(name);
           if (tournSheet) {
-            const allData    = tournSheet.getDataRange().getValues();
-            const N          = getSuitouN_(allData[0]);
-            if (N != null) {
-              const formEndIdx = getSuitouFormEndIdx_(allData);
-              const feeMap     = getSuitouFeeMap_(allData, formEndIdx);
-              for (let j = 1; j < formEndIdx; j++) {
-                const payStatus = String(allData[j][N + 2] || '').trim();
-                const isPaid    = payStatus === '済' || payStatus === '繰越' || payStatus === 'くりこし';
-                if (!isPaid) continue;
-                const nameRaw  = String(allData[j][2] || '').trim();
-                if (!nameRaw) continue;
-                const gradeStr = String(allData[j][4] || '').trim();
-                const fee      = calcFeeFromGrade_(gradeStr, feeMap);
-                if (fee <= 0) continue;
-                appendSuitouTx_(ss, normalizeName_(nameRaw), -fee, name + '　参加費');
-              }
+            const structure = tournamentSheetStructure_(tournSheet, false);
+            const allData = structure.data;
+            const formEndIdx = structure.response_end_index;
+            const feeMap = getSuitouFeeMap_(allData, formEndIdx);
+            const paymentStatusIndex = structure.layout.payment_status_column - 1;
+            for (let j = 1; j < formEndIdx; j++) {
+              const payStatus = String(allData[j][paymentStatusIndex] || '').trim();
+              const isPaid = payStatus === '済' || payStatus === '繰越'
+                || payStatus === 'くりこし';
+              if (!isPaid) continue;
+              const nameRaw = String(allData[j][2] || '').trim();
+              if (!nameRaw) continue;
+              const gradeStr = String(allData[j][4] || '').trim();
+              const fee = calcFeeFromGrade_(gradeStr, feeMap);
+              if (fee <= 0) continue;
+              appendSuitouTx_(ss, normalizeName_(nameRaw), -fee, name + '　参加費');
             }
           }
         }
@@ -119,13 +119,12 @@ function completeTournament(name) {
     // 大会登録済みチェック
     const tournamentSheet = ss.getSheetByName(name);
     if (tournamentSheet) {
-      const colA = tournamentSheet.getRange(1, 1, tournamentSheet.getLastRow(), 1).getValues();
+      const structure = tournamentSheetStructure_(tournamentSheet, false);
       let registered = false;
-      for (let i = 0; i < colA.length - 1; i++) {
-        if (String(colA[i][0]).trim() === 'registerDatabase') {
-          registered = String(colA[i + 1][0]).includes('登録済み');
-          break;
-        }
+      if (structure.register_database_row) {
+        registered = String(
+          (structure.data[structure.register_database_row] || [])[0] || ''
+        ).includes('登録済み');
       }
       if (!registered) {
         return JSON.stringify({ error: '「大会として登録」が完了していないため、完了にできません' });

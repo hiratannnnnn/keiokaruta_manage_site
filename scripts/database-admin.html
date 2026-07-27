@@ -144,11 +144,20 @@ function dbAdminPreviewFiscalSync() {
         errors.style.display = '';
         return;
       }
+      if ((data.warnings || []).length) {
+        errors.innerHTML = data.warnings.map(warning =>
+          '<li>警告: ' + escHtml(warning) + '</li>'
+        ).join('');
+        errors.style.display = '';
+      }
       dbAdminFiscalPreviewValid = true;
       runButton.disabled = false;
       status.textContent = data.fiscal_year + '年度：大会'
         + data.summary.tournament_count + '件、日程' + data.summary.schedule_count
-        + '件、申込' + data.summary.entry_count + '件';
+        + '件、申込' + data.summary.entry_count + '件、メールジョブ'
+        + Number((data.mail_sync && data.mail_sync.summary
+          && data.mail_sync.summary.candidate_count) || 0) + '件'
+        + ((data.warnings || []).length ? '（警告' + data.warnings.length + '件）' : '');
       status.className = 'op-status ok';
     })
     .withFailureHandler(error => {
@@ -205,8 +214,8 @@ function dbAdminStopFiscalProgress() {
 function dbAdminRunFiscalSync() {
   if (!dbAdminFiscalPreviewValid) return;
   if (!window.confirm(
-    'プレビューにない同一年度のDB日程・申込を削除し、シートの状態で再構築します。'
-    + 'この操作は元に戻せません。実行しますか？'
+    '大会・日程・申込を履歴を残したまま差分同期し、'
+    + '未送信メールジョブとGmail紐付けも同期します。実行しますか？'
   )) return;
   const status = document.getElementById('db-admin-sync-status');
   const button = document.getElementById('db-admin-sync-run-btn');
@@ -223,8 +232,10 @@ function dbAdminRunFiscalSync() {
         return;
       }
       dbAdminFiscalPreviewValid = false;
-      status.textContent = '完全同期しました';
-      status.className = 'op-status ok';
+      status.textContent = data.warning
+        ? '履歴保全型の完全同期を実行しました（警告: ' + data.warning + '）'
+        : '履歴保全型の完全同期を実行しました';
+      status.className = 'op-status ' + (data.warning ? 'error' : 'ok');
       document.getElementById('db-admin-sync-preview').textContent =
         JSON.stringify(data, null, 2);
       dbAdminLoadPane('left');

@@ -67,6 +67,39 @@ function databaseAdminAuthenticate_(password) {
   }
 }
 
+function databaseAdminPseudonymizePlayerEmail_(player) {
+  if (!player || typeof player !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(player, 'email')) {
+    return player;
+  }
+  const email = String(player.email || '').trim();
+  if (!email || isPseudonymousEmail_(email)) return player;
+
+  const clean = Object.assign({}, player);
+  const playerName = [
+    String(clean.family_name || '').trim(),
+    String(clean.given_name || '').trim(),
+  ].filter(Boolean).join(' ');
+  clean.email = rememberPseudonymousEmail_(email, playerName);
+  return clean;
+}
+
+function databaseAdminProtectPlayerEmail_(method, path, body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+
+  if ((method === 'POST' && path === '/players') ||
+      (method === 'PATCH' && /^\/players\/\d+$/.test(path))) {
+    return databaseAdminPseudonymizePlayerEmail_(body);
+  }
+  if (method === 'POST' && path === '/registrations' &&
+      body.player && typeof body.player === 'object') {
+    const clean = Object.assign({}, body);
+    clean.player = databaseAdminPseudonymizePlayerEmail_(body.player);
+    return clean;
+  }
+  return body;
+}
+
 function databaseAdminRequest(json) {
   try {
     const input = JSON.parse(json);
@@ -79,7 +112,11 @@ function databaseAdminRequest(json) {
     }
 
     const query = input.query && typeof input.query === 'object' ? input.query : {};
-    const body = input.body === undefined ? null : input.body;
+    const body = databaseAdminProtectPlayerEmail_(
+      method,
+      path,
+      input.body === undefined ? null : input.body
+    );
     const data = taikaiApiRequest_(method, path, body, query);
     return JSON.stringify({ ok: true, data: data });
   } catch (e) {

@@ -32,22 +32,24 @@ function runCountMatches(name) {
     const sheet = ss.getSheetByName(name);
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
-    const data  = sheet.getDataRange().getValues();
-    const count = data[0].find(c => typeof c === 'number');
-    if (count == null) throw new Error('カラム数 (N) が取得できません');
+    const structure = tournamentSheetStructure_(sheet, true);
+    const data = structure.data;
+    const paymentStatusIndex = structure.layout.payment_status_column - 1;
+    const formIdIndex = structure.layout.form_id_column - 1;
+    const editUrlIndex = structure.layout.edit_url_column - 1;
 
     const gradeRegex     = /^[A-E]$/;
     const formerDates    = {};
     let   moshikomiStart = '';
 
-    sheet.getRange(1, 1, sheet.getLastRow(), count + 5).getValues().forEach(row => {
+    data.slice(structure.response_end_index).forEach(row => {
       if (gradeRegex.test(String(row[0]))) {
-        const d = row[count + 2];
+        const d = row[paymentStatusIndex];
         if (d instanceof Date) formerDates[row[0]] = new Date(d.getTime() - 24 * 60 * 60 * 1000);
       }
-      if (row[count + 3] === '申込開始日') moshikomiStart = row[count + 4];
-      if (typeof moshikomiStart === 'string' && row[count + 3] === 'リマインダー') {
-        moshikomiStart = row[count + 4];
+      if (row[formIdIndex] === '申込開始日') moshikomiStart = row[editUrlIndex];
+      if (typeof moshikomiStart === 'string' && row[formIdIndex] === 'リマインダー') {
+        moshikomiStart = row[editUrlIndex];
       }
     });
     const moshikomiDate = moshikomiStart ? new Date(moshikomiStart) : null;
@@ -60,8 +62,7 @@ function runCountMatches(name) {
       }
     }
 
-    for (let i = 0; i < data.length; i++) {
-      if (typeof data[i][2] === 'number') break;
+    for (let i = 1; i < structure.response_end_index; i++) {
       if (typeof data[i][2] !== 'string' || data[i][2] === '') continue;
       if (!data[i][2].includes(' ') && !data[i][2].includes('　')) continue;
 
@@ -84,14 +85,13 @@ function runCountMatches(name) {
         return p[0] + '：' + p[1];
       });
 
-      sheet.getRange(i + 1, count + 4, 1, 2).setValues([[num, historyList.join(',')]]);
+      sheet.getRange(
+        i + 1, structure.layout.form_id_column, 1, 2
+      ).setValues([[num, historyList.join(',')]]);
 
       const bg = (inputVal !== null && Number(inputVal) !== matchesList.length) ? 'yellow' : 'white';
-      sheet.getRange(i + 1, count + 4).setBackground(bg);
+      sheet.getRange(i + 1, structure.layout.form_id_column).setBackground(bg);
 
-      if (data[i][count + 3] === '催促メール設定（「☆大会フォーム」から）') {
-        sheet.getRange(i, count + 4).setValue('大会開催日までの、申込開始日時点で抽選に通っているもの');
-      }
     }
 
     return JSON.stringify({ ok: true });

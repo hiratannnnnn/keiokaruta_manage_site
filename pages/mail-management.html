@@ -3,6 +3,59 @@
   <div class="list-page">
     <div class="page-title">メール管理</div>
 
+    <div class="panel mm-db-sync-panel">
+      <div class="panel-header">メールジョブDB同期</div>
+      <div class="panel-body">
+        <p style="margin:0 0 10px;line-height:1.6;">
+          「メール管理」シートの未送信・未来日時の予定を、案内とメールジョブとしてDBへ同期します。
+          検査だけではDBを書き換えず、本同期を実行してもこの画面からGmailは送信しません。
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="mm-toggle-btn" type="button" onclick="mmPreviewDatabaseSync()">
+            1. 同期内容を検査
+          </button>
+          <button class="mm-add-row-btn" id="mm-db-sync-run" type="button"
+                  onclick="mmRunDatabaseSync()" disabled>
+            2. 検査した内容でDB同期
+          </button>
+          <span id="mm-db-sync-status" class="op-status">
+            先に同期内容を検査してください。
+          </span>
+        </div>
+        <details id="mm-db-sync-details" style="display:none;margin-top:10px;">
+          <summary>検査・同期の詳細を表示</summary>
+          <pre id="mm-db-sync-preview" class="db-admin-preview"></pre>
+        </details>
+      </div>
+    </div>
+
+    <div class="panel mm-db-sync-panel">
+      <div class="panel-header">案内Gmail ID紐付け</div>
+      <div class="panel-body">
+        <p style="margin:0 0 10px;line-height:1.6;">
+          DBの案内と送信済みGmailを、件名の完全一致とフォームURLで照合します。
+          一致が1件だけの案内を紐付け、メール本文の引用に使用できる状態にします。
+          この操作でGmailは送信しません。
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="mm-toggle-btn" type="button" onclick="mmPreviewAnnouncementGmailLinks()">
+            1. Gmail紐付けを検査
+          </button>
+          <button class="mm-add-row-btn" id="mm-gmail-link-run" type="button"
+                  onclick="mmRunAnnouncementGmailLinks()" disabled>
+            2. 検査した案内を紐付け
+          </button>
+          <span id="mm-gmail-link-status" class="op-status">
+            先にGmail紐付けを検査してください。
+          </span>
+        </div>
+        <details id="mm-gmail-link-details" style="display:none;margin-top:10px;">
+          <summary>検査・紐付けの詳細を表示</summary>
+          <pre id="mm-gmail-link-preview" class="db-admin-preview"></pre>
+        </details>
+      </div>
+    </div>
+
     <div id="mail-management-status" class="status" style="display:none;"></div>
 
     <div id="mail-management-table" style="display:none;">
