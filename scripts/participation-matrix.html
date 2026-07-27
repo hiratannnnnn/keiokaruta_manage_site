@@ -154,7 +154,7 @@ function renderParticipationMatrix(players, tournaments) {
   if (participationMatrixData.truncated) {
     status.className = 'status error';
     status.textContent =
-      'APIの一覧上限に達したため、一部のデータや合計回数が正確でない可能性があります。';
+      'APIが結果を切り詰めたため、一部のデータや合計回数が正確でない可能性があります。';
   }
   wrap.style.display = 'block';
 }
