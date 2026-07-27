@@ -56,6 +56,43 @@
       </div>
     </div>
 
+    <div class="panel mm-db-sync-panel">
+      <div class="panel-header">案内・Gmail監査／手動紐付け</div>
+      <div class="panel-body">
+        <p style="margin:0 0 10px;line-height:1.6;">
+          保存済みGmail IDの実在性と内容、未紐付け案内、案内がない級別日程を監査します。
+          手動紐付けでも、件名とフォームURLが一致するGmailだけを登録できます。
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button id="mm-gmail-audit-load" class="mm-toggle-btn" type="button"
+                  onclick="mmLoadGmailAudit()">監査結果を読込</button>
+          <span id="mm-gmail-audit-status" class="op-status">
+            監査結果を読み込んでください。
+          </span>
+        </div>
+        <div id="mm-gmail-audit-results" style="display:none;margin-top:12px;">
+          <div class="mm-table-wrapper">
+            <table class="mm-table">
+              <thead>
+                <tr>
+                  <th>案内</th>
+                  <th>対象日程</th>
+                  <th>保存状態</th>
+                  <th>一致候補／Gmail ID</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="mm-gmail-audit-tbody"></tbody>
+            </table>
+          </div>
+          <details id="mm-uncovered-schedules-details" style="margin-top:10px;">
+            <summary id="mm-uncovered-schedules-summary">案内未登録の日程</summary>
+            <div id="mm-uncovered-schedules"></div>
+          </details>
+        </div>
+      </div>
+    </div>
+
     <div id="mail-management-status" class="status" style="display:none;"></div>
 
     <div id="mail-management-table" style="display:none;">

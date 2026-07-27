@@ -8,6 +8,11 @@ let _mmShowAll = false;
 let _mmAllData = [];
 let _mmDatabaseSyncPreviewValid = false;
 let _mmGmailLinkPreviewValid = false;
+let _mmGmailAuditData = null;
+
+function mmEscAttr(value) {
+  return escHtml(String(value || '')).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 // ---- 初期化 ----
 function initMailManagement() {
@@ -188,6 +193,138 @@ function mmRunAnnouncementGmailLinks() {
       details.open = true;
     })
     .linkAnnouncementGmailMessages();
+}
+
+function mmLoadGmailAudit() {
+  const button = document.getElementById('mm-gmail-audit-load');
+  const status = document.getElementById('mm-gmail-audit-status');
+  button.disabled = true;
+  status.textContent = 'DBとGmailを監査中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      button.disabled = false;
+      const data = JSON.parse(json);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      _mmGmailAuditData = data;
+      mmRenderGmailAudit();
+      const summary = data.summary || {};
+      status.textContent = '案内' + Number(summary.announcement_count || 0)
+        + '件、正常' + Number(summary.valid_count || 0)
+        + '件、要確認' + Number(summary.unresolved_count || 0)
+        + '件、案内未登録日程' + Number(summary.uncovered_schedule_count || 0) + '件';
+      status.className = 'op-status '
+        + (Number(summary.unresolved_count || 0)
+          || Number(summary.uncovered_schedule_count || 0) ? 'error' : 'ok');
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .getAnnouncementGmailAudit();
+}
+
+function mmGmailAuditStatusLabel(status) {
+  return {
+    valid: '正常',
+    unlinked: '未紐付け',
+    missing: '保存IDを取得不能',
+    mismatch: '件名・URL不一致',
+  }[status] || status;
+}
+
+function mmRenderGmailAudit() {
+  const results = document.getElementById('mm-gmail-audit-results');
+  const tbody = document.getElementById('mm-gmail-audit-tbody');
+  tbody.innerHTML = '';
+  (_mmGmailAuditData.announcements || []).forEach(item => {
+    const tr = document.createElement('tr');
+    const candidates = item.candidates || [];
+    const options = candidates.map(candidate =>
+      '<option value="' + mmEscAttr(candidate.gmail_message_id) + '">'
+        + escHtml(candidate.sent_at + ' / ' + candidate.gmail_message_id) + '</option>'
+    ).join('');
+    const current = item.gmail_message_id || '';
+    tr.innerHTML =
+      '<td><div>' + escHtml(item.subject) + '</div>'
+        + (item.form_url
+          ? '<a href="' + mmEscAttr(item.form_url)
+            + '" target="_blank" rel="noopener">フォーム</a>'
+          : '') + '</td>'
+      + '<td>' + escHtml((item.schedule_ids || []).join(', ')) + '</td>'
+      + '<td><strong>' + escHtml(mmGmailAuditStatusLabel(item.current_status)) + '</strong>'
+        + (current ? '<br><small>' + escHtml(current) + '</small>' : '') + '</td>'
+      + '<td><select class="me-select mm-gmail-audit-select">'
+        + '<option value="">Gmail IDを選択または下欄へ入力</option>'
+        + options + '</select>'
+        + '<input class="fc-text-input mm-gmail-audit-input" type="text"'
+        + ' placeholder="GmailメッセージID" value="'
+        + mmEscAttr(candidates.length === 1
+          ? candidates[0].gmail_message_id : '') + '"></td>'
+      + '<td><button type="button" class="mm-add-row-btn mm-gmail-audit-save"'
+        + '>検証して保存</button></td>';
+    const select = tr.querySelector('.mm-gmail-audit-select');
+    const input = tr.querySelector('.mm-gmail-audit-input');
+    select.addEventListener('change', () => {
+      if (select.value) input.value = select.value;
+    });
+    tr.querySelector('.mm-gmail-audit-save').addEventListener('click', () => {
+      mmSaveGmailAuditLink(item.id, item.gmail_message_id, input.value);
+    });
+    tbody.appendChild(tr);
+  });
+
+  const uncovered = _mmGmailAuditData.uncovered_schedules || [];
+  document.getElementById('mm-uncovered-schedules-summary').textContent =
+    '案内未登録の日程（' + uncovered.length + '件）';
+  document.getElementById('mm-uncovered-schedules').innerHTML = uncovered.length
+    ? '<ul>' + uncovered.map(item =>
+      '<li>' + escHtml(item.tournament_name + ' ' + item.grade + '級 '
+        + item.held_on + '（schedule ' + item.schedule_id + '）') + '</li>'
+    ).join('') + '</ul>'
+    : '<p>案内未登録の日程はありません。</p>';
+  results.style.display = '';
+}
+
+function mmSaveGmailAuditLink(announcementId, expectedId, messageId) {
+  const value = String(messageId || '').trim();
+  if (!value) {
+    window.alert('GmailメッセージIDを選択または入力してください。');
+    return;
+  }
+  if (!window.confirm(
+    'Gmailの件名とフォームURLを再検証し、案内' + announcementId
+    + 'のGmail IDを更新しますか？'
+  )) return;
+  const status = document.getElementById('mm-gmail-audit-status');
+  status.textContent = 'Gmail IDを検証して保存中...';
+  status.className = 'op-status db-admin-searching';
+  google.script.run
+    .withSuccessHandler(json => {
+      const data = JSON.parse(json);
+      if (data.error) {
+        status.textContent = 'エラー: ' + data.error;
+        status.className = 'op-status error';
+        return;
+      }
+      status.textContent = 'Gmail IDを更新しました。監査結果を再読込します。';
+      status.className = 'op-status ok';
+      mmLoadGmailAudit();
+    })
+    .withFailureHandler(error => {
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .setAnnouncementGmailLinkManual(JSON.stringify({
+      announcement_id: announcementId,
+      gmail_message_id: value,
+      expected_gmail_message_id: expectedId || null,
+    }));
 }
 
 function mmOnLoaded(json) {

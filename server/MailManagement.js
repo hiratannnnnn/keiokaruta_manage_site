@@ -410,6 +410,17 @@ function mailManagementEscapeGmailQuery_(text) {
   return String(text || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function mailManagementMessageMatchesAnnouncement_(message, announcement) {
+  if (!message) return false;
+  const subject = String(announcement.subject || '').trim();
+  if (!subject || String(message.getSubject() || '') !== subject) return false;
+  const formUrl = String(announcement.form_url || '').trim();
+  if (!formUrl) return true;
+  const plain = String(message.getPlainBody ? message.getPlainBody() : '');
+  const html = String(message.getBody ? message.getBody() : '');
+  return plain.includes(formUrl) || html.includes(formUrl);
+}
+
 function mailManagementAnnouncementMessages_(announcement) {
   const subject = String(announcement.subject || '').trim();
   if (!subject) return [];
@@ -421,17 +432,116 @@ function mailManagementAnnouncementMessages_(announcement) {
   const matches = {};
   threads.forEach(thread => {
     thread.getMessages().forEach(message => {
-      if (String(message.getSubject() || '') !== subject) return;
-      const formUrl = String(announcement.form_url || '').trim();
-      if (formUrl) {
-        const plain = String(message.getPlainBody ? message.getPlainBody() : '');
-        const html = String(message.getBody ? message.getBody() : '');
-        if (!plain.includes(formUrl) && !html.includes(formUrl)) return;
-      }
+      if (!mailManagementMessageMatchesAnnouncement_(message, announcement)) return;
       matches[String(message.getId())] = message;
     });
   });
   return Object.keys(matches).map(id => matches[id]);
+}
+
+function mailManagementGmailMessageById_(messageId) {
+  if (!messageId) return null;
+  try {
+    return GmailApp.getMessageById(String(messageId)) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function getAnnouncementGmailAudit() {
+  try {
+    const source = taikaiApiRequest_('GET', '/announcement-audit-source') || {};
+    const announcements = (source.announcements || []).map(announcement => {
+      const currentId = String(announcement.gmail_message_id || '');
+      const currentMessage = mailManagementGmailMessageById_(currentId);
+      let currentStatus = currentId ? 'missing' : 'unlinked';
+      if (currentMessage) {
+        currentStatus = mailManagementMessageMatchesAnnouncement_(
+          currentMessage,
+          announcement
+        ) ? 'valid' : 'mismatch';
+      }
+      const candidates = mailManagementAnnouncementMessages_(announcement).map(message => ({
+        gmail_message_id: String(message.getId()),
+        sent_at: Utilities.formatDate(message.getDate(), 'JST', 'yyyy-MM-dd HH:mm:ss'),
+      }));
+      return {
+        id: String(announcement.id),
+        subject: String(announcement.subject || ''),
+        form_url: String(announcement.form_url || ''),
+        schedule_ids: (announcement.schedule_ids || []).map(String),
+        gmail_message_id: currentId || null,
+        current_status: currentStatus,
+        candidates: candidates,
+      };
+    });
+    return JSON.stringify({
+      announcements: announcements,
+      uncovered_schedules: (source.uncovered_schedules || []).map(schedule => ({
+        schedule_id: String(schedule.schedule_id),
+        tournament_id: String(schedule.tournament_id),
+        tournament_name: String(schedule.tournament_name || ''),
+        grade: String(schedule.grade || ''),
+        held_on: String(schedule.held_on || ''),
+      })),
+      summary: {
+        announcement_count: announcements.length,
+        valid_count: announcements.filter(item => item.current_status === 'valid').length,
+        unresolved_count: announcements.filter(item => item.current_status !== 'valid').length,
+        uncovered_schedule_count: (source.uncovered_schedules || []).length,
+      },
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function setAnnouncementGmailLinkManual(json) {
+  try {
+    const request = JSON.parse(json);
+    const announcementId = String(request.announcement_id || '').trim();
+    const messageId = String(request.gmail_message_id || '').trim();
+    if (!/^\d+$/.test(announcementId)) throw new Error('案内IDが不正です。');
+    if (!messageId) throw new Error('Gmail IDを入力してください。');
+
+    const announcement = taikaiApiRequest_(
+      'GET',
+      '/announcements/' + encodeURIComponent(announcementId)
+    );
+    const expected = request.expected_gmail_message_id == null
+      ? null
+      : String(request.expected_gmail_message_id);
+    const current = announcement.gmail_message_id == null
+      ? null
+      : String(announcement.gmail_message_id);
+    if (current !== expected) {
+      throw new Error('Gmail IDが確認後に変更されています。監査結果を再読込してください。');
+    }
+    const verifiedCandidates = mailManagementAnnouncementMessages_(announcement);
+    const message = verifiedCandidates.find(item =>
+      String(item.getId()) === messageId
+    );
+    if (!message) {
+      throw new Error(
+        '指定されたGmail IDは、送信済みメールの件名・フォームURL完全一致候補ではありません。'
+      );
+    }
+    const updated = taikaiApiRequest_(
+      'PUT',
+      '/announcements/' + encodeURIComponent(announcementId) + '/gmail-message',
+      {
+        gmail_message_id: messageId,
+        expected_gmail_message_id: expected,
+      }
+    );
+    return JSON.stringify({
+      ok: true,
+      announcement_id: announcementId,
+      gmail_message_id: String(updated.gmail_message_id || messageId),
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
 }
 
 function buildAnnouncementGmailLinkPlan_() {
