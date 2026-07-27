@@ -193,9 +193,8 @@ function playerEmailMigrationPlan_() {
   };
 }
 
-function previewPlayerEmailMigration(password) {
+function previewPlayerEmailMigration() {
   try {
-    databaseAdminAuthenticate_(password);
     const plan = playerEmailMigrationPlan_();
     const result = plan.targets.length ? taikaiApiRequest_(
       'POST',
@@ -214,9 +213,8 @@ function previewPlayerEmailMigration(password) {
   }
 }
 
-function migratePlayerEmails(password) {
+function migratePlayerEmails() {
   try {
-    databaseAdminAuthenticate_(password);
     const plan = playerEmailMigrationPlan_();
     if (!plan.targets.length) {
       return JSON.stringify({ ok: true, total: plan.total, updated_count: 0 });

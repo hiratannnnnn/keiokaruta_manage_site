@@ -9,10 +9,6 @@ function initSheetMigration() {
   sheetMigrationPreview();
 }
 
-function sheetMigrationPassword() {
-  return localStorage.getItem('karuta_pw') || '';
-}
-
 function sheetMigrationPreview() {
   const status = document.getElementById('sheet-migration-status');
   const run = document.getElementById('sheet-migration-run');
@@ -42,7 +38,7 @@ function sheetMigrationPreview() {
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .previewTournamentSheetMigrations(sheetMigrationPassword());
+    .previewTournamentSheetMigrations();
 }
 
 function sheetMigrationRenderPlans(plans) {
@@ -134,9 +130,7 @@ function sheetMigrationRun() {
       sheetMigrationPreview();
     })
     .withFailureHandler(error => alert('エラー: ' + error.message))
-    .executeTournamentSheetMigrations(
-      sheetMigrationPassword(), JSON.stringify(names)
-    );
+    .executeTournamentSheetMigrations(JSON.stringify(names));
 }
 
 function sheetMigrationRestore(migrationId) {
@@ -152,6 +146,6 @@ function sheetMigrationRestore(migrationId) {
       sheetMigrationPreview();
     })
     .withFailureHandler(error => alert('エラー: ' + error.message))
-    .restoreTournamentSheetMigration(sheetMigrationPassword(), migrationId);
+    .restoreTournamentSheetMigration(migrationId);
 }
 </script>

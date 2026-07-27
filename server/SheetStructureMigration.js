@@ -110,9 +110,8 @@ function sheetMigrationHistory_() {
     })).reverse();
 }
 
-function previewTournamentSheetMigrations(password) {
+function previewTournamentSheetMigrations() {
   try {
-    databaseAdminAuthenticate_(password);
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const plans = tournamentSheetNamesForMigration_().map(name => {
       const sheet = ss.getSheetByName(name);
@@ -197,9 +196,8 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
   }
 }
 
-function executeTournamentSheetMigrations(password, sheetNamesJson) {
+function executeTournamentSheetMigrations(sheetNamesJson) {
   try {
-    databaseAdminAuthenticate_(password);
     if (!sheetMigrationEnabled_()) {
       throw new Error(
         '大会シート構造移行はまだ有効化されていません。'
@@ -228,9 +226,8 @@ function executeTournamentSheetMigrations(password, sheetNamesJson) {
   }
 }
 
-function restoreTournamentSheetMigration(password, migrationId) {
+function restoreTournamentSheetMigration(migrationId) {
   try {
-    databaseAdminAuthenticate_(password);
     const historySheet = sheetMigrationHistorySheet_(false);
     const history = sheetMigrationHistory_();
     const item = history.find(row => row.migration_id === String(migrationId));

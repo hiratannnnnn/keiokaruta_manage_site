@@ -67,7 +67,7 @@ function dbAdminPreviewEmailMigration() {
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .previewPlayerEmailMigration(dbAdminPassword());
+    .previewPlayerEmailMigration();
 }
 
 function dbAdminRunEmailMigration() {
@@ -96,7 +96,7 @@ function dbAdminRunEmailMigration() {
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .migratePlayerEmails(dbAdminPassword());
+    .migratePlayerEmails();
 }
 
 function initDatabaseAdmin() {
@@ -105,10 +105,6 @@ function initDatabaseAdmin() {
     dbAdminLoadPane('left');
     dbAdminLoadPane('right');
   }
-}
-
-function dbAdminPassword() {
-  return localStorage.getItem('karuta_pw') || '';
 }
 
 function dbAdminPreviewFiscalSync() {
@@ -165,7 +161,7 @@ function dbAdminPreviewFiscalSync() {
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .previewFiscalYearDatabaseSync(dbAdminPassword(), operationId);
+    .previewFiscalYearDatabaseSync(operationId);
 }
 
 function dbAdminStartFiscalProgress(operationId) {
@@ -196,7 +192,7 @@ function dbAdminStartFiscalProgress(operationId) {
             + '（経過' + seconds + '秒）'
           : '準備中…（経過' + seconds + '秒）';
       })
-      .getFiscalYearSyncProgress(operationId, dbAdminPassword());
+      .getFiscalYearSyncProgress(operationId);
   };
   poll();
   dbAdminFiscalProgressTimer = setInterval(poll, 1000);
@@ -246,7 +242,7 @@ function dbAdminRunFiscalSync() {
       status.textContent = 'エラー: ' + error.message;
       status.className = 'op-status error';
     })
-    .syncFiscalYearDatabase(dbAdminPassword());
+    .syncFiscalYearDatabase();
 }
 
 function dbAdminCall(request, onSuccess, onFailure) {
@@ -257,7 +253,7 @@ function dbAdminCall(request, onSuccess, onFailure) {
     })
     .withFailureHandler(error => onFailure(error))
     .databaseAdminRequest(JSON.stringify(Object.assign({
-      password: dbAdminPassword(), query: {}, body: null,
+      query: {}, body: null,
     }, request)));
 }
 

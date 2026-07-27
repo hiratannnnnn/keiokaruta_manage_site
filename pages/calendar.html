@@ -266,7 +266,9 @@
     </div>
     <div class="modal-body">
       <div class="search-bar">
-        <input type="text" id="modal-result-name" placeholder="選手名（例：山田 太郎）">
+        <input type="text" id="modal-result-name" list="modal-result-name-suggestions"
+               placeholder="選手名（例：山田 太郎）" autocomplete="off">
+        <datalist id="modal-result-name-suggestions"></datalist>
         <input type="date" id="modal-result-date">
         <button onclick="searchModalResults()">検索</button>
       </div>

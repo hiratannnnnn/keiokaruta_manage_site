@@ -49,9 +49,8 @@ function fiscalSyncSetProgress_(operationId, progress) {
   );
 }
 
-function getFiscalYearSyncProgress(operationId, password) {
+function getFiscalYearSyncProgress(operationId) {
   try {
-    databaseAdminAuthenticate_(password);
     const raw = CacheService.getUserCache().get(fiscalSyncProgressKey_(operationId));
     return raw || JSON.stringify({ phase: 'starting', processed: 0, total: 0 });
   } catch (e) {
@@ -304,9 +303,8 @@ function fiscalSyncLatestEntries_(entries) {
   return Object.keys(latestByEmail).map(key => latestByEmail[key]);
 }
 
-function previewFiscalYearDatabaseSync(password, operationId) {
+function previewFiscalYearDatabaseSync(operationId) {
   try {
-    databaseAdminAuthenticate_(password);
     const snapshot = buildFiscalYearDatabaseSnapshot_(operationId);
     snapshot.mail_sync = buildMailManagementSnapshotSyncPlan_(snapshot);
     if (snapshot.mail_sync.errors.length) {
@@ -324,9 +322,8 @@ function previewFiscalYearDatabaseSync(password, operationId) {
   }
 }
 
-function syncFiscalYearDatabase(password) {
+function syncFiscalYearDatabase() {
   try {
-    databaseAdminAuthenticate_(password);
     const snapshot = buildFiscalYearDatabaseSnapshot_();
     const mailSnapshotPlan = buildMailManagementSnapshotSyncPlan_(snapshot);
     if (mailSnapshotPlan.errors.length) {

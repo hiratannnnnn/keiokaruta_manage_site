@@ -62,14 +62,3 @@ function saveRoleNames(json) {
     return JSON.stringify({ error: e.message });
   }
 }
-
-// パスワード検証（PropertiesService の 'PASSWORD' キー）
-function validatePassword(pw) {
-  try {
-    const stored = PropertiesService.getScriptProperties().getProperty('PASSWORD');
-    if (!stored) return JSON.stringify({ ok: false, error: 'パスワード未設定' });
-    return JSON.stringify({ ok: (pw === stored) });
-  } catch (e) {
-    return JSON.stringify({ ok: false, error: e.message });
-  }
-}

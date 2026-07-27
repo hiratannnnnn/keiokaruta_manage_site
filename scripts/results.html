@@ -6,43 +6,69 @@ function searchResults() {
   const name = document.getElementById('result-name').value.trim();
   if (!name) { setStatus('results', 'empty', '選手名を入力してください'); return; }
   const date = document.getElementById('result-date').value;
+  document.getElementById('result-count').style.display = 'none';
   setStatus('results', 'loading');
   google.script.run
     .withSuccessHandler(onResultsLoaded)
     .withFailureHandler(err => setStatus('results', 'error', err.message))
-    .getTournamentResults(name, date);
+    .getTournamentResults(selectedMemberId, name, date);
 }
 
 function onResultsLoaded(raw) {
-  const res  = JSON.parse(raw);
-  const body = res.body ?? '';
-  const statusEl = document.getElementById('results-status');
-
-  statusEl.style.display = 'block';
-  statusEl.className = 'status';
-  statusEl.innerHTML =
-    `<pre style="text-align:left;white-space:pre-wrap;word-break:break-all;font-size:0.8rem;">` +
-    `URL: ${escHtml(res.url ?? '—')}\nHTTP: ${res.status ?? '—'}\nBody: ${escHtml(body)}</pre>`;
-
-  if (res.error) return;
-
+  let res;
   try {
-    const results = JSON.parse(body);
-    if (!Array.isArray(results) || !results.length) return;
+    res = JSON.parse(raw);
+  } catch (e) {
+    setStatus('results', 'error', '出場履歴の応答を解析できませんでした。');
+    return;
+  }
+  const statusEl = document.getElementById('results-status');
+  const table = document.getElementById('results-table');
+  const tbody = document.getElementById('results-tbody');
+  const badge = document.getElementById('result-count');
+  tbody.replaceChildren();
+  table.style.display = 'none';
+  badge.style.display = 'none';
 
-    document.getElementById('results-tbody').innerHTML =
-      results.map(r =>
-        `<tr><td>${r.date ?? ''}</td><td>${r.location ?? ''}</td><td>${r.raffleDate ?? ''}</td></tr>`
-      ).join('');
+  if (res.error) {
+    setStatus('results', 'error', res.error);
+    return;
+  }
+  const results = Array.isArray(res.results) ? res.results : [];
+  if (!results.length) {
+    setStatus('results', 'empty', '該当する出場大会はありません。');
+    return;
+  }
 
-    document.getElementById('results-table').style.display = 'table';
-    const badge = document.getElementById('result-count');
-    badge.textContent = results.length + ' 件';
-    badge.style.display = 'inline-block';
-  } catch (e) { /* bodyが配列でなければテーブルは出さない */ }
+  results.forEach(result => {
+    const tr = document.createElement('tr');
+    [result.date, result.location, result.raffleDate].forEach(value => {
+      const td = document.createElement('td');
+      td.textContent = value || '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  statusEl.style.display = 'none';
+  table.style.display = 'table';
+  badge.textContent = results.length + ' 件';
+  badge.style.display = 'inline-block';
 }
 
 document.getElementById('result-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') searchResults();
+});
+document.getElementById('result-name').addEventListener('input', () => {
+  selectedMemberId = '';
+  const input = document.getElementById('result-name').value.trim();
+  const exactLabel = allMembers.filter(member =>
+    memberSuggestionLabel(member) === input
+  );
+  if (exactLabel.length === 1) {
+    selectedMemberId = exactLabel[0].id;
+    return;
+  }
+  const exactName = allMembers.filter(member => member.name === input);
+  if (exactName.length === 1) selectedMemberId = exactName[0].id;
 });
 </script>

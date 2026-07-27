@@ -2,15 +2,35 @@
 // 名簿関連
 // ============================================================
 
-// 選手マスタはDBから取得するが、画面に出す実メールは非公開対応表から逆引きする。
+// 選手マスタを全件取得する。通常の名簿画面にはメールアドレスを返さない。
 function getMembers() {
   try {
-    const players = taikaiApiRequest_('GET', '/players', null, {}) || [];
+    const players = [];
+    let offset = 0;
+    let total = 0;
+    do {
+      const page = taikaiApiRequest_(
+        'GET', '/admin/database/players', null, { limit: 100, offset: offset }
+      ) || {};
+      const rows = Array.isArray(page.rows) ? page.rows : [];
+      total = Number(page.total || 0);
+      players.push.apply(players, rows);
+      offset += rows.length;
+      if (!rows.length) break;
+    } while (offset < total);
+
+    if (players.length < total) {
+      throw new Error(
+        '選手一覧を最後まで取得できませんでした（'
+        + players.length + '/' + total + '件）。'
+      );
+    }
+
     const members = players.map(player => ({
-      '氏名': String(player.family_name || '') + ' ' + String(player.given_name || ''),
-      'ふりがな': player.ruby || '',
-      'メールアドレス': realEmailForPseudonym_(player.email),
-      '所属': player.club || '',
+      id: String(player.id),
+      name: [player.family_name, player.given_name].filter(Boolean).join(' '),
+      ruby: String(player.ruby || ''),
+      club: String(player.club || ''),
     }));
     return JSON.stringify(members);
   } catch (e) {

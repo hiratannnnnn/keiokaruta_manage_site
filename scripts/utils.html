@@ -8,9 +8,17 @@ function setStatus(key, type, msg) {
   if (tableEl) tableEl.style.display = 'none';
   statusEl.style.display = 'block';
   statusEl.className = 'status' + (type === 'error' ? ' error' : '');
-  statusEl.innerHTML = type === 'loading'
-    ? '<span class="spinner"></span> 読み込み中...'
-    : (type === 'error' ? `エラー: ${msg}` : (msg || 'データがありません'));
+  statusEl.replaceChildren();
+  if (type === 'loading') {
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    statusEl.appendChild(spinner);
+    statusEl.appendChild(document.createTextNode(' 読み込み中...'));
+    return;
+  }
+  statusEl.textContent = type === 'error'
+    ? 'エラー: ' + String(msg || '')
+    : String(msg || 'データがありません');
 }
 
 function escHtml(s) {
@@ -121,7 +129,6 @@ function initApp() {
   loadAndApplyPermissions();
   loadMembers();
   loadCalendar();
-  startApiDebugPolling();
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('nav-settings-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
@@ -140,15 +147,14 @@ function initApp() {
 
 window.addEventListener('load', () => {
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
-  // キャッシュ済みログイン情報があれば自動ログイン
+  // 前回の役職だけ復元する。アクセス認証はGoogle側で実施される。
   try {
+    // 旧版が保存した平文パスワードを初回表示時に削除する。
+    localStorage.removeItem('karuta_pw');
     const savedRole = localStorage.getItem('karuta_role');
-    const savedPw   = localStorage.getItem('karuta_pw');
-    if (savedRole && savedPw) {
+    if (savedRole) {
       const roleBtn = document.querySelector(`.login-role-btn[data-role="${savedRole}"]`);
       if (roleBtn) selectLoginRole(roleBtn);
-      document.getElementById('login-pw').value = savedPw;
-      submitLogin();
     }
   } catch(e) {}
 });

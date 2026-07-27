@@ -4,21 +4,25 @@
 
 // name   : 選手名（全角スペースは半角に変換）
 // dateStr: 日付文字列 yyyy-MM-dd（省略可）
-function getTournamentResults(name, dateStr) {
+function getTournamentResults(playerId, name, dateStr) {
   const date = dateStr || Utilities.formatDate(new Date(), 'JST', 'yyyy-MM-dd');
   try {
-    const results = taikaiGetParticipations_(String(name).replace(/　/g, ' '), new Date(date + 'T23:59:59+09:00'));
+    const beforeDate = new Date(date + 'T23:59:59+09:00');
+    const results = playerId
+      ? taikaiGetParticipationsByPlayerId_(String(playerId), beforeDate)
+      : taikaiGetParticipations_(
+        String(name).replace(/　/g, ' '),
+        beforeDate
+      );
     return JSON.stringify({
-      url:    'taikai_manage:/players/{id}/participations',
-      status: 200,
-      body:   JSON.stringify(results.map(item => ({
+      results: results.map(item => ({
         date: item.date,
         location: item.location,
         raffleDate: item.raffleDate,
         isOfficial: item.isOfficial,
-      }))),
+      })),
     });
   } catch (e) {
-    return JSON.stringify({ url: 'taikai_manage:/players/{id}/participations', error: e.message });
+    return JSON.stringify({ error: e.message });
   }
 }

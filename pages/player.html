@@ -31,7 +31,9 @@
       </div>
       <div class="panel-body">
         <div class="search-bar">
-          <input type="text" id="result-name" placeholder="選手名（例：山田 太郎）">
+          <input type="text" id="result-name" list="result-name-suggestions"
+                 placeholder="選手名（例：山田 太郎）" autocomplete="off">
+          <datalist id="result-name-suggestions"></datalist>
           <input type="date" id="result-date" title="日付で絞り込み（省略可）">
           <button onclick="searchResults()">検索</button>
         </div>

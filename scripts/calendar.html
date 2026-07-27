@@ -1,6 +1,6 @@
 <script>
 // ------------------------------------------------------------
-// ログイン・役職
+// 役職選択（アクセス認証はGoogle側で実施）
 // ------------------------------------------------------------
 let currentRole = '申込係';
 let appInitialized = false;
@@ -12,67 +12,35 @@ function selectLoginRole(btn) {
 }
 
 function showReloginOverlay() {
-  document.getElementById('login-pw').value = '';
-  document.getElementById('login-error').textContent = '';
   document.getElementById('login-overlay').style.display = 'flex';
-  // ログイン済みの場合はキャンセルボタンを表示
   document.getElementById('login-cancel-btn').style.display = appInitialized ? 'block' : 'none';
-  // キャッシュがあればログアウトボタンを表示
-  try {
-    const hasCached = localStorage.getItem('karuta_pw');
-    document.getElementById('login-logout-btn').style.display = hasCached ? 'block' : 'none';
-  } catch(e) {}
 }
 
 function cancelRelogin() {
   document.getElementById('login-overlay').style.display = 'none';
 }
 
-function clearLoginCache() {
+function submitRoleSelection() {
+  document.getElementById('login-overlay').style.display = 'none';
+  const badge = document.getElementById('current-role-badge');
+  badge.textContent = currentRole;
+  badge.style.display = 'inline-block';
   try {
-    localStorage.removeItem('karuta_role');
-    localStorage.removeItem('karuta_pw');
+    localStorage.setItem('karuta_role', currentRole);
   } catch(e) {}
-  document.getElementById('login-logout-btn').style.display = 'none';
-  document.getElementById('login-error').textContent = 'ログイン情報をクリアしました';
-}
-
-function submitLogin() {
-  const pw  = document.getElementById('login-pw').value;
-  const err = document.getElementById('login-error');
-  err.textContent = '';
-  if (!pw) { err.textContent = 'パスワードを入力してください'; return; }
-  google.script.run
-    .withSuccessHandler(res => {
-      const r = JSON.parse(res);
-      if (r.error) { err.textContent = r.error; return; }
-      if (!r.ok)   { err.textContent = 'パスワードが違います'; return; }
-      document.getElementById('login-overlay').style.display = 'none';
-      const badge = document.getElementById('current-role-badge');
-      badge.textContent = currentRole;
-      badge.style.display = 'inline-block';
-      // ログイン状態をキャッシュ
-      try {
-        localStorage.setItem('karuta_role', currentRole);
-        localStorage.setItem('karuta_pw', pw);
-      } catch(e) {}
-      if (!appInitialized) {
-        initApp();
-        appInitialized = true;
-      } else {
-        // 再ログイン時：カレンダータブへ遷移し、全データを再読込
-        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.querySelector('[data-page="calendar"]').classList.add('active');
-        document.getElementById('page-calendar').classList.add('active');
-        document.getElementById('calendar-detail-view').classList.remove('active');
-        document.getElementById('calendar-list-view').style.display = '';
-        calendarLoaded = false;
-        initApp();
-      }
-    })
-    .withFailureHandler(e => { err.textContent = 'エラー: ' + e.message; })
-    .validatePassword(pw);
+  if (!appInitialized) {
+    initApp();
+    appInitialized = true;
+  } else {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelector('[data-page="calendar"]').classList.add('active');
+    document.getElementById('page-calendar').classList.add('active');
+    document.getElementById('calendar-detail-view').classList.remove('active');
+    document.getElementById('calendar-list-view').style.display = '';
+    calendarLoaded = false;
+    initApp();
+  }
 }
 
 // ------------------------------------------------------------
@@ -1166,7 +1134,11 @@ function showCalendarList() {
   document.getElementById('calendar-list-view').style.display = '';
 }
 
+let modalSelectedMemberId = '';
+
 function goToPlayerSearch(name) {
+  const matches = allMembers.filter(member => member.name === name);
+  modalSelectedMemberId = matches.length === 1 ? matches[0].id : '';
   document.getElementById('modal-player-name').textContent = name + ' の出場大会';
   document.getElementById('modal-result-name').value = name;
   document.getElementById('modal-result-date').value = new Date().toISOString().slice(0, 10);
@@ -1174,6 +1146,13 @@ function goToPlayerSearch(name) {
   document.getElementById('modal-results-status').textContent = '';
   document.getElementById('modal-results-table').style.display = 'none';
   document.getElementById('player-modal').style.display = 'flex';
+  if (matches.length > 1) {
+    const status = document.getElementById('modal-results-status');
+    status.textContent = '同姓同名の選手がいます。ふりがな・所属付きの候補から選択してください。';
+    status.style.display = 'block';
+    document.getElementById('modal-result-name').focus();
+    return;
+  }
   searchModalResults();
 }
 
@@ -1190,6 +1169,14 @@ function searchModalResults() {
     s.className = 'status'; s.textContent = '選手名を入力してください'; s.style.display = 'block';
     return;
   }
+  const sameName = allMembers.filter(member => member.name === name);
+  if (!modalSelectedMemberId && sameName.length > 1) {
+    const s = document.getElementById('modal-results-status');
+    s.className = 'status';
+    s.textContent = '同姓同名の選手がいます。候補から一人を選択してください。';
+    s.style.display = 'block';
+    return;
+  }
   const date = document.getElementById('modal-result-date').value;
   const s = document.getElementById('modal-results-status');
   s.className = 'status'; s.innerHTML = '<span class="spinner"></span> 読み込み中...'; s.style.display = 'block';
@@ -1200,43 +1187,65 @@ function searchModalResults() {
       const s = document.getElementById('modal-results-status');
       s.className = 'status error'; s.textContent = 'エラー: ' + err.message; s.style.display = 'block';
     })
-    .getTournamentResults(name, date);
+    .getTournamentResults(modalSelectedMemberId, name, date);
 }
 
 function onModalResultsLoaded(raw) {
-  const res  = JSON.parse(raw);
-  const body = res.body ?? '';
-  const s    = document.getElementById('modal-results-status');
+  const s = document.getElementById('modal-results-status');
+  let res;
+  try {
+    res = JSON.parse(raw);
+  } catch (e) {
+    s.className = 'status error';
+    s.textContent = '出場履歴の応答を解析できませんでした。';
+    s.style.display = 'block';
+    return;
+  }
 
   if (res.error) {
     s.className = 'status error'; s.textContent = 'エラー: ' + res.error; s.style.display = 'block';
     return;
   }
 
-  try {
-    const results = JSON.parse(body);
-    if (!Array.isArray(results) || !results.length) {
-      s.className = 'status'; s.textContent = '結果がありません'; s.style.display = 'block';
-      return;
-    }
-    const applyDateNorm = currentTournamentApplyStart
-      ? currentTournamentApplyStart.split('/').join('-').substring(0, 10)
-      : '';
-    console.log('applyDateNorm:', applyDateNorm);
-
-    document.getElementById('modal-results-tbody').innerHTML =
-      results.map(r => {
-        const raffleDate = r.raffleDate ?? '';
-        const raffleDateNorm = raffleDate.substring(0, 10);
-        const isAfterApply = applyDateNorm && raffleDateNorm > applyDateNorm;
-        console.log('raffleDate:', raffleDateNorm, '> applyDate:', applyDateNorm, '=', isAfterApply);
-        const rowStyle = isAfterApply ? ' style="background:#ffe0e0;"' : '';
-        return `<tr${rowStyle}><td>${r.date ?? ''}</td><td>${r.location ?? ''}</td><td>${raffleDate}</td></tr>`;
-      }).join('');
-    s.style.display = 'none';
-    document.getElementById('modal-results-table').style.display = 'table';
-  } catch (e) {
-    s.className = 'status error'; s.textContent = '解析エラー: ' + e.message; s.style.display = 'block';
+  const results = Array.isArray(res.results) ? res.results : [];
+  if (!results.length) {
+    s.className = 'status'; s.textContent = '結果がありません'; s.style.display = 'block';
+    return;
   }
+  const applyDateNorm = currentTournamentApplyStart
+    ? currentTournamentApplyStart.split('/').join('-').substring(0, 10)
+    : '';
+  const tbody = document.getElementById('modal-results-tbody');
+  tbody.replaceChildren();
+  results.forEach(result => {
+    const raffleDate = result.raffleDate || '';
+    const raffleDateNorm = raffleDate.substring(0, 10);
+    const tr = document.createElement('tr');
+    if (applyDateNorm && raffleDateNorm > applyDateNorm) {
+      tr.style.background = '#ffe0e0';
+    }
+    [result.date, result.location, raffleDate].forEach(value => {
+      const td = document.createElement('td');
+      td.textContent = value || '';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  s.style.display = 'none';
+  document.getElementById('modal-results-table').style.display = 'table';
 }
+
+document.getElementById('modal-result-name').addEventListener('input', event => {
+  modalSelectedMemberId = '';
+  const input = event.target.value.trim();
+  const exactLabel = allMembers.filter(member =>
+    memberSuggestionLabel(member) === input
+  );
+  if (exactLabel.length === 1) {
+    modalSelectedMemberId = exactLabel[0].id;
+    return;
+  }
+  const exactName = allMembers.filter(member => member.name === input);
+  if (exactName.length === 1) modalSelectedMemberId = exactName[0].id;
+});
 </script>

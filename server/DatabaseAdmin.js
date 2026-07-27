@@ -60,13 +60,6 @@ function databaseAdminAllowedPath_(method, path) {
   return (rules[method] || []).some(pattern => pattern.test(path));
 }
 
-function databaseAdminAuthenticate_(password) {
-  const stored = PropertiesService.getScriptProperties().getProperty('PASSWORD');
-  if (!stored || String(password || '') !== stored) {
-    throw new Error('DB管理権限の認証に失敗しました。');
-  }
-}
-
 function databaseAdminPseudonymizePlayerEmail_(player) {
   if (!player || typeof player !== 'object' ||
       !Object.prototype.hasOwnProperty.call(player, 'email')) {
@@ -103,8 +96,6 @@ function databaseAdminProtectPlayerEmail_(method, path, body) {
 function databaseAdminRequest(json) {
   try {
     const input = JSON.parse(json);
-    databaseAdminAuthenticate_(input.password);
-
     const method = String(input.method || 'GET').toUpperCase();
     const path = String(input.path || '').trim();
     if (!databaseAdminAllowedPath_(method, path)) {
