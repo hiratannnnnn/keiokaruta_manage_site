@@ -19,11 +19,15 @@ assert.match(board, /_boardLoaded = true/);
 assert.match(mail, /if \(_mmLoaded\)/);
 assert.match(mail, /_mmLoaded = true/);
 assert.match(suitou, /if \(_suAllData\)/);
-assert.match(suitou, /\(allTournaments \|\| \[\]\)\.forEach/);
 assert.doesNotMatch(
   suitou.match(/function suShowAddModal[\s\S]*?function suCloseAddModal/)[0],
   /\.getTournamentList\(\)/,
   '出納追加を開くたびに大会一覧を再取得してはいけません'
+);
+assert.doesNotMatch(
+  suitou.match(/function suShowAddModal[\s\S]*?function suCloseAddModal/)[0],
+  /ensureMembersLoaded/,
+  'API台帳に含まれるplayer IDを利用し、名簿APIを追加取得してはいけません'
 );
 assert.match(migration, /if \(!sheetMigrationLoaded\) sheetMigrationPreview\(\)/);
 assert.match(settings, /if \(settingsPageLoaded\) return/);

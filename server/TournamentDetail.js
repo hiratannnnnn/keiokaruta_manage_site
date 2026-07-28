@@ -153,7 +153,6 @@ function getTournamentKeyValue(sheetName, key) {
 function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
   try {
     const isPaid = value === '済' || value === '繰越' || value === 'くりこし';
-    taikaiSetPaymentByPlayer_(String(sheetName).replace(/[A-E]+級$/, ''), playerName, isPaid);
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
@@ -163,31 +162,24 @@ function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
     const formEndIdx = structure.response_end_index;
     for (let i = 1; i < formEndIdx; i++) {
       if (String(allData[i][2]) === playerName) {
-        sheet.getRange(i + 1, structure.layout.payment_status_column).setValue(value);
-        // 済になった場合は出納管理にトランザクションを追加
-        if (value === '済') {
-          const feeMap   = getSuitouFeeMap_(allData, formEndIdx);
-          const gradeStr = String(allData[i][4] || '').trim();
-          const fee      = calcFeeFromGrade_(gradeStr, feeMap);
-          if (fee > 0) {
-            const normalizedName = normalizeName_(playerName);
-            if (useDeposit) {
-              // 利用可能なデポジット純残高をマイナスで相殺してから参加費をプラス追加
-              const suitouSheet = ss.getSheetByName('出納管理');
-              if (suitouSheet && suitouSheet.getLastRow() >= 7) {
-                const txRows = suitouSheet.getRange(7, 1, suitouSheet.getLastRow() - 6, 3).getValues();
-                const depositBalance = getPlayerDepositBalance_(txRows, normalizedName);
-                if (depositBalance > 0) {
-                  const today = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd');
-                  const lastRow = Math.max(suitouSheet.getLastRow(), 6);
-                  suitouSheet.getRange(lastRow + 1, 1, 1, 4)
-                    .setValues([[normalizedName, -depositBalance, 'デポジット', today]]);
-                }
-              }
-            }
-            appendSuitouTx_(ss, normalizedName, fee, sheetName + '　参加費');
-          }
+        const currentValue = String(
+          allData[i][structure.layout.payment_status_column - 1] || ''
+        ).trim();
+        const currentPaid = currentValue === '済'
+          || currentValue === '繰越' || currentValue === 'くりこし';
+        if (currentPaid && value === '') {
+          throw new Error(
+            '支払い履歴は削除できません。出納管理から対象履歴を取り消してください。'
+          );
         }
+        if (isPaid) {
+          taikaiRecordFullPaymentByPlayer_(
+            String(sheetName).replace(/[A-E]+級$/, ''),
+            playerName,
+            useDeposit === true
+          );
+        }
+        sheet.getRange(i + 1, structure.layout.payment_status_column).setValue(value);
         return JSON.stringify({ ok: true });
       }
     }

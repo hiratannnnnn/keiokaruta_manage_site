@@ -31,8 +31,9 @@ assert.match(page, /選手個人のデポジットを自動で探して消費す
 assert.match(page, /期限後キャンセルへの変更だけでは、参加費のプラス記録は自動作成されません/);
 assert.match(suitou, /function getPlayerDepositBalance_/);
 assert.match(suitou, /deposit: balance > 0/);
-assert.match(detail, /getPlayerDepositBalance_\(txRows, normalizedName\)/);
-assert.doesNotMatch(detail, /const depositAmt = Number\(txRows\[j\]\[1\]\)/);
+assert.match(detail, /taikaiRecordFullPaymentByPlayer_/);
+assert.doesNotMatch(detail, /appendSuitouTx_/);
+assert.match(suitou, /\/players\/.*\/deposits/);
 
 const sandbox = {};
 vm.runInNewContext(suitou, sandbox);

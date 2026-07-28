@@ -21,7 +21,7 @@ assert.match(utils, /if \(page === 'player'\) ensureMembersLoaded\(\)/);
 assert.match(members, /function ensureMembersLoaded/);
 assert.match(members, /if \(!membersLoading\) loadMembers\(false\)/);
 assert.match(calendar, /ensureMembersLoaded\(\(\) => goToPlayerSearchWithMembers\(name\)\)/);
-assert.match(suitou, /function suShowAddModal[\s\S]*?ensureMembersLoaded\(\)/);
+assert.doesNotMatch(suitou, /ensureMembersLoaded\(\)/);
 assert.match(playerPage, /onclick="loadMembers\(true\)"/);
 
 console.log('Lazy loading regression checks passed.');

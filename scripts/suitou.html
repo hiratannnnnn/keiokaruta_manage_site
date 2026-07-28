@@ -1,8 +1,13 @@
 <script>
-// ============================================================
-// 出納管理・残高記録ページ
-// ============================================================
 let _suAllData = null;
+
+const SU_STATUS_LABELS = {
+  unknown: '参加費未設定',
+  unpaid: '未払い',
+  partial: '一部支払い',
+  paid: '支払済み',
+  overpaid: '過払い',
+};
 
 function showAccountingGuide() {
   document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
@@ -22,15 +27,15 @@ function initSuitou() {
   suSetLoading(true);
   google.script.run
     .withSuccessHandler(json => {
-      const r = JSON.parse(json);
-      if (r.error) {
-        suSetError(r.error);
+      const result = JSON.parse(json);
+      if (result.error) {
+        suSetError(result.error);
         return;
       }
-      _suAllData = r;
-      suRenderTables(r);
+      _suAllData = result;
+      suRenderTables(result);
     })
-    .withFailureHandler(e => suSetError(e.message))
+    .withFailureHandler(error => suSetError(error.message))
     .getSuitouSheets();
 }
 
@@ -40,305 +45,258 @@ function reloadSuitou() {
 }
 
 function suSetLoading(on) {
-  ['su-tx-status', 'su-balance-status'].forEach(id => {
-    const el = document.getElementById(id);
-    el.style.display = on ? 'block' : 'none';
-    if (on) el.textContent = '読み込み中...';
+  ['su-tx-status', 'su-entry-status'].forEach(id => {
+    const element = document.getElementById(id);
+    element.style.display = on ? 'block' : 'none';
+    if (on) element.textContent = 'DBから読み込み中...';
   });
   document.getElementById('su-tx-table-wrap').style.display = 'none';
-  document.getElementById('su-balance-table-wrap').style.display = 'none';
+  document.getElementById('su-entry-table-wrap').style.display = 'none';
 }
 
-function suSetError(msg) {
-  ['su-tx-status', 'su-balance-status'].forEach(id => {
-    const el = document.getElementById(id);
-    el.style.display = 'block';
-    el.textContent = 'エラー: ' + msg;
+function suSetError(message) {
+  ['su-tx-status', 'su-entry-status'].forEach(id => {
+    const element = document.getElementById(id);
+    element.style.display = 'block';
+    element.className = 'status error';
+    element.textContent = 'エラー: ' + message;
   });
 }
 
 function suRenderTables(data) {
-  suRenderTx(data.transactions);
-  suRenderBalance(data.balances);
+  document.getElementById('su-fiscal-year').textContent =
+    Number(data.fiscalYear) + '年度';
+  suRenderTx(data.transactions || []);
+  suRenderEntries(data.entries || []);
+}
+
+function suFormatTimestamp(value) {
+  const text = String(value || '');
+  return text.replace('T', ' ').replace(/([+-]\d{2}:\d{2}|Z)$/, '');
 }
 
 function suRenderTx(transactions) {
-  const statusEl = document.getElementById('su-tx-status');
-  const wrapEl   = document.getElementById('su-tx-table-wrap');
-  const tbody    = document.getElementById('su-tx-tbody');
-  if (!transactions || transactions.length === 0) {
-    statusEl.style.display = 'block';
-    statusEl.textContent   = 'データがありません';
-    wrapEl.style.display   = 'none';
+  const status = document.getElementById('su-tx-status');
+  const wrap = document.getElementById('su-tx-table-wrap');
+  const tbody = document.getElementById('su-tx-tbody');
+  tbody.replaceChildren();
+  if (!transactions.length) {
+    status.style.display = 'block';
+    status.className = 'status';
+    status.textContent = '支払い・デポジット履歴がありません。';
+    wrap.style.display = 'none';
     return;
   }
-  statusEl.style.display = 'none';
-  tbody.replaceChildren();
-  transactions.forEach(t => {
-    const isDeposit  = t.reason === 'デポジット';
-    const canConvert = t.amount > 0 && !isDeposit;
-    const isPending  = t.rowNum === 0;
-    const tr = document.createElement('tr');
+  status.style.display = 'none';
+  transactions.forEach(transaction => {
+    const row = document.createElement('tr');
+    if (transaction.reversed_at) row.className = 'su-reversed-row';
     const name = document.createElement('td');
-    name.className = 'su-name-link';
-    name.textContent = t.name || '';
-    name.addEventListener('click', () => suShowAddModal(t.name));
+    name.textContent = transaction.name || '';
     const amount = document.createElement('td');
-    amount.className = 'su-amount' + (t.amount < 0 ? ' su-amount-neg' : '');
-    amount.textContent = Number(t.amount || 0).toLocaleString() + '円';
+    amount.className = 'su-amount' + (Number(transaction.amount) < 0 ? ' su-amount-neg' : '');
+    amount.textContent = Number(transaction.amount || 0).toLocaleString() + '円';
     const reason = document.createElement('td');
-    if (isDeposit) {
-      const badge = document.createElement('span');
-      badge.className = 'su-deposit-badge';
-      badge.textContent = 'デポジット';
-      reason.appendChild(badge);
-    } else {
-      reason.textContent = t.reason || '';
-    }
+    reason.textContent = transaction.reason || '';
+    if (transaction.note) reason.title = transaction.note;
     const date = document.createElement('td');
     date.className = 'su-date';
-    date.textContent = t.date || '';
+    date.textContent = suFormatTimestamp(transaction.date);
+    const state = document.createElement('td');
+    state.textContent = transaction.reversed_at ? '取消済み' : '有効';
     const actions = document.createElement('td');
-    actions.style.whiteSpace = 'nowrap';
-    if (isPending) {
-      actions.textContent = '同期中...';
-    } else {
-      if (canConvert) {
-        const deposit = document.createElement('button');
-        deposit.className = 'su-deposit-btn';
-        deposit.textContent = 'デポジット化';
-        deposit.addEventListener('click', () => suConvertToDeposit(t.rowNum, deposit));
-        actions.appendChild(deposit);
-      }
-      const remove = document.createElement('button');
-      remove.className = 'su-del-btn';
-      remove.textContent = '削除';
-      remove.addEventListener('click', () => suDeleteRow(t.rowNum, remove));
-      actions.appendChild(remove);
+    if (!transaction.reversed_at && transaction.reversible !== false) {
+      const reverse = document.createElement('button');
+      reverse.className = 'su-del-btn';
+      reverse.textContent = '取消';
+      reverse.addEventListener('click', () => suReverseTransaction(transaction, reverse));
+      actions.appendChild(reverse);
     }
-    tr.append(name, amount, reason, date, actions);
-    tbody.appendChild(tr);
+    row.append(name, amount, reason, date, state, actions);
+    tbody.appendChild(row);
   });
-  wrapEl.style.display = '';
+  wrap.style.display = '';
 }
 
-function suRenderBalance(balances) {
-  const statusEl = document.getElementById('su-balance-status');
-  const wrapEl   = document.getElementById('su-balance-table-wrap');
-  const tbody    = document.getElementById('su-balance-tbody');
-  if (!balances || balances.length === 0) {
-    statusEl.style.display = 'block';
-    statusEl.textContent   = 'データがありません';
-    wrapEl.style.display   = 'none';
+function suRenderEntries(entries) {
+  const status = document.getElementById('su-entry-status');
+  const wrap = document.getElementById('su-entry-table-wrap');
+  const tbody = document.getElementById('su-entry-tbody');
+  tbody.replaceChildren();
+  if (!entries.length) {
+    status.style.display = 'block';
+    status.className = 'status';
+    status.textContent = '今年度の申込がありません。';
+    wrap.style.display = 'none';
     return;
   }
-  statusEl.style.display = 'none';
-  tbody.replaceChildren();
-  balances.forEach(balance => {
-    const tr = document.createElement('tr');
-    const name = document.createElement('td');
-    name.textContent = balance.name || '';
-    const amount = document.createElement('td');
-    amount.className = 'su-amount'
-      + (balance.balance < 0 ? ' su-amount-neg' : '');
-    amount.textContent = Number(balance.balance || 0).toLocaleString() + '円';
-    const tournaments = document.createElement('td');
-    tournaments.className = 'su-tournaments';
-    tournaments.textContent = balance.tournaments || '';
-    tr.append(name, amount, tournaments);
-    tbody.appendChild(tr);
+  status.style.display = 'none';
+  entries.forEach(entry => {
+    const row = document.createElement('tr');
+    const values = [
+      entry.name,
+      entry.tournament + entry.grade + '級',
+      entry.fee === null ? '未設定' : Number(entry.fee).toLocaleString() + '円',
+      Number(entry.paid || 0).toLocaleString() + '円',
+      entry.balance === null ? '不明' : Number(entry.balance).toLocaleString() + '円',
+      SU_STATUS_LABELS[entry.status] || entry.status,
+      Number(entry.deposit_balance || 0).toLocaleString() + '円',
+    ];
+    values.forEach((value, index) => {
+      const cell = document.createElement(index < 2 ? 'th' : 'td');
+      cell.textContent = value || '';
+      if (index === 4 && Number(entry.balance) < 0) cell.className = 'su-amount-neg';
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
   });
-  wrapEl.style.display = '';
-}
-
-function suUpdate() {
-  const btn      = document.querySelector('.su-update-btn');
-  const statusEl = document.getElementById('su-update-status');
-  btn.disabled         = true;
-  statusEl.textContent = '更新中...';
-  statusEl.style.color = '#666';
-
-  google.script.run
-    .withSuccessHandler(json => {
-      btn.disabled = false;
-      const r = JSON.parse(json);
-      if (r.error) {
-        statusEl.textContent = 'エラー: ' + r.error;
-        statusEl.style.color = '#e74c3c';
-      } else {
-        statusEl.textContent = `完了 — ${r.personCount} 人 / ${r.transactionCount} 件`;
-        statusEl.style.color = '#27ae60';
-        _suAllData = null;
-        initSuitou();
-      }
-    })
-    .withFailureHandler(e => {
-      btn.disabled         = false;
-      statusEl.textContent = 'エラー: ' + e.message;
-      statusEl.style.color = '#e74c3c';
-    })
-    .updateSuitou();
+  wrap.style.display = '';
 }
 
 function suShowConfirm(message, onOk, title) {
-  document.getElementById('su-confirm-title').textContent   = title || '確認';
+  document.getElementById('su-confirm-title').textContent = title || '確認';
   document.getElementById('su-confirm-message').textContent = message;
-  const okBtn = document.getElementById('su-confirm-ok');
-  okBtn.onclick = () => { suCloseConfirm(); onOk(); };
+  const ok = document.getElementById('su-confirm-ok');
+  ok.onclick = () => {
+    suCloseConfirm();
+    onOk();
+  };
   document.getElementById('su-confirm-modal').style.display = 'flex';
 }
 
-function suCloseConfirm(e) {
-  if (e && e.target !== document.getElementById('su-confirm-modal')) return;
+function suCloseConfirm(event) {
+  if (event && event.target !== document.getElementById('su-confirm-modal')) return;
   document.getElementById('su-confirm-modal').style.display = 'none';
 }
 
-function suDeleteRow(rowNum, btn) {
-  suShowConfirm('この行を削除しますか？', () => {
-    btn.disabled = true;
-    google.script.run
-      .withSuccessHandler(json => {
-        btn.disabled = false;
-        const r = JSON.parse(json);
-        if (r.error) { suShowConfirm('エラー: ' + r.error, () => {}, 'エラー'); return; }
-        initSuitou();
-      })
-      .withFailureHandler(e => {
-        btn.disabled = false;
-        suShowConfirm('エラー: ' + e.message, () => {}, 'エラー');
-      })
-      .deleteSuitouRow(rowNum);
-  }, '削除の確認');
+function suJstTimestamp() {
+  const now = new Date();
+  const offset = -now.getTimezoneOffset();
+  const local = new Date(now.getTime() + offset * 60000);
+  const sign = offset >= 0 ? '+' : '-';
+  const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+  const minutes = String(Math.abs(offset) % 60).padStart(2, '0');
+  return local.toISOString().slice(0, 19) + sign + hours + ':' + minutes;
 }
 
-function suConvertToDeposit(rowNum, btn) {
+function suReverseTransaction(transaction, button) {
   suShowConfirm(
-    'この行の事由を「デポジット」に変更しますか？\nシートから再計算しても消えなくなります。',
+    'この履歴を取り消します。履歴自体は削除されません。よろしいですか？',
     () => {
-      btn.disabled = true;
+      button.disabled = true;
+      const reversedAt = suJstTimestamp();
       google.script.run
         .withSuccessHandler(json => {
-          btn.disabled = false;
-          const r = JSON.parse(json);
-          if (r.error) { suShowConfirm('エラー: ' + r.error, () => {}, 'エラー'); return; }
-          initSuitou();
+          const result = JSON.parse(json);
+          if (result.error) {
+            button.disabled = false;
+            suShowConfirm('エラー: ' + result.error, () => {}, '取消エラー');
+            return;
+          }
+          reloadSuitou();
         })
-        .withFailureHandler(e => {
-          btn.disabled = false;
-          suShowConfirm('エラー: ' + e.message, () => {}, 'エラー');
+        .withFailureHandler(error => {
+          button.disabled = false;
+          suShowConfirm('エラー: ' + error.message, () => {}, '取消エラー');
         })
-        .convertToDeposit(rowNum);
+        .reverseSuitouApiTransaction(transaction.type, transaction.id, reversedAt);
     },
-    'デポジット化の確認'
+    '履歴の取消'
   );
 }
 
-function suFilterNameSuggestions() {
-  const q    = document.getElementById('su-add-name').value.trim();
-  const list = document.getElementById('su-name-suggest-list');
-  if (!q || !allMembers.length) { list.style.display = 'none'; return; }
-  const matched = allMembers
-    .map(m => String(m.name || ''))
-    .filter(n => n.includes(q));
-  if (!matched.length) { list.style.display = 'none'; return; }
-  list.replaceChildren();
-  matched.slice(0, 10).forEach(name => {
-    const item = document.createElement('li');
-    item.textContent = name;
-    item.addEventListener('mousedown', event => {
-      event.preventDefault();
-      suSelectName(name);
-    });
-    list.appendChild(item);
+function suIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return 'suitou-' + crypto.randomUUID();
+  }
+  return 'suitou-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+    + '-' + Math.random().toString(36).slice(2);
+}
+
+function suShowAddModal() {
+  if (!_suAllData || !_suAllData.entries.length) return;
+  const select = document.getElementById('su-add-entry');
+  select.replaceChildren();
+  _suAllData.entries.forEach(entry => {
+    const option = document.createElement('option');
+    option.value = entry.entry_id;
+    option.dataset.playerId = entry.player_id;
+    option.textContent = entry.name + '｜' + entry.tournament + entry.grade + '級'
+      + '｜残額 ' + (entry.balance === null ? '不明' : Number(entry.balance).toLocaleString() + '円')
+      + '｜デポジット ' + Number(entry.deposit_balance || 0).toLocaleString() + '円';
+    select.appendChild(option);
   });
-  list.style.display = 'block';
-}
-
-function suSelectName(name) {
-  document.getElementById('su-add-name').value = name;
-  suHideNameSuggestions();
-}
-
-function suHideNameSuggestions() {
-  document.getElementById('su-name-suggest-list').style.display = 'none';
-}
-
-function suShowAddModal(presetName) {
-  // 氏名候補が必要になった時点でのみ名簿APIを取得する。
-  ensureMembersLoaded();
-  document.getElementById('su-add-name').value   = presetName || '';
-  suHideNameSuggestions();
+  document.getElementById('su-add-operation').value = 'payment';
+  document.getElementById('su-add-method').value = 'bank_transfer';
   document.getElementById('su-add-amount').value = '2500';
+  document.getElementById('su-add-note').value = '';
+  document.getElementById('su-add-idempotency').value = suIdempotencyKey();
+  document.getElementById('su-add-submit').disabled = false;
+  suOperationChanged();
   suAddError('');
-
-  // 大会一覧は初期表示で取得済みのシートデータを再利用する。
-  const sel = document.getElementById('su-add-reason');
-  sel.innerHTML = '<option value="デポジット">デポジット</option>';
-  (allTournaments || []).forEach(t => {
-    const reason = t.name + '　参加費';
-    const opt = document.createElement('option');
-    opt.value = reason;
-    opt.textContent = reason;
-    sel.appendChild(opt);
-  });
-
   document.getElementById('su-add-modal').style.display = 'flex';
 }
 
-function suCloseAddModal(e) {
-  if (e && e.target !== document.getElementById('su-add-modal')) return;
+function suCloseAddModal(event) {
+  if (event && event.target !== document.getElementById('su-add-modal')) return;
   document.getElementById('su-add-modal').style.display = 'none';
 }
 
-function suAddError(msg) {
-  const el = document.getElementById('su-add-error');
-  el.textContent = msg;
-  el.style.display = msg ? 'block' : 'none';
+function suOperationChanged() {
+  document.getElementById('su-add-method-wrap').style.display =
+    document.getElementById('su-add-operation').value === 'payment' ? '' : 'none';
+}
+
+function suAddError(message) {
+  const element = document.getElementById('su-add-error');
+  element.textContent = message;
+  element.style.display = message ? 'block' : 'none';
 }
 
 function suSubmitAdd() {
-  const name      = document.getElementById('su-add-name').value.trim();
-  const reason    = document.getElementById('su-add-reason').value;
-  const direction = document.querySelector('input[name="su-direction"]:checked').value;
-  const amountRaw = document.getElementById('su-add-amount').value;
-
-  if (!name)   { suAddError('氏名を入力してください'); return; }
-  if (!reason) { suAddError('事由を選択してください'); return; }
-  if (amountRaw === '' || isNaN(Number(amountRaw)) || Number(amountRaw) < 0) {
-    suAddError('金額を正の数で入力してください'); return;
+  const entrySelect = document.getElementById('su-add-entry');
+  const selected = entrySelect.options[entrySelect.selectedIndex];
+  const amount = Number(document.getElementById('su-add-amount').value);
+  const note = document.getElementById('su-add-note').value.trim();
+  if (!selected) {
+    suAddError('対象の申込を選択してください。');
+    return;
   }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    suAddError('金額は1円以上の整数で入力してください。');
+    return;
+  }
+  if (note.length > 1000) {
+    suAddError('メモは1000文字以内で入力してください。');
+    return;
+  }
+  const button = document.getElementById('su-add-submit');
+  button.disabled = true;
   suAddError('');
-
-  const amount = direction === 'out' ? -Math.abs(Number(amountRaw)) : Math.abs(Number(amountRaw));
-
-  // 楽観的UI更新：即座にモーダルを閉じて先頭に行を挿入
-  document.getElementById('su-add-modal').style.display = 'none';
-  const today = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const dateStr = `${today.getFullYear()}/${pad(today.getMonth()+1)}/${pad(today.getDate())}`;
-  const newTx = { rowNum: 0, name, amount, reason, date: dateStr };
-  if (_suAllData) {
-    _suAllData.transactions.unshift(newTx);
-    suRenderTables(_suAllData);
-  }
-
-  // バックグラウンドでサーバー送信、完了後に静かに再同期
+  const payload = {
+    operation: document.getElementById('su-add-operation').value,
+    entry_id: selected.value,
+    player_id: selected.dataset.playerId,
+    amount_yen: amount,
+    method: document.getElementById('su-add-method').value,
+    note: note,
+    idempotency_key: document.getElementById('su-add-idempotency').value,
+  };
   google.script.run
     .withSuccessHandler(json => {
-      const r = JSON.parse(json);
-      if (r.error) {
-        document.getElementById('su-update-status').textContent = '追加エラー: ' + r.error;
-        document.getElementById('su-update-status').style.color = '#e74c3c';
+      const result = JSON.parse(json);
+      if (result.error) {
+        button.disabled = false;
+        suAddError(result.error);
+        return;
       }
-      _suAllData = null;
-      initSuitou();
+      suCloseAddModal();
+      reloadSuitou();
     })
-    .withFailureHandler(e => {
-      document.getElementById('su-update-status').textContent = '追加エラー: ' + e.message;
-      document.getElementById('su-update-status').style.color = '#e74c3c';
-      _suAllData = null;
-      initSuitou();
+    .withFailureHandler(error => {
+      button.disabled = false;
+      suAddError(error.message);
     })
-    .addSuitouRow(JSON.stringify({ name, amount: Number(amount), reason }));
+    .addSuitouApiTransaction(JSON.stringify(payload));
 }
 </script>

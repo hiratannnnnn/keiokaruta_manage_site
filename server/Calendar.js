@@ -52,35 +52,6 @@ function setCalendarColumn(name, colOneBased, value, skipMinus) {
       if (String(data[i][0]) === name) {
         sheet.getRange(i + 1, colOneBased).setValue(value);
 
-        // 振込済み（col 12）が取り消された場合、マイナストランザクションを削除
-        if (colOneBased === 12 && value === '') {
-          removeSuitouNegTxByReason_(ss, name + '　参加費');
-        }
-
-        // 振込済み（col 12）が「済」になった場合、大会シートの済参加者にマイナス計上
-        if (colOneBased === 12 && value === '済' && !skipMinus) {
-          const tournSheet = ss.getSheetByName(name);
-          if (tournSheet) {
-            const structure = tournamentSheetStructure_(tournSheet, false);
-            const allData = structure.data;
-            const formEndIdx = structure.response_end_index;
-            const feeMap = getSuitouFeeMap_(allData, formEndIdx);
-            const paymentStatusIndex = structure.layout.payment_status_column - 1;
-            for (let j = 1; j < formEndIdx; j++) {
-              const payStatus = String(allData[j][paymentStatusIndex] || '').trim();
-              const isPaid = payStatus === '済' || payStatus === '繰越'
-                || payStatus === 'くりこし';
-              if (!isPaid) continue;
-              const nameRaw = String(allData[j][2] || '').trim();
-              if (!nameRaw) continue;
-              const gradeStr = String(allData[j][4] || '').trim();
-              const fee = calcFeeFromGrade_(gradeStr, feeMap);
-              if (fee <= 0) continue;
-              appendSuitouTx_(ss, normalizeName_(nameRaw), -fee, name + '　参加費');
-            }
-          }
-        }
-
         return JSON.stringify({ ok: true });
       }
     }

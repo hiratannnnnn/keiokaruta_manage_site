@@ -77,6 +77,8 @@ function getEnvironmentConfigurationStatus() {
       'TAIKAI_API_BASE_URL',
       'TAIKAI_API_ALERT_EMAIL',
       'PSEUDO_EMAIL_SECRET',
+      'LINE_LINK_WEBHOOK_SECRET',
+      'LINE_LINK_BINDING_SECRET',
     ]);
     const items = requiredKeys.map(key => ({
       key: key,

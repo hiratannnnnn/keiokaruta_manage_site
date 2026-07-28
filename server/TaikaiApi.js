@@ -436,11 +436,43 @@ function taikaiFindTournamentEntry_(tournamentName, playerName) {
   , null);
 }
 
-function taikaiSetPaymentByPlayer_(tournamentName, playerName, isPaid) {
+function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit) {
   const entry = taikaiFindTournamentEntry_(tournamentName, playerName);
-  return taikaiApiRequest_('PUT', '/entries/' + encodeURIComponent(String(entry.id)) + '/payment', {
-    is_paid: Boolean(isPaid),
-  });
+  const summary = taikaiApiRequest_(
+    'GET', '/entries/' + encodeURIComponent(String(entry.id)) + '/payment-summary'
+  );
+  const balance = Number(summary.balance_yen);
+  if (!Number.isFinite(balance)) {
+    throw new Error('参加費が未設定のため、支払いを登録できません。');
+  }
+  if (balance <= 0) return summary;
+  const body = {
+    idempotency_key: 'detail-' + Utilities.getUuid(),
+    amount_yen: balance,
+    paid_at: Utilities.formatDate(
+      new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+    ),
+    note: '大会詳細から登録',
+  };
+  if (useDeposit) {
+    const deposit = Number(summary.deposit_balance_yen || 0);
+    if (deposit !== balance) {
+      throw new Error(
+        'デポジット残高と参加費残額が一致しません。出納管理から金額を確認してください。'
+      );
+    }
+    return taikaiApiRequest_(
+      'POST',
+      '/entries/' + encodeURIComponent(String(entry.id)) + '/deposit-application',
+      body
+    );
+  }
+  body.method = 'bank_transfer';
+  return taikaiApiRequest_(
+    'POST',
+    '/entries/' + encodeURIComponent(String(entry.id)) + '/payments',
+    body
+  );
 }
 
 function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned) {

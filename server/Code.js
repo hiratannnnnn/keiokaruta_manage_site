@@ -11,6 +11,11 @@ function doGet(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// taikai_manageのLINE連携から呼ばれるJSON Webhook。
+function doPost(e) {
+  return lineLinkWebhookResponse_(e);
+}
+
 // HTML 内で <?!= include('ファイル名') ?> として使う
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
