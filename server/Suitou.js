@@ -207,6 +207,18 @@ function addSuitouApiTransaction(json) {
     } else {
       throw new Error('操作が不正です。');
     }
+    if (result && result.entry_id) {
+      try {
+        refreshTournamentSheetV2ByEntryId_(String(result.entry_id));
+      } catch (writebackError) {
+        return JSON.stringify({
+          error: '出納APIへの登録は成功しましたが、大会シートの書戻しに失敗しました。'
+            + '同じ再送防止キーで再実行してください: ' + writebackError.message,
+          partial: true,
+          result: result,
+        });
+      }
+    }
     return JSON.stringify({ ok: true, result: result });
   } catch (e) {
     return JSON.stringify({ error: e.message });
@@ -229,6 +241,18 @@ function reverseSuitouApiTransaction(type, id, reversedAt) {
     const result = taikaiApiRequest_(
       'POST', path, { reversed_at: timestamp }
     );
+    if (result && result.entry_id) {
+      try {
+        refreshTournamentSheetV2ByEntryId_(String(result.entry_id));
+      } catch (writebackError) {
+        return JSON.stringify({
+          error: '取消APIへの登録は成功しましたが、大会シートの書戻しに失敗しました。'
+            + '同じ取消日時で再実行してください: ' + writebackError.message,
+          partial: true,
+          result: result,
+        });
+      }
+    }
     return JSON.stringify({ ok: true, result: result });
   } catch (e) {
     return JSON.stringify({ error: e.message });

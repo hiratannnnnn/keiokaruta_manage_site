@@ -2,12 +2,12 @@
 // Googleフォーム回答の新DB登録
 // ============================================================
 
-function formAnswerValue_(namedValues, values, predicate, fallbackIndex) {
+function formAnswerValue_(namedValues, predicate) {
   const keys = Object.keys(namedValues || {});
   for (let i = 0; i < keys.length; i++) {
     if (predicate(keys[i])) return String((namedValues[keys[i]] || [''])[0] || '').trim();
   }
-  return String((values || [])[fallbackIndex] || '').trim();
+  return '';
 }
 
 function formDateValue_(value) {
@@ -34,16 +34,39 @@ function recordFormResponseInTournamentSheetV2_(
     }
   }
   if (!insertRow) throw new Error('大会管理データv2の案内セクションがありません。');
+  const responseColumns = tournamentSheetResponseColumns_(structure);
+  const normalizedEmail = String(response.email || '').trim().toLowerCase();
+  for (let previousRow = 2; previousRow < sourceRow; previousRow++) {
+    const raw = structure.data[previousRow - 1] || [];
+    if (String(raw[responseColumns.email] || '').trim().toLowerCase()
+        !== normalizedEmail) continue;
+    const previousEntry = structure.management.entries_by_source_row[previousRow];
+    if (!previousEntry) continue;
+    sheet.getRange(previousEntry.row_number, 7, 1, 7).clearContent();
+    sheet.getRange(previousEntry.row_number, 14).setValue('superseded');
+    sheet.getRange(previousEntry.row_number, 15).setValue('superseded');
+    sheet.getRange(previousEntry.row_number, 16, 1, 2).clearContent();
+  }
   const fee = tournamentSheetGradeFee_(structure, response.grade);
   const player = apiResult && apiResult.player ? apiResult.player : {};
   const entry = apiResult && apiResult.entry ? apiResult.entry : {};
+  const summary = apiResult && apiResult.payment_summary
+    ? apiResult.payment_summary : {};
+  const participationFee = summary.participation_fee_yen !== undefined
+    ? summary.participation_fee_yen : fee;
+  const paid = summary.paid_yen !== undefined ? summary.paid_yen : 0;
+  const balance = summary.balance_yen !== undefined
+    ? summary.balance_yen
+    : (participationFee === null ? '' : Number(participationFee) - Number(paid));
   sheet.insertRowBefore(insertRow);
   const row = new Array(TOURNAMENT_SHEET_V2_WIDTH_).fill('');
   [
     '申込', sourceRow, response.email, response.name, response.grade, '',
     player.id || '', entry.id || '', entry.schedule_id || '', entry.canceled_at || '',
-    fee === null ? '' : fee, 0, fee === null ? '' : fee,
-    fee === null ? 'unpriced' : 'unpaid',
+    participationFee === null ? '' : participationFee,
+    paid,
+    balance,
+    summary.status || (participationFee === null ? 'unpriced' : 'unpaid'),
     apiError ? 'pending_api' : 'synced',
     apiError ? '' : new Date(),
     apiError ? String(apiError.message || apiError).slice(0, 5000) : '',
@@ -67,12 +90,15 @@ function registerFormResponseToDatabase(e) {
   if (!match) throw new Error('回答シート名から大会名を取得できません: ' + sheetName);
 
   const named = e.namedValues || {};
-  const values = e.values || [];
-  const name = formAnswerValue_(named, values, title => title.includes('氏名'), 2);
-  const email = formAnswerValue_(named, values, title => /メールアドレス/i.test(title), 1);
-  const grade = formAnswerValue_(named, values, title => title === '級' || title.endsWith('級'), 4)
+  const name = formAnswerValue_(named, title => title.includes('氏名'));
+  const email = formAnswerValue_(named, title => /メールアドレス/i.test(title));
+  const grade = formAnswerValue_(named, title =>
+    title === '級' || /参加.*級|出場.*級/.test(title)
+  )
     .replace(/級/g, '').trim();
-  const heldOn = formDateValue_(formAnswerValue_(named, values, title => title.includes('希望日'), -1));
+  const heldOn = formDateValue_(
+    formAnswerValue_(named, title => title.includes('希望日'))
+  );
   if (!name || !email || !/^[A-E]$/.test(grade)) {
     throw new Error('回答から氏名・メールアドレス・級を取得できません。');
   }
@@ -83,6 +109,12 @@ function registerFormResponseToDatabase(e) {
   let apiError = null;
   try {
     result = taikaiRegisterEntry_(match[1], grade, heldOn, name, email);
+    if (result && result.entry && result.entry.id) {
+      result.payment_summary = taikaiApiRequest_(
+        'GET',
+        '/entries/' + encodeURIComponent(String(result.entry.id)) + '/payment-summary'
+      );
+    }
   } catch (error) {
     apiError = error;
   }

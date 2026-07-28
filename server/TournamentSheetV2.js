@@ -10,7 +10,7 @@ const TOURNAMENT_SHEET_V2_WIDTH_ = 17;
 const TOURNAMENT_SHEET_V2_SCHEDULE_HEADERS_ = [
   '級', '参加費', '開催日', 'schedule ID', '申込期限', '会内振込期限',
   '本振込期限', '支払時期', '抽選結果日', '会場', '受付締切', '公認',
-  '振込先',
+  '振込先', '同期状態', '最終同期日時',
 ];
 
 const TOURNAMENT_SHEET_V2_ENTRY_HEADERS_ = [
@@ -150,16 +150,27 @@ function tournamentSheetV2Parse_(data, responseEndIndex) {
       markerRows.push(index);
     }
   }
-  if (markerRows.length !== 1) return null;
+  if (markerRows.length === 0) return null;
+  if (markerRows.length !== 1) {
+    throw new Error('大会管理データv2の開始マーカーが重複しています。');
+  }
   const start = markerRows[0];
+  if (Number((data[start] || [])[1]) !== TOURNAMENT_SHEET_V2_VERSION_) {
+    throw new Error('大会管理データv2のバージョンが不正です。');
+  }
   let end = -1;
+  let endCount = 0;
   for (let index = start + 1; index < data.length; index++) {
     if (String((data[index] || [])[0] || '') === TOURNAMENT_SHEET_V2_END_) {
-      end = index;
-      break;
+      endCount++;
+      if (end < 0) end = index;
     }
   }
   if (end < 0) throw new Error('大会管理データv2の終了マーカーがありません。');
+  if (endCount !== 1
+      || Number((data[end] || [])[1]) !== TOURNAMENT_SHEET_V2_VERSION_) {
+    throw new Error('大会管理データv2の終了マーカーが重複または不正です。');
+  }
 
   const metadata = {};
   const metadataRows = {};
@@ -174,6 +185,9 @@ function tournamentSheetV2Parse_(data, responseEndIndex) {
     const type = String(row[0] || '');
     if (type === '大会') {
       const key = String(row[1] || '');
+      if (!key || Object.prototype.hasOwnProperty.call(metadata, key)) {
+        throw new Error('大会管理データv2の大会項目が空または重複しています。');
+      }
       metadata[key] = row[2];
       metadataRows[key] = index + 1;
     }
@@ -198,6 +212,14 @@ function tournamentSheetV2Parse_(data, responseEndIndex) {
       legacyRecords.push(row.slice(1, 10));
     }
   }
+  [
+    '大会名', 'tournament ID', 'フォームID', 'フォーム公開URL',
+    'フォーム編集URL', '同期状態', '最終同期日時', '同期エラー',
+  ].forEach(key => {
+    if (!Object.prototype.hasOwnProperty.call(metadata, key)) {
+      throw new Error('大会管理データv2の大会項目が不足しています: ' + key);
+    }
+  });
   return {
     version: TOURNAMENT_SHEET_V2_VERSION_,
     start_index: start,
@@ -222,6 +244,7 @@ function tournamentSheetV2ValidateSnapshot_(snapshot, requireSynced) {
     throw new Error('大会管理データv2のtournament IDがありません。');
   }
   const scheduleKeys = {};
+  const scheduleIds = {};
   (snapshot.schedules || []).forEach(schedule => {
     if (!/^[A-E]$/.test(String(schedule.grade || ''))
         || (requireSynced === true && (!schedule.id || !schedule.held_on))) {
@@ -231,11 +254,22 @@ function tournamentSheetV2ValidateSnapshot_(snapshot, requireSynced) {
       throw new Error('大会管理データv2の日程級が重複しています。');
     }
     scheduleKeys[schedule.grade] = true;
+    if (schedule.id) {
+      const id = String(schedule.id);
+      if (scheduleIds[id]) {
+        throw new Error('大会管理データv2のschedule IDが重複しています。');
+      }
+      scheduleIds[id] = true;
+    }
   });
   if (!Object.keys(scheduleKeys).length) {
     throw new Error('大会管理データv2に日程がありません。');
   }
   const sourceRows = {};
+  const entryIds = {};
+  const allowedSyncStatuses = [
+    'synced', 'pending_api', 'pending_sheet', 'not_selected', 'superseded',
+  ];
   (snapshot.entries || []).forEach(entry => {
     if (!Number.isInteger(entry.source_row) || entry.source_row < 2
         || sourceRows[entry.source_row] || !entry.email || !entry.name || !entry.grade) {
@@ -245,7 +279,52 @@ function tournamentSheetV2ValidateSnapshot_(snapshot, requireSynced) {
         && (!entry.player_id || !entry.entry_id || !entry.schedule_id)) {
       throw new Error('同期済み申込のDB識別情報が不足しています。');
     }
+    if (!allowedSyncStatuses.includes(String(entry.sync_status || ''))) {
+      throw new Error('大会管理データv2の申込同期状態が不正です。');
+    }
+    if (entry.schedule_id && !scheduleIds[String(entry.schedule_id)]) {
+      throw new Error('大会管理データv2の申込schedule IDが日程に存在しません。');
+    }
+    if (entry.entry_id) {
+      const id = String(entry.entry_id);
+      if (entryIds[id]) {
+        throw new Error('大会管理データv2のentry IDが重複しています。');
+      }
+      entryIds[id] = true;
+    }
     sourceRows[entry.source_row] = true;
+  });
+  const announcementIds = {};
+  (snapshot.announcements || []).forEach(item => {
+    if (!item.id || announcementIds[String(item.id)]) {
+      throw new Error('大会管理データv2のannouncement IDが不足または重複しています。');
+    }
+    announcementIds[String(item.id)] = true;
+    (item.schedule_ids || []).forEach(id => {
+      if (!scheduleIds[String(id)]) {
+        throw new Error('大会管理データv2の案内対象日程が存在しません。');
+      }
+    });
+  });
+  const emailJobIds = {};
+  const deliveryIds = {};
+  (snapshot.email_jobs || []).forEach(item => {
+    if (!item.id || emailJobIds[String(item.id)]) {
+      throw new Error('大会管理データv2のemail job IDが不足または重複しています。');
+    }
+    emailJobIds[String(item.id)] = true;
+    (item.schedule_ids || []).forEach(id => {
+      if (!scheduleIds[String(id)]) {
+        throw new Error('大会管理データv2のメール対象日程が存在しません。');
+      }
+    });
+    (item.deliveries || []).forEach(delivery => {
+      if (!delivery.id || deliveryIds[String(delivery.id)]
+          || !delivery.entry_id) {
+        throw new Error('大会管理データv2の配信識別情報が不足または重複しています。');
+      }
+      deliveryIds[String(delivery.id)] = true;
+    });
   });
   return true;
 }

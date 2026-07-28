@@ -115,12 +115,41 @@ function sheetMigrationIsoDate_(value) {
   return match ? match[0] : '';
 }
 
+function sheetMigrationSnapshotSignature_(snapshot) {
+  const clean = JSON.parse(JSON.stringify(snapshot, (key, value) =>
+    key === 'synced_at' ? undefined : value
+  ));
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    JSON.stringify(clean),
+    Utilities.Charset.UTF_8
+  );
+  return bytes.map(value => {
+    const unsigned = value < 0 ? value + 256 : value;
+    return ('0' + unsigned.toString(16)).slice(-2);
+  }).join('');
+}
+
+function sheetMigrationLatestSourceRowsByEmail_(structure, emailColumn) {
+  const latest = {};
+  for (let index = 1; index < structure.response_end_index; index++) {
+    const email = String(
+      (structure.data[index] || [])[emailColumn] || ''
+    ).trim().toLowerCase();
+    if (email) latest[email] = index + 1;
+  }
+  return latest;
+}
+
 function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   const baseName = String(sheet.getName()).replace(/[A-E]+級$/, '');
   const tournament = taikaiFindTournament_(baseName);
+  const responseColumns = tournamentSheetResponseColumns_(structure);
   const pseudoEmails = [];
   for (let index = 1; index < structure.response_end_index; index++) {
-    const email = String((structure.data[index] || [])[1] || '').trim();
+    const email = String(
+      (structure.data[index] || [])[responseColumns.email] || ''
+    ).trim();
     if (email) pseudoEmails.push(pseudonymousEmailFor_(email));
   }
   const api = taikaiApiRequest_(
@@ -197,24 +226,39 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   api.entries.forEach(entry => {
     const key = String(entry.player_email || '').toLowerCase()
       + '|' + String(entry.grade || '').toUpperCase();
-    if (apiEntries[key]) {
-      throw new Error('API申込を疑似メールと級で一意に対応できません。');
+    if (!apiEntries[key]) apiEntries[key] = [];
+    apiEntries[key].push(entry);
+  });
+  Object.keys(apiEntries).forEach(key => {
+    const active = apiEntries[key].filter(entry => !entry.canceled_at);
+    if (active.length > 1) {
+      throw new Error('APIの有効申込を疑似メールと級で一意に対応できません。');
     }
-    apiEntries[key] = entry;
+    apiEntries[key] = active[0] || apiEntries[key].reduce((latest, entry) =>
+      !latest || taikaiCompareIds_(entry.entry_id, latest.entry_id) > 0
+        ? entry : latest
+    , null);
   });
   const now = new Date();
   const entries = [];
+  const latestSourceRowByEmail = sheetMigrationLatestSourceRowsByEmail_(
+    structure, responseColumns.email
+  );
+  const matchedApiEntries = {};
   for (let index = 1; index < structure.response_end_index; index++) {
     const row = structure.data[index] || [];
-    const email = String(row[1] || '').trim();
-    const name = String(row[2] || '').trim();
-    const grade = String(row[4] || '').replace(/級/g, '').trim().toUpperCase();
+    const email = String(row[responseColumns.email] || '').trim();
+    const name = String(row[responseColumns.name] || '').trim();
+    const grade = String(row[responseColumns.grade] || '')
+      .replace(/級/g, '').trim().toUpperCase();
     if (!email && !name) continue;
     if (!email || !name || !/^[A-E]$/.test(grade)) {
       throw new Error('回答行' + (index + 1) + 'のメール・氏名・級が不足しています。');
     }
+    const isLatest = latestSourceRowByEmail[email.toLowerCase()] === index + 1;
     const key = pseudonymousEmailFor_(email).toLowerCase() + '|' + grade;
-    const apiEntry = apiEntries[key];
+    const apiEntry = isLatest ? apiEntries[key] : null;
+    if (apiEntry) matchedApiEntries[String(apiEntry.entry_id)] = true;
     const sheetStatus = String(
       tournamentSheetPaymentStatus_(structure, index + 1) || ''
     ).trim();
@@ -222,7 +266,7 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
       || sheetStatus === 'くりこし';
     const requiresApiEntry = sheetStatus === '' || sheetStatus === '済'
       || isCarriedOver;
-    if (!apiEntry && requiresApiEntry) {
+    if (isLatest && !apiEntry && requiresApiEntry) {
       throw new Error('回答行' + (index + 1) + 'をAPI申込へ対応できません。');
     }
     entries.push({
@@ -240,11 +284,22 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
       paid_yen: apiEntry ? apiEntry.paid_yen : 0,
       balance_yen: apiEntry
         ? apiEntry.balance_yen : apiSchedules[grade].participation_fee_yen,
-      payment_status: apiEntry ? apiEntry.payment_status : 'not_selected',
-      sync_status: apiEntry ? 'synced' : 'not_selected',
+      payment_status: apiEntry
+        ? apiEntry.payment_status : (isLatest ? 'not_selected' : 'superseded'),
+      sync_status: apiEntry
+        ? 'synced' : (isLatest ? 'not_selected' : 'superseded'),
       synced_at: apiEntry ? now : '',
       sync_error: '',
     });
+  }
+  const unmatchedActiveEntries = api.entries.filter(entry =>
+    !entry.canceled_at && !matchedApiEntries[String(entry.entry_id)]
+  );
+  if (unmatchedActiveEntries.length) {
+    throw new Error(
+      'APIに大会シートの最新回答へ対応しない有効申込が'
+      + unmatchedActiveEntries.length + '件あります。'
+    );
   }
   const formId = tournamentSheetFormId_(structure);
   const editUrl = tournamentSheetFormEditUrl_(structure);
@@ -327,9 +382,8 @@ function inspectTournamentSheetMigration_(sheet) {
       String(value || '').trim() || '（見出しなし・' + (deleteStart + index) + '列目）'
     );
     result.response_end_index = structure.response_end_index;
-    result.non_empty_cell_count = sheetMigrationLegacyRecords_(
-      sheet, result
-    ).length;
+    const legacyRecords = sheetMigrationLegacyRecords_(sheet, result);
+    result.non_empty_cell_count = legacyRecords.length;
     result.move_target =
       '回答終端下の大会管理データv2（大会・日程・申込/支払・案内・メール・同期・旧管理監査）';
     if (result.non_empty_cell_count) {
@@ -338,7 +392,15 @@ function inspectTournamentSheetMigration_(sheet) {
         + 'セルを監査保存し、業務項目へ正規化してから旧領域を撤去します。'
       );
     }
-    result.warnings.push('API全件取得・日程/参加費・疑似メール/級の照合失敗時は実行しません。');
+    const snapshot = sheetMigrationSnapshot_(sheet, structure, legacyRecords);
+    result.api_verified = true;
+    result.tournament_id = snapshot.tournament_id;
+    result.schedule_count = snapshot.schedules.length;
+    result.entry_count = snapshot.entries.length;
+    result.announcement_count = snapshot.announcements.length;
+    result.email_job_count = snapshot.email_jobs.length;
+    result.snapshot_signature = sheetMigrationSnapshotSignature_(snapshot);
+    result.warnings.push('API全件取得・日程/参加費・疑似メール/級の照合を完了しました。');
     result.status = 'ready';
     result.executable = true;
     return result;
@@ -423,7 +485,42 @@ function backupNameForMigration_(migrationId) {
   return (SHEET_MIGRATION_BACKUP_PREFIX_ + migrationId).slice(0, 99);
 }
 
+function sheetMigrationCopyProtectionSettings_(source, target) {
+  target.setDescription(source.getDescription() || '');
+  if (source.isWarningOnly()) {
+    target.setWarningOnly(true);
+    return;
+  }
+  target.setWarningOnly(false);
+  const editors = source.getEditors().map(user => user.getEmail()).filter(Boolean);
+  if (editors.length) target.addEditors(editors);
+  if (source.canDomainEdit()) target.setDomainEdit(true);
+}
+
+function sheetMigrationRestoreProtections_(target, backup) {
+  [
+    SpreadsheetApp.ProtectionType.RANGE,
+    SpreadsheetApp.ProtectionType.SHEET,
+  ].forEach(type => {
+    target.getProtections(type).forEach(protection => protection.remove());
+  });
+  backup.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(source => {
+    const range = source.getRange();
+    const restored = target.getRange(range.getA1Notation()).protect();
+    sheetMigrationCopyProtectionSettings_(source, restored);
+  });
+  backup.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(source => {
+    const restored = target.protect();
+    restored.setUnprotectedRanges(source.getUnprotectedRanges().map(range =>
+      target.getRange(range.getA1Notation())
+    ));
+    sheetMigrationCopyProtectionSettings_(source, restored);
+  });
+}
+
 function sheetMigrationRestoreFromBackup_(target, backup) {
+  const targetFilter = target.getFilter();
+  if (targetFilter) targetFilter.remove();
   if (target.getMaxColumns() < backup.getMaxColumns()) {
     target.insertColumnsAfter(
       target.getMaxColumns(), backup.getMaxColumns() - target.getMaxColumns()
@@ -438,20 +535,119 @@ function sheetMigrationRestoreFromBackup_(target, backup) {
   } else if (target.getMaxRows() > backup.getMaxRows()) {
     target.deleteRows(backup.getMaxRows() + 1, target.getMaxRows() - backup.getMaxRows());
   }
+  target.getRange(
+    1, 1, target.getMaxRows(), target.getMaxColumns()
+  ).breakApart();
   target.clear();
   backup.getRange(
     1, 1, backup.getMaxRows(), backup.getMaxColumns()
   ).copyTo(target.getRange(
     1, 1, backup.getMaxRows(), backup.getMaxColumns()
   ));
+  for (let row = 1; row <= backup.getMaxRows(); row++) {
+    target.setRowHeight(row, backup.getRowHeight(row));
+    if (backup.isRowHiddenByUser(row)) target.hideRows(row);
+    else target.showRows(row);
+  }
+  for (let column = 1; column <= backup.getMaxColumns(); column++) {
+    target.setColumnWidth(column, backup.getColumnWidth(column));
+    if (backup.isColumnHiddenByUser(column)) target.hideColumns(column);
+    else target.showColumns(column);
+  }
+  backup.getDataRange().getMergedRanges().forEach(range => {
+    target.getRange(
+      range.getRow(), range.getColumn(), range.getNumRows(), range.getNumColumns()
+    ).merge();
+  });
+  target.setFrozenRows(backup.getFrozenRows());
+  target.setFrozenColumns(backup.getFrozenColumns());
+  target.setTabColor(backup.getTabColor());
+  target.setConditionalFormatRules(
+    backup.getConditionalFormatRules().map(rule => rule.copy().setRanges(
+      rule.getRanges().map(range => target.getRange(range.getA1Notation()))
+    ).build())
+  );
+  const backupFilter = backup.getFilter();
+  if (backupFilter) {
+    const sourceRange = backupFilter.getRange();
+    const restoredFilter = target.getRange(
+      sourceRange.getRow(),
+      sourceRange.getColumn(),
+      sourceRange.getNumRows(),
+      sourceRange.getNumColumns()
+    ).createFilter();
+    for (let column = sourceRange.getColumn();
+         column <= sourceRange.getLastColumn(); column++) {
+      const criteria = backupFilter.getColumnFilterCriteria(column);
+      if (criteria) restoredFilter.setColumnFilterCriteria(column, criteria);
+    }
+  }
+  sheetMigrationRestoreProtections_(target, backup);
 }
 
-function executeOneTournamentSheetMigration_(ss, sheetName) {
+function sheetMigrationBackupFingerprint_(sheet) {
+  const rows = sheet.getMaxRows();
+  const columns = sheet.getMaxColumns();
+  const range = sheet.getRange(1, 1, rows, columns);
+  return JSON.stringify({
+    rows: rows,
+    columns: columns,
+    values: range.getValues().map(row => row.map(sheetMigrationCanonicalValue_)),
+    formulas: range.getFormulas(),
+    notes: range.getNotes(),
+    number_formats: range.getNumberFormats(),
+    backgrounds: range.getBackgrounds(),
+    merged: range.getMergedRanges().map(item => item.getA1Notation()).sort(),
+    row_heights: Array.from({ length: rows }, (_, index) =>
+      [sheet.getRowHeight(index + 1), sheet.isRowHiddenByUser(index + 1)]
+    ),
+    column_widths: Array.from({ length: columns }, (_, index) =>
+      [sheet.getColumnWidth(index + 1), sheet.isColumnHiddenByUser(index + 1)]
+    ),
+    frozen_rows: sheet.getFrozenRows(),
+    frozen_columns: sheet.getFrozenColumns(),
+    tab_color: sheet.getTabColor(),
+  });
+}
+
+function sheetMigrationVerifyBackupRestore_(target, backup) {
+  if (sheetMigrationBackupFingerprint_(target)
+      !== sheetMigrationBackupFingerprint_(backup)) {
+    throw new Error('バックアップからの全セル・シート属性再読取検証に失敗しました。');
+  }
+  return true;
+}
+
+function sheetMigrationRowsCanonical_(rows) {
+  return JSON.stringify((rows || []).map(row =>
+    (row || []).map(sheetMigrationCanonicalValue_)
+  ));
+}
+
+function sheetMigrationVerifyRows_(sheet, startRow, expectedRows) {
+  const actualRows = sheet.getRange(
+    startRow, 1, expectedRows.length, TOURNAMENT_SHEET_V2_WIDTH_
+  ).getValues();
+  if (sheetMigrationRowsCanonical_(actualRows)
+      !== sheetMigrationRowsCanonical_(expectedRows)) {
+    throw new Error('大会管理データv2の全セル再読取検証に失敗しました。');
+  }
+  return true;
+}
+
+function executeOneTournamentSheetMigration_(ss, sheetName, expectedSignature) {
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) throw new Error('対象シートが見つかりません。');
   const plan = inspectTournamentSheetMigration_(sheet);
   if (!plan.executable) {
     return { sheet_name: sheetName, status: 'skipped', reason: plan.reason || plan.status };
+  }
+  if (!expectedSignature || plan.snapshot_signature !== expectedSignature) {
+    return {
+      sheet_name: sheetName,
+      status: 'skipped',
+      reason: 'dry-run後にシートまたはAPIが変更されました。再検査してください。',
+    };
   }
 
   const migrationId = sheetMigrationId_();
@@ -466,6 +662,9 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
       throw new Error('dry-run後に旧管理情報が変更されました。再検査してください。');
     }
     const snapshot = sheetMigrationSnapshot_(sheet, originalStructure, records);
+    if (sheetMigrationSnapshotSignature_(snapshot) !== expectedSignature) {
+      throw new Error('dry-run後にシートまたはAPIが変更されました。再検査してください。');
+    }
     const v2Rows = tournamentSheetV2Rows_(snapshot);
     backup = sheet.copyTo(ss).setName(backupName);
     backup.hideSheet();
@@ -499,6 +698,7 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
     sheet.getRange(startRow, 1, 1, TOURNAMENT_SHEET_V2_WIDTH_)
       .setBackground('#d9ead3').setFontWeight('bold');
 
+    sheetMigrationVerifyRows_(sheet, startRow, v2Rows);
     const converted = tournamentSheetStructure_(sheet, true);
     if (converted.version !== 2
         || String(converted.management.metadata['tournament ID'])
@@ -528,7 +728,10 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
   } catch (e) {
     let rollbackError = '';
     try {
-      if (backup) sheetMigrationRestoreFromBackup_(sheet, backup);
+      if (backup) {
+        sheetMigrationRestoreFromBackup_(sheet, backup);
+        sheetMigrationVerifyBackupRestore_(sheet, backup);
+      }
     } catch (rollbackException) {
       rollbackError = ' ロールバックにも失敗しました: ' + rollbackException.message;
     }
@@ -560,22 +763,32 @@ function executeTournamentSheetMigrations(sheetNamesJson) {
         + ' taikai_manage #54/#55完了後に実行してください。'
       );
     }
-    const names = JSON.parse(sheetNamesJson);
-    if (!Array.isArray(names) || !names.length) {
+    const requests = JSON.parse(sheetNamesJson);
+    if (!Array.isArray(requests) || !requests.length) {
       throw new Error('移行対象シートを1件以上選択してください。');
     }
     const allowed = {};
     tournamentSheetNamesForMigration_().forEach(name => { allowed[name] = true; });
     const unique = [];
-    names.forEach(name => {
-      const clean = String(name || '').trim();
+    requests.forEach(request => {
+      if (!request || typeof request !== 'object') {
+        throw new Error('dry-run結果がありません。再検査してください。');
+      }
+      const clean = String(request.sheet_name || '').trim();
       if (!allowed[clean]) throw new Error('移行対象外のシートです: ' + clean);
-      if (!unique.includes(clean)) unique.push(clean);
+      if (!unique.some(item => item.sheet_name === clean)) {
+        unique.push({
+          sheet_name: clean,
+          snapshot_signature: String(request.snapshot_signature || ''),
+        });
+      }
     });
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     return JSON.stringify({
       ok: true,
-      results: unique.map(name => executeOneTournamentSheetMigration_(ss, name)),
+      results: unique.map(item => executeOneTournamentSheetMigration_(
+        ss, item.sheet_name, item.snapshot_signature
+      )),
     });
     } catch (e) {
       return JSON.stringify({ error: e.message });
@@ -609,6 +822,7 @@ function refreshTournamentSheetV2FromApi_(sheet) {
     sheet.getRange(
       startRow, 1, rows.length, TOURNAMENT_SHEET_V2_WIDTH_
     ).setValues(rows);
+    sheetMigrationVerifyRows_(sheet, startRow, rows);
     const verified = tournamentSheetStructure_(sheet, false);
     if (verified.version !== 2
         || String(verified.management.metadata['tournament ID'])
@@ -633,6 +847,71 @@ function refreshTournamentSheetV2FromApi_(sheet) {
     announcement_count: snapshot.announcements.length,
     email_job_count: snapshot.email_jobs.length,
   };
+}
+
+function markTournamentSheetV2SyncState_(sheet, state, errorMessage, entryId) {
+  const structure = tournamentSheetStructure_(sheet, false);
+  if (structure.version !== 2) return false;
+  const message = String(errorMessage || '').slice(0, 5000);
+  const metadataRows = structure.management.metadata_rows;
+  sheet.getRange(metadataRows['同期状態'], 3).setValue(state);
+  sheet.getRange(metadataRows['同期エラー'], 3).setValue(message);
+  if (entryId) {
+    Object.keys(structure.management.entries_by_source_row).some(sourceRow => {
+      const item = structure.management.entries_by_source_row[sourceRow];
+      if (String(item.row[7] || '') !== String(entryId)) return false;
+      sheet.getRange(item.row_number, 15).setValue(state);
+      sheet.getRange(item.row_number, 17).setValue(message);
+      return true;
+    });
+  }
+  return true;
+}
+
+function tournamentSheetV2ByEntryId_(entryId) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const matches = [];
+  tournamentSheetNamesForMigration_().forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+    const structure = tournamentSheetStructure_(sheet, false);
+    if (structure.version !== 2) return;
+    const found = Object.keys(structure.management.entries_by_source_row).some(
+      sourceRow => String(
+        structure.management.entries_by_source_row[sourceRow].row[7] || ''
+      ) === String(entryId)
+    );
+    if (found) matches.push(sheet);
+  });
+  if (matches.length !== 1) {
+    throw new Error(
+      'entry ID ' + entryId + 'の大会シートを一意に特定できません'
+      + '（候補' + matches.length + '件）。'
+    );
+  }
+  return matches[0];
+}
+
+function refreshTournamentSheetV2ByEntryId_(entryId) {
+  const sheet = tournamentSheetV2ByEntryId_(entryId);
+  try {
+    return refreshTournamentSheetV2FromApi_(sheet);
+  } catch (error) {
+    markTournamentSheetV2SyncState_(
+      sheet, 'pending_sheet', error.message || error, entryId
+    );
+    throw error;
+  }
+}
+
+function markFiscalTournamentSheetsV2SyncState_(snapshot, state, errorMessage) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  (snapshot.tournaments || []).forEach(tournament => {
+    (tournament.sheet_names || []).forEach(sheetName => {
+      const sheet = ss.getSheetByName(sheetName);
+      if (sheet) markTournamentSheetV2SyncState_(sheet, state, errorMessage);
+    });
+  });
 }
 
 function refreshFiscalYearTournamentSheetsV2_(snapshot) {
@@ -664,6 +943,7 @@ function restoreTournamentSheetMigration(migrationId) {
       throw new Error('対象シートは復元前の列構造ではありません。');
     }
     sheetMigrationRestoreFromBackup_(target, backup);
+    sheetMigrationVerifyBackupRestore_(target, backup);
     const originalRow = historySheet.getRange(
       2, 1, historySheet.getLastRow() - 1, 1
     ).getValues().findIndex(row => String(row[0]) === item.migration_id) + 2;

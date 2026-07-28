@@ -73,11 +73,13 @@ function getLotteryResults(sheetName) {
     const paymentStatusIndex = responseData.payment_status_index;
 
     const stats = {}; // { grade: { winnerNames: [], loserNames: [] } }
-    const latestRows = latestFormRowsByPlayer_(responseData.rows);
+    const latestRows = latestFormRowsByPlayer_(
+      responseData.rows, responseData.columns
+    );
     latestRows.forEach(row => {
-      const name = String(row[2] || '').trim();
+      const name = String(row[responseData.columns.name] || '').trim();
       if (!name) return;
-      const grade = String(row[4] || '').trim()
+      const grade = String(row[responseData.columns.grade] || '').trim()
         .replace(/[Ａ-Ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
       if (!/^[A-E]$/.test(grade)) return;
       if (!stats[grade]) stats[grade] = { winnerNames: [], loserNames: [] };

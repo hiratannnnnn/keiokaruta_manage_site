@@ -252,12 +252,19 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     });
 
     const header = data[0] || [];
+    let responseColumns;
+    try {
+      responseColumns = tournamentSheetResponseColumns_(structure);
+    } catch (e) {
+      errors.push(sheetName + ': ' + e.message);
+      return;
+    }
     const rubyIndex = header.findIndex(value => String(value || '').includes('ふりがな'));
     const clubIndex = header.findIndex(value => String(value || '').includes('所属'));
     const entries = [];
     for (let i = 1; i < structure.response_end_index; i++) {
       const row = data[i];
-      const playerName = String(row[2] || '').trim();
+      const playerName = String(row[responseColumns.name] || '').trim();
       if (!playerName || !/[ 　]/.test(playerName)) continue;
 
       const payStatus = String(tournamentSheetPaymentStatus_(structure, i + 1) || '').trim();
@@ -266,8 +273,9 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       const isTarget = payStatus === '' || payStatus === '済'
         || isCarriedOver;
 
-      const email = String(row[1] || '').trim();
-      const grade = String(row[4] || '').replace(/級/g, '').trim().toUpperCase();
+      const email = String(row[responseColumns.email] || '').trim();
+      const grade = String(row[responseColumns.grade] || '')
+        .replace(/級/g, '').trim().toUpperCase();
       if (!currentFiscalGrades.includes(grade)) continue;
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       if (!email) {
@@ -292,12 +300,16 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
           held_on: heldOn,
           is_paid: payStatus === '済' || isCarriedOver,
           payment_method: isCarriedOver ? 'carried_over' : 'bank_transfer',
+          // v2の支払状態はAPIからの書戻し値。完全同期で履歴を再生成しない。
+          sync_payment: structure.version !== 2,
           source_sheet: sheetName,
           source_row: i + 1,
           // 同一人物・同一大会の重複時は、回答時刻が新しい行を正とする。
           // 時刻がない場合も後から読み込んだ行を採用できるよう順序を保持する。
-          registered_at_ms: row[0] && typeof row[0].getTime === 'function' && !isNaN(row[0].getTime())
-            ? row[0].getTime()
+          registered_at_ms: row[responseColumns.timestamp]
+            && typeof row[responseColumns.timestamp].getTime === 'function'
+            && !isNaN(row[responseColumns.timestamp].getTime())
+            ? row[responseColumns.timestamp].getTime()
             : null,
           source_order: entrySourceOrder++,
           is_sync_target: isTarget,
@@ -460,6 +472,9 @@ function syncFiscalYearDatabase() {
         });
       });
     } catch (mailError) {
+      markFiscalTournamentSheetsV2SyncState_(
+        snapshot, 'partial_mail', mailError.message || mailError
+      );
       return JSON.stringify({
         error: '大会・申込の差分同期は成功しましたが、メール同期に失敗しました。'
           + '同じ完全同期を再実行してください: ' + mailError.message,
@@ -467,13 +482,7 @@ function syncFiscalYearDatabase() {
         result: result,
       });
     }
-    const pendingCleared = taikaiClearPendingTournaments_(
-      snapshot.tournaments.map(item => item.name)
-    );
     const warnings = [];
-    if (!pendingCleared) {
-      warnings.push('DB未同期状態の解除に失敗しました。');
-    }
     if (gmailPlan.errors.length) {
       warnings.push(
         'Gmail IDを一意に確認できない案内が'
@@ -484,12 +493,47 @@ function syncFiscalYearDatabase() {
     try {
       sheetWriteback = refreshFiscalYearTournamentSheetsV2_(snapshot);
     } catch (writebackError) {
+      markFiscalTournamentSheetsV2SyncState_(
+        snapshot, 'pending_sheet', writebackError.message || writebackError
+      );
       return JSON.stringify({
         error: 'DB/API同期は成功しましたが、大会シートへの書戻しに失敗しました。'
           + '片側完了にはせず、同じ完全同期を再実行してください: '
           + writebackError.message,
         partial: true,
         result: result,
+      });
+    }
+    if (gmailPlan.errors.length) {
+      markFiscalTournamentSheetsV2SyncState_(
+        snapshot,
+        'partial_gmail',
+        'Gmail IDを一意に確認できない案内が' + gmailPlan.errors.length + '件あります。'
+      );
+    }
+    const pendingCleared = gmailPlan.errors.length
+      ? false
+      : taikaiClearPendingTournaments_(
+        snapshot.tournaments.map(item => item.name)
+      );
+    if (!gmailPlan.errors.length && !pendingCleared) {
+      warnings.push('DB未同期状態の解除に失敗しました。');
+    }
+    if (gmailPlan.errors.length) {
+      return JSON.stringify({
+        error: 'DB/APIと大会シートの同期は完了しましたが、Gmail IDを一意に'
+          + '確認できない案内が' + gmailPlan.errors.length
+          + '件あります。同じ完全同期を再実行してください。',
+        partial: true,
+        result: result,
+        mail_sync: mailResult,
+        gmail_links: {
+          linked_count: gmailLinked.length,
+          already_linked_count: gmailPlan.skipped.length,
+          unresolved_count: gmailPlan.errors.length,
+          unresolved: gmailPlan.errors,
+        },
+        sheet_writeback: sheetWriteback,
       });
     }
     return JSON.stringify({

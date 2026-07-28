@@ -1,6 +1,7 @@
 <script>
 let sheetMigrationExecutionEnabled = false;
 let sheetMigrationLoaded = false;
+let sheetMigrationSignatures = {};
 
 function sheetMigrationEscAttr(value) {
   return escHtml(String(value)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -44,6 +45,12 @@ function sheetMigrationPreview() {
 }
 
 function sheetMigrationRenderPlans(plans) {
+  sheetMigrationSignatures = {};
+  plans.forEach(plan => {
+    if (plan.status === 'ready' && plan.snapshot_signature) {
+      sheetMigrationSignatures[plan.sheet_name] = plan.snapshot_signature;
+    }
+  });
   const panel = document.getElementById('sheet-migration-plans');
   panel.style.display = '';
   const rows = plans.map(plan => {
@@ -103,6 +110,13 @@ function sheetMigrationSelectedNames() {
     .map(input => input.value);
 }
 
+function sheetMigrationSelectedRequests() {
+  return sheetMigrationSelectedNames().map(name => ({
+    sheet_name: name,
+    snapshot_signature: sheetMigrationSignatures[name] || '',
+  }));
+}
+
 function sheetMigrationUpdateRunButton() {
   document.getElementById('sheet-migration-run').disabled =
     !sheetMigrationExecutionEnabled || sheetMigrationSelectedNames().length === 0;
@@ -137,7 +151,9 @@ function sheetMigrationRun() {
       sheetMigrationPreview();
     })
     .withFailureHandler(error => alert('エラー: ' + error.message))
-    .executeTournamentSheetMigrations(JSON.stringify(names));
+    .executeTournamentSheetMigrations(JSON.stringify(
+      sheetMigrationSelectedRequests()
+    ));
 }
 
 function sheetMigrationRestore(migrationId) {

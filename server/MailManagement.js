@@ -722,8 +722,8 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   }
   const responseData = tournamentSheetResponseRowsWithStatus_(structure);
   const paymentStatusIndex = responseData.payment_status_index;
-  const data = latestFormRowsByPlayer_(responseData.rows)
-    .filter(row => row[2] !== '');
+  const data = latestFormRowsByPlayer_(responseData.rows, responseData.columns)
+    .filter(row => row[responseData.columns.name] !== '');
 
   const gradesArray = grades.replace('級', '').split('');
   const byGrade = {};
@@ -731,8 +731,8 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   const paidList = [];
 
   data.forEach(row => {
-    const name      = String(row[2]).replace('　', ' ');
-    const gradeStr  = String(row[4]);
+    const name      = String(row[responseData.columns.name]).replace('　', ' ');
+    const gradeStr  = String(row[responseData.columns.grade]);
     const isPaid    = String(row[paymentStatusIndex] || '').trim() === '済';
 
     if (isPaid && !paidList.includes(name)) paidList.push(name);

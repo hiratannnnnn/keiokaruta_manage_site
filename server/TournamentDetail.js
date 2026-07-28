@@ -13,6 +13,7 @@ function getTournamentDetail(name) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    const responseColumns = tournamentSheetResponseColumns_(structure);
     const data = structure.data;
     const rows = data.map(row => row.map(cell => formatCell(cell)));
     if (!rows.length) return JSON.stringify({ name, personHeaders: [], personRows: [], bottomLeft: [], bottomRight: [] });
@@ -26,7 +27,7 @@ function getTournamentDetail(name) {
     const personRows = [];
     const formEndIdx = structure.response_end_index;
     for (let i = 1; i < formEndIdx; i++) {
-      if (rows[i][2] !== '') {
+      if (rows[i][responseColumns.name] !== '') {
         personRows.push(
           rows[i].slice(0, rawColumnCount).concat([
             formatCell(tournamentSheetPaymentStatus_(structure, i + 1)),
@@ -212,10 +213,11 @@ function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    const responseColumns = tournamentSheetResponseColumns_(structure);
     const allData = structure.data;
     const formEndIdx = structure.response_end_index;
     for (let i = 1; i < formEndIdx; i++) {
-      if (String(allData[i][2]) === playerName) {
+      if (String(allData[i][responseColumns.name]) === playerName) {
         const currentValue = String(
           tournamentSheetPaymentStatus_(structure, i + 1) || ''
         ).trim();
@@ -259,6 +261,12 @@ function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
           );
         }
         tournamentSheetPaymentStatusRange_(sheet, structure, i + 1).setValue(value);
+        if (structure.version === 2) {
+          const entryRow = structure.management.entries_by_source_row[i + 1].row_number;
+          sheet.getRange(entryRow, 15).setValue('pending_api');
+          sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
+            .setValue('pending_api');
+        }
         return JSON.stringify({ ok: true });
       }
     }
@@ -276,6 +284,7 @@ function getTournamentPaySummary(name) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    const responseColumns = tournamentSheetResponseColumns_(structure);
     const allData = structure.data;
     const formEndIdx = structure.response_end_index;
     const feeMap     = getSuitouFeeMap_(allData, formEndIdx);
@@ -288,10 +297,10 @@ function getTournamentPaySummary(name) {
       ).trim();
       const isPaid    = payStatus === '済' || payStatus === '繰越' || payStatus === 'くりこし';
       if (!isPaid) continue;
-      const gradeStr = String(allData[i][4] || '').trim();
+      const gradeStr = String(allData[i][responseColumns.grade] || '').trim();
       const fee      = calcFeeFromGrade_(gradeStr, feeMap);
       if (fee <= 0) continue;
-      const playerName = String(allData[i][2] || '').trim();
+      const playerName = String(allData[i][responseColumns.name] || '').trim();
       count++;
       total += fee;
       if (!gradeMap[gradeStr]) gradeMap[gradeStr] = { fee, names: [] };

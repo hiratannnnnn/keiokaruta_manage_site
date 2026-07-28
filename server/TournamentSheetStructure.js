@@ -239,15 +239,51 @@ function tournamentSheetRawResponseColumnCount_(structure) {
     : structure.layout.payment_status_column - 1;
 }
 
+function tournamentSheetResponseColumn_(structure, field) {
+  const header = (structure.data[0] || []).slice(
+    0, tournamentSheetRawResponseColumnCount_(structure)
+  );
+  const predicates = {
+    timestamp: value => /タイムスタンプ|回答日時|送信日時/.test(value),
+    email: value => /メールアドレス|e-?mail/i.test(value),
+    name: value => /氏名|名前/.test(value),
+    grade: value => value === '級' || /参加.*級|出場.*級/.test(value),
+  };
+  if (!predicates[field]) throw new Error('回答項目の指定が不正です: ' + field);
+  const matches = [];
+  header.forEach((value, index) => {
+    if (predicates[field](String(value || '').replace(/\s+/g, '').trim())) {
+      matches.push(index);
+    }
+  });
+  if (matches.length !== 1) {
+    throw new Error(
+      'フォーム回答の「' + field + '」列を一意に特定できません'
+      + '（候補' + matches.length + '件）。'
+    );
+  }
+  return matches[0];
+}
+
+function tournamentSheetResponseColumns_(structure) {
+  return {
+    timestamp: tournamentSheetResponseColumn_(structure, 'timestamp'),
+    email: tournamentSheetResponseColumn_(structure, 'email'),
+    name: tournamentSheetResponseColumn_(structure, 'name'),
+    grade: tournamentSheetResponseColumn_(structure, 'grade'),
+  };
+}
+
 function tournamentSheetResponseRowsWithStatus_(structure) {
   const width = tournamentSheetRawResponseColumnCount_(structure);
+  const columns = tournamentSheetResponseColumns_(structure);
   const rows = [];
   for (let index = 1; index < structure.response_end_index; index++) {
     rows.push((structure.data[index] || []).slice(0, width).concat([
       tournamentSheetPaymentStatus_(structure, index + 1),
     ]));
   }
-  return { rows: rows, payment_status_index: width };
+  return { rows: rows, payment_status_index: width, columns: columns };
 }
 
 function tournamentSheetGradeFee_(structure, grade) {
