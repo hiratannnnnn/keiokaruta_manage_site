@@ -31,6 +31,7 @@ function getEnvironmentConfigurationStatus() {
     ];
     const requiredKeys = resourceKeys.concat([
       'TAIKAI_API_BASE_URL',
+      'TAIKAI_API_TOKEN',
       'TAIKAI_API_ALERT_EMAIL',
       'PSEUDO_EMAIL_SECRET',
       'LINE_LINK_WEBHOOK_SECRET',

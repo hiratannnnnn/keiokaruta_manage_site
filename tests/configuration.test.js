@@ -8,6 +8,7 @@ const board = fs.readFileSync(path.join(root, 'server/Board.js'), 'utf8');
 const settings = fs.readFileSync(path.join(root, 'server/Settings.js'), 'utf8');
 const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
 const claspignore = fs.readFileSync(path.join(root, '.claspignore'), 'utf8');
+const envExample = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
 
 [
   'MAIN_SPREADSHEET_ID',
@@ -22,6 +23,8 @@ assert.doesNotMatch(config, /['"][A-Za-z0-9_-]{30,}['"]/);
 assert.match(board, /CONFIG\.BOARD_SPREADSHEET_ID/);
 assert.match(settings, /'LINE_LINK_WEBHOOK_SECRET'/);
 assert.match(settings, /'LINE_LINK_BINDING_SECRET'/);
+assert.match(settings, /'TAIKAI_API_TOKEN'/);
+assert.match(envExample, /^TAIKAI_API_TOKEN=$/m);
 assert.doesNotMatch(board, /BOARD_SPREADSHEET_ID_\s*=/);
 assert.match(gitignore, /^\.env$/m);
 assert.match(claspignore, /^\.env$/m);
