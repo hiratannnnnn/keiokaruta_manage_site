@@ -45,8 +45,7 @@ function createDraft2(json) {
 }
 
 // タブ1補助：大会シートから抽選結果（氏名リスト）を取得
-// 当選判定: col[N+2] が '' / '済' / '繰越'含む / 'くりこし' → 当選
-// それ以外の非空文字列（例: '落選'等）→ 落選
+// 当選判定は選考状態を参照する。入金状態は当落と混同しない。
 // 表示名は dupName ロジック（名簿の重複苗字なら苗字＋名前の頭文字）で短縮
 function getLotteryResults(sheetName) {
   try {
@@ -69,24 +68,20 @@ function getLotteryResults(sheetName) {
     };
 
     const structure = tournamentSheetStructure_(sheet, false);
-    const responseData = tournamentSheetResponseRowsWithStatus_(structure);
-    const paymentStatusIndex = responseData.payment_status_index;
+    const records = tournamentSheetResponseRecords_(structure, false);
 
     const stats = {}; // { grade: { winnerNames: [], loserNames: [] } }
-    const latestRows = latestFormRowsByPlayer_(
-      responseData.rows, responseData.columns
-    );
-    latestRows.forEach(row => {
-      const name = String(row[responseData.columns.name] || '').trim();
+    records.forEach(record => {
+      const name = record.name;
       if (!name) return;
-      const grade = String(row[responseData.columns.grade] || '').trim()
+      const grade = record.grade
         .replace(/[Ａ-Ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
       if (!/^[A-E]$/.test(grade)) return;
       if (!stats[grade]) stats[grade] = { winnerNames: [], loserNames: [] };
-      const pay = String(row[paymentStatusIndex] || '').trim();
-      if (pay === '' || pay === '済') {
+      const selectionStatus = record.selection_status;
+      if (selectionStatus === '') {
         stats[grade].winnerNames.push(dupName(name));
-      } else if (pay.includes('キャンセル待ち')) {
+      } else if (selectionStatus.includes('キャンセル待ち')) {
         stats[grade].loserNames.push(dupName(name));
       }
     });

@@ -262,29 +262,31 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     const rubyIndex = header.findIndex(value => String(value || '').includes('ふりがな'));
     const clubIndex = header.findIndex(value => String(value || '').includes('所属'));
     const entries = [];
-    for (let i = 1; i < structure.response_end_index; i++) {
-      const row = data[i];
-      const playerName = String(row[responseColumns.name] || '').trim();
-      if (!playerName || !/[ 　]/.test(playerName)) continue;
+    const responseRecords = tournamentSheetResponseRecords_(structure, false);
+    responseRecords.forEach(record => {
+      const row = record.raw_values;
+      const playerName = record.name;
+      if (!playerName || !/[ 　]/.test(playerName)) return;
 
-      const payStatus = String(tournamentSheetPaymentStatus_(structure, i + 1) || '').trim();
-      const isCarriedOver = (payStatus.includes('繰') && payStatus.includes('越'))
-        || payStatus === 'くりこし';
-      const isTarget = payStatus === '' || payStatus === '済'
-        || isCarriedOver;
+      const selectionStatus = record.selection_status;
+      const isCarriedOver = structure.version === 1
+        && ((selectionStatus.includes('繰') && selectionStatus.includes('越'))
+          || selectionStatus === 'くりこし');
+      const isTarget = selectionStatus === ''
+        || (structure.version === 1
+          && (selectionStatus === '済' || isCarriedOver));
 
-      const email = String(row[responseColumns.email] || '').trim();
-      const grade = String(row[responseColumns.grade] || '')
-        .replace(/級/g, '').trim().toUpperCase();
-      if (!currentFiscalGrades.includes(grade)) continue;
+      const email = record.email;
+      const grade = record.grade;
+      if (!currentFiscalGrades.includes(grade)) return;
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       if (!email) {
         errors.push(sheetName + ': ' + playerName + 'のメールアドレスがありません。');
-        continue;
+        return;
       }
       if (!/^[A-E]$/.test(grade) || !heldOn) {
         errors.push(sheetName + ': ' + playerName + 'の級または開催日を特定できません。');
-        continue;
+        return;
       }
       try {
         const player = fiscalSyncPlayer_(playerName);
@@ -298,12 +300,12 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
           club: clubIndex >= 0 ? String(row[clubIndex] || '').trim() || null : null,
           grade: grade,
           held_on: heldOn,
-          is_paid: payStatus === '済' || isCarriedOver,
+          is_paid: record.is_paid,
           payment_method: isCarriedOver ? 'carried_over' : 'bank_transfer',
           // v2の支払状態はAPIからの書戻し値。完全同期で履歴を再生成しない。
           sync_payment: structure.version !== 2,
           source_sheet: sheetName,
-          source_row: i + 1,
+          source_row: record.source_row,
           // 同一人物・同一大会の重複時は、回答時刻が新しい行を正とする。
           // 時刻がない場合も後から読み込んだ行を採用できるよう順序を保持する。
           registered_at_ms: row[responseColumns.timestamp]
@@ -317,7 +319,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       } catch (e) {
         errors.push(sheetName + ': ' + e.message);
       }
-    }
+    });
 
     if (!grouped[baseName]) {
       grouped[baseName] = {
@@ -517,7 +519,25 @@ function syncFiscalYearDatabase() {
         snapshot.tournaments.map(item => item.name)
       );
     if (!gmailPlan.errors.length && !pendingCleared) {
-      warnings.push('DB未同期状態の解除に失敗しました。');
+      markFiscalTournamentSheetsV2SyncState_(
+        snapshot,
+        'partial_pending',
+        'DB未同期状態の解除に失敗しました。'
+      );
+      return JSON.stringify({
+        error: 'DB/API・大会シート・Gmailの同期は完了しましたが、'
+          + 'DB未同期状態の解除に失敗しました。同じ完全同期を再実行してください。',
+        partial: true,
+        result: result,
+        mail_sync: mailResult,
+        gmail_links: {
+          linked_count: gmailLinked.length,
+          already_linked_count: gmailPlan.skipped.length,
+          unresolved_count: 0,
+          unresolved: [],
+        },
+        sheet_writeback: sheetWriteback,
+      });
     }
     if (gmailPlan.errors.length) {
       return JSON.stringify({

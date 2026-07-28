@@ -212,7 +212,7 @@ function tournamentSheetFormPublicUrl_(structure) {
   return formId ? FormApp.openById(formId).getPublishedUrl() : '';
 }
 
-function tournamentSheetPaymentStatus_(structure, sourceRow) {
+function tournamentSheetRawSheetStatus_(structure, sourceRow) {
   if (structure.version === 2) {
     const item = structure.management.entries_by_source_row[sourceRow];
     return item ? item.row[5] : '';
@@ -222,7 +222,110 @@ function tournamentSheetPaymentStatus_(structure, sourceRow) {
   ];
 }
 
-function tournamentSheetPaymentStatusRange_(sheet, structure, sourceRow) {
+function tournamentSheetSelectionStatus_(structure, sourceRow) {
+  const value = String(
+    tournamentSheetRawSheetStatus_(structure, sourceRow) || ''
+  ).trim();
+  if (structure.version === 2
+      && (value === '済' || value === '繰越' || value === 'くりこし')) {
+    return '';
+  }
+  return value;
+}
+
+function tournamentSheetEntryPaymentStatus_(structure, sourceRow) {
+  if (structure.version === 2) {
+    const item = structure.management.entries_by_source_row[sourceRow];
+    return item ? String(item.row[13] || '').trim() : '';
+  }
+  const legacy = String(
+    tournamentSheetRawSheetStatus_(structure, sourceRow) || ''
+  ).trim();
+  return legacy === '済' || legacy === '繰越' || legacy === 'くりこし'
+    ? 'paid' : 'unpaid';
+}
+
+function tournamentSheetPaymentIsPaid_(record) {
+  return record.payment_status === 'paid'
+    || record.payment_status === 'overpaid'
+    || (record.balance_yen !== null
+      && record.balance_yen !== ''
+      && Number(record.balance_yen) <= 0);
+}
+
+function tournamentSheetRecordDisplayStatus_(record) {
+  if (record.selection_status) return record.selection_status;
+  if (record.is_paid) return '済';
+  if (record.payment_status === 'partial') return '一部入金';
+  if (record.payment_status === 'unpriced') return '参加費未設定';
+  return '';
+}
+
+function tournamentSheetResponseRecords_(structure, includeSuperseded) {
+  const columns = tournamentSheetResponseColumns_(structure);
+  const width = tournamentSheetRawResponseColumnCount_(structure);
+  const latestByEmail = {};
+  for (let index = 1; index < structure.response_end_index; index++) {
+    const email = String(
+      (structure.data[index] || [])[columns.email] || ''
+    ).trim().toLowerCase();
+    if (email) latestByEmail[email] = index + 1;
+  }
+  const records = [];
+  for (let index = 1; index < structure.response_end_index; index++) {
+    const sourceRow = index + 1;
+    const raw = structure.data[index] || [];
+    const email = String(raw[columns.email] || '').trim();
+    const name = String(raw[columns.name] || '').trim();
+    if (!email && !name) continue;
+    const management = structure.version === 2
+      ? structure.management.entries_by_source_row[sourceRow] : null;
+    const managementRow = management ? management.row : [];
+    const syncStatus = structure.version === 2
+      ? String(managementRow[14] || '').trim() : 'legacy';
+    const superseded = syncStatus === 'superseded'
+      || Boolean(email && latestByEmail[email.toLowerCase()] !== sourceRow);
+    if (superseded && includeSuperseded !== true) continue;
+    const record = {
+      source_row: sourceRow,
+      raw_values: raw.slice(0, width),
+      columns: columns,
+      email: email,
+      name: name,
+      grade: String(raw[columns.grade] || '').replace(/級/g, '').trim().toUpperCase(),
+      selection_status: tournamentSheetSelectionStatus_(structure, sourceRow),
+      payment_status: tournamentSheetEntryPaymentStatus_(structure, sourceRow),
+      player_id: structure.version === 2 ? String(managementRow[6] || '') : '',
+      entry_id: structure.version === 2 ? String(managementRow[7] || '') : '',
+      schedule_id: structure.version === 2 ? String(managementRow[8] || '') : '',
+      participation_fee_yen: structure.version === 2 ? managementRow[10] : null,
+      paid_yen: structure.version === 2 ? managementRow[11] : null,
+      balance_yen: structure.version === 2 ? managementRow[12] : null,
+      sync_status: syncStatus,
+      sync_error: structure.version === 2 ? String(managementRow[16] || '') : '',
+      superseded: superseded,
+    };
+    record.is_paid = tournamentSheetPaymentIsPaid_(record);
+    records.push(record);
+  }
+  return records;
+}
+
+function tournamentSheetResponseRecord_(structure, sourceRow, entryId) {
+  const matches = tournamentSheetResponseRecords_(structure, false).filter(record =>
+    record.source_row === Number(sourceRow)
+    && (structure.version !== 2 || record.entry_id === String(entryId || ''))
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      '大会申込を回答行とentry IDで一意に特定できません'
+      + '（候補' + matches.length + '件）。'
+    );
+  }
+  return matches[0];
+}
+
+function tournamentSheetSelectionStatusRange_(sheet, structure, sourceRow) {
   if (structure.version === 2) {
     const item = structure.management.entries_by_source_row[sourceRow];
     if (!item) {
@@ -272,18 +375,6 @@ function tournamentSheetResponseColumns_(structure) {
     name: tournamentSheetResponseColumn_(structure, 'name'),
     grade: tournamentSheetResponseColumn_(structure, 'grade'),
   };
-}
-
-function tournamentSheetResponseRowsWithStatus_(structure) {
-  const width = tournamentSheetRawResponseColumnCount_(structure);
-  const columns = tournamentSheetResponseColumns_(structure);
-  const rows = [];
-  for (let index = 1; index < structure.response_end_index; index++) {
-    rows.push((structure.data[index] || []).slice(0, width).concat([
-      tournamentSheetPaymentStatus_(structure, index + 1),
-    ]));
-  }
-  return { rows: rows, payment_status_index: width, columns: columns };
 }
 
 function tournamentSheetGradeFee_(structure, grade) {

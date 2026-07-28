@@ -23,18 +23,25 @@ function getTournamentDetail(name) {
       ? structure.layout.raw_response_column_count
       : structure.layout.payment_status_column - 1;
     const paymentStatusIndex = rawColumnCount;
-    const personHeaders = headerRow.slice(0, rawColumnCount).concat(['振込み済みか']);
-    const personRows = [];
+    const personHeaders = headerRow.slice(0, rawColumnCount)
+      .concat(['選考・支払状態']);
+    const responseRecords = tournamentSheetResponseRecords_(structure, false);
+    const personRecords = responseRecords.map(record => ({
+      source_row: record.source_row,
+      entry_id: record.entry_id,
+      player_id: record.player_id,
+      name: record.name,
+      selection_status: record.selection_status,
+      payment_status: record.payment_status,
+      paid_yen: record.paid_yen,
+      balance_yen: record.balance_yen,
+      display_status: tournamentSheetRecordDisplayStatus_(record),
+      values: record.raw_values.map(formatCell).concat([
+        tournamentSheetRecordDisplayStatus_(record),
+      ]),
+    }));
+    const personRows = personRecords.map(record => record.values);
     const formEndIdx = structure.response_end_index;
-    for (let i = 1; i < formEndIdx; i++) {
-      if (rows[i][responseColumns.name] !== '') {
-        personRows.push(
-          rows[i].slice(0, rawColumnCount).concat([
-            formatCell(tournamentSheetPaymentStatus_(structure, i + 1)),
-          ])
-        );
-      }
-    }
 
     let bottomLeft;
     let bottomRight;
@@ -84,24 +91,22 @@ function getTournamentDetail(name) {
       if (typeof fee !== 'number' || fee <= 0) continue;
       const date = formatCell(tournamentSheetGradeDate_(structure, gradeKey));
       // 参加者数カウント（全登録者で grade が一致するもの）
-      let count = 0;
-      for (let j = 1; j < formEndIdx; j++) {
-        if (!data[j][2]) continue;
-        const gradeStr = String(data[j][4] || '').trim()
-          .replace(/級/g, '')
-          .replace(/[Ａ-Ｅ]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-        if (gradeStr.split('').some(g => g === gradeKey)) count++;
-      }
+      const count = responseRecords.filter(record =>
+        record.grade.split('').includes(gradeKey)
+      ).length;
       gradeSummary.push({ grade: gradeKey, fee, count, total: fee * count, date });
     }
 
     return JSON.stringify({
       name,
+      sheetVersion: structure.version,
       paymentStatusIndex,
       isOfficial,
       isRegistered,
       personHeaders,
       personRows,
+      personRecords,
+      nameColumnIndex: responseColumns.name,
       bottomLeft,
       bottomRight,
       gradeSummary,
@@ -204,8 +209,8 @@ function getTournamentKeyValue(sheetName, key) {
   }
 }
 
-// 大会詳細シートの振込み済みか列（col N+2）を書き換える
-function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
+// 回答行・entry IDで対象を確定し、選考状態またはAPI支払い履歴を更新する。
+function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
   try {
     const isPaid = value === '済' || value === '繰越' || value === 'くりこし';
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -213,64 +218,48 @@ function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
-    const responseColumns = tournamentSheetResponseColumns_(structure);
-    const allData = structure.data;
-    const formEndIdx = structure.response_end_index;
-    for (let i = 1; i < formEndIdx; i++) {
-      if (String(allData[i][responseColumns.name]) === playerName) {
-        const currentValue = String(
-          tournamentSheetPaymentStatus_(structure, i + 1) || ''
-        ).trim();
-        const currentPaid = currentValue === '済'
-          || currentValue === '繰越' || currentValue === 'くりこし';
-        if (currentPaid && value === '') {
-          throw new Error(
-            '支払い履歴は削除できません。出納管理から対象履歴を取り消してください。'
-          );
-        }
-        if (isPaid) {
-          if (structure.version === 2) {
-            const entryRow = structure.management.entries_by_source_row[i + 1].row_number;
-            tournamentSheetPaymentStatusRange_(sheet, structure, i + 1).setValue(value);
-            sheet.getRange(entryRow, 15).setValue('pending_api');
-            try {
-              taikaiRecordFullPaymentByPlayer_(
-                String(sheetName).replace(/[A-E]+級$/, ''),
-                playerName,
-                useDeposit === true
-              );
-              refreshTournamentSheetV2FromApi_(sheet);
-            } catch (paymentError) {
-              const currentStructure = tournamentSheetStructure_(sheet, false);
-              const currentEntry = currentStructure.version === 2
-                ? currentStructure.management.entries_by_source_row[i + 1]
-                : null;
-              if (currentEntry) {
-                sheet.getRange(currentEntry.row_number, 15).setValue('pending_api');
-                sheet.getRange(currentEntry.row_number, 17)
-                  .setValue(String(paymentError.message || paymentError).slice(0, 5000));
-              }
-              throw paymentError;
-            }
-            return JSON.stringify({ ok: true });
-          }
-          taikaiRecordFullPaymentByPlayer_(
-            String(sheetName).replace(/[A-E]+級$/, ''),
-            playerName,
-            useDeposit === true
-          );
-        }
-        tournamentSheetPaymentStatusRange_(sheet, structure, i + 1).setValue(value);
-        if (structure.version === 2) {
-          const entryRow = structure.management.entries_by_source_row[i + 1].row_number;
-          sheet.getRange(entryRow, 15).setValue('pending_api');
-          sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
-            .setValue('pending_api');
-        }
-        return JSON.stringify({ ok: true });
-      }
+    const record = tournamentSheetResponseRecord_(structure, sourceRow, entryId);
+    if (record.is_paid && value === '') {
+      throw new Error(
+        '支払い履歴は削除できません。出納管理から対象履歴を取り消してください。'
+      );
     }
-    return JSON.stringify({ error: '選手が見つかりません' });
+    if (isPaid && structure.version === 2) {
+      if (!record.entry_id) {
+        throw new Error(
+          '申込IDがまだ同期されていません。先に完全同期を実行してください。'
+        );
+      }
+      const management = structure.management.entries_by_source_row[record.source_row];
+      sheet.getRange(management.row_number, 15).setValue('pending_api');
+      try {
+        taikaiRecordFullPaymentByEntry_(record.entry_id, useDeposit === true);
+        refreshTournamentSheetV2FromApi_(sheet);
+      } catch (paymentError) {
+        markTournamentSheetV2SyncState_(
+          sheet, 'pending_api', paymentError.message || paymentError, record.entry_id
+        );
+        throw paymentError;
+      }
+      return JSON.stringify({ ok: true });
+    }
+    if (isPaid) {
+      taikaiRecordFullPaymentByPlayer_(
+        String(sheetName).replace(/[A-E]+級$/, ''),
+        record.name,
+        useDeposit === true
+      );
+    }
+    tournamentSheetSelectionStatusRange_(
+      sheet, structure, record.source_row
+    ).setValue(isPaid && structure.version === 2 ? '' : value);
+    if (structure.version === 2) {
+      const management = structure.management.entries_by_source_row[record.source_row];
+      sheet.getRange(management.row_number, 15).setValue('pending_api');
+      sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
+        .setValue('pending_api');
+    }
+    return JSON.stringify({ ok: true });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
@@ -284,28 +273,24 @@ function getTournamentPaySummary(name) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
-    const responseColumns = tournamentSheetResponseColumns_(structure);
+    const records = tournamentSheetResponseRecords_(structure, false);
     const allData = structure.data;
     const formEndIdx = structure.response_end_index;
     const feeMap     = getSuitouFeeMap_(allData, formEndIdx);
 
     let count = 0, total = 0;
     const gradeMap = {}; // grade -> { fee, names[] }
-    for (let i = 1; i < formEndIdx; i++) {
-      const payStatus = String(
-        tournamentSheetPaymentStatus_(structure, i + 1) || ''
-      ).trim();
-      const isPaid    = payStatus === '済' || payStatus === '繰越' || payStatus === 'くりこし';
-      if (!isPaid) continue;
-      const gradeStr = String(allData[i][responseColumns.grade] || '').trim();
+    records.forEach(record => {
+      if (!record.is_paid) return;
+      const gradeStr = record.grade;
       const fee      = calcFeeFromGrade_(gradeStr, feeMap);
-      if (fee <= 0) continue;
-      const playerName = String(allData[i][responseColumns.name] || '').trim();
+      if (fee <= 0) return;
+      const playerName = record.name;
       count++;
       total += fee;
       if (!gradeMap[gradeStr]) gradeMap[gradeStr] = { fee, names: [] };
       gradeMap[gradeStr].names.push(playerName);
-    }
+    });
     const grades = Object.keys(gradeMap).sort().map(g => ({ grade: g, fee: gradeMap[g].fee, names: gradeMap[g].names }));
     return JSON.stringify({ ok: true, count, total, grades });
   } catch (e) {

@@ -38,6 +38,8 @@ assert.match(taikai, /function taikaiRecordFullPaymentByPlayer_/);
 assert.doesNotMatch(taikai, /\/entries\/.*\/payment['"]/);
 assert.doesNotMatch(calendar, /appendSuitouTx_/);
 assert.doesNotMatch(calendar, /removeSuitouNegTxByReason_/);
+assert.doesNotMatch(calendar, /getSheetByName\('出納管理'\)/);
+assert.match(calendar, /'PATCH',[\s\S]*'\/tournaments\/'/);
 assert.match(detail, /支払い履歴は削除できません/);
 
 const sandbox = {};

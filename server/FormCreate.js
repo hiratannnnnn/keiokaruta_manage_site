@@ -267,8 +267,11 @@ function createFormFromWeb(paramsJson) {
         dbSyncWarning +=
           ' なお、DB未同期状態の保存に失敗したため、この警告を控えておいてください。';
       }
-    } else {
-      taikaiClearPendingTournaments_([title]);
+    } else if (!taikaiClearPendingTournaments_([title])) {
+      dbSyncPending = true;
+      dbSyncWarning =
+        '大会はDBへ登録されましたが、DB未同期状態の解除に失敗しました。'
+        + '「今年度のシート→DB完全同期」を再実行してください。';
     }
     return JSON.stringify({
       ok: true,

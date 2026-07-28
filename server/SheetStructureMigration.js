@@ -145,22 +145,10 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   const baseName = String(sheet.getName()).replace(/[A-E]+級$/, '');
   const tournament = taikaiFindTournament_(baseName);
   const responseColumns = tournamentSheetResponseColumns_(structure);
-  const pseudoEmails = [];
-  for (let index = 1; index < structure.response_end_index; index++) {
-    const email = String(
-      (structure.data[index] || [])[responseColumns.email] || ''
-    ).trim();
-    if (email) pseudoEmails.push(pseudonymousEmailFor_(email));
-  }
   const api = taikaiApiRequest_(
     'POST',
     '/admin/tournament-sheet-snapshot',
-    {
-      tournament_id: String(tournament.id),
-      pseudonymous_emails: pseudoEmails.filter(
-        (value, index, values) => values.indexOf(value) === index
-      ),
-    },
+    { tournament_id: String(tournament.id) },
     null,
     { tournament_name: baseName, operation: '大会シート構造移行' }
   );
@@ -259,13 +247,15 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     const key = pseudonymousEmailFor_(email).toLowerCase() + '|' + grade;
     const apiEntry = isLatest ? apiEntries[key] : null;
     if (apiEntry) matchedApiEntries[String(apiEntry.entry_id)] = true;
-    const sheetStatus = String(
-      tournamentSheetPaymentStatus_(structure, index + 1) || ''
+    const rawSheetStatus = String(
+      tournamentSheetRawSheetStatus_(structure, index + 1) || ''
     ).trim();
-    const isCarriedOver = (sheetStatus.includes('繰') && sheetStatus.includes('越'))
-      || sheetStatus === 'くりこし';
-    const requiresApiEntry = sheetStatus === '' || sheetStatus === '済'
+    const isCarriedOver = (rawSheetStatus.includes('繰') && rawSheetStatus.includes('越'))
+      || rawSheetStatus === 'くりこし';
+    const requiresApiEntry = rawSheetStatus === '' || rawSheetStatus === '済'
       || isCarriedOver;
+    const selectionStatus = rawSheetStatus === '済' || isCarriedOver
+      ? '' : rawSheetStatus;
     if (isLatest && !apiEntry && requiresApiEntry) {
       throw new Error('回答行' + (index + 1) + 'をAPI申込へ対応できません。');
     }
@@ -274,7 +264,7 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
       email: email,
       name: name,
       grade: grade,
-      sheet_status: sheetStatus,
+      sheet_status: selectionStatus,
       player_id: apiEntry ? apiEntry.player_id : '',
       entry_id: apiEntry ? apiEntry.entry_id : '',
       schedule_id: apiEntry ? apiEntry.schedule_id : apiSchedules[grade].id,
@@ -518,6 +508,28 @@ function sheetMigrationRestoreProtections_(target, backup) {
   });
 }
 
+function sheetMigrationCloneProtections_(source, target) {
+  [
+    SpreadsheetApp.ProtectionType.RANGE,
+    SpreadsheetApp.ProtectionType.SHEET,
+  ].forEach(type => {
+    target.getProtections(type).forEach(protection => protection.remove());
+  });
+  source.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(protection => {
+    const cloned = target.getRange(
+      protection.getRange().getA1Notation()
+    ).protect();
+    sheetMigrationCopyProtectionSettings_(protection, cloned);
+  });
+  source.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(protection => {
+    const cloned = target.protect();
+    cloned.setUnprotectedRanges(protection.getUnprotectedRanges().map(range =>
+      target.getRange(range.getA1Notation())
+    ));
+    sheetMigrationCopyProtectionSettings_(protection, cloned);
+  });
+}
+
 function sheetMigrationRestoreFromBackup_(target, backup) {
   const targetFilter = target.getFilter();
   if (targetFilter) targetFilter.remove();
@@ -585,6 +597,88 @@ function sheetMigrationRestoreFromBackup_(target, backup) {
   sheetMigrationRestoreProtections_(target, backup);
 }
 
+function sheetMigrationFilterFingerprint_(sheet) {
+  const filter = sheet.getFilter();
+  if (!filter) return null;
+  const range = filter.getRange();
+  const criteria = [];
+  for (let column = range.getColumn(); column <= range.getLastColumn(); column++) {
+    const item = filter.getColumnFilterCriteria(column);
+    if (!item) continue;
+    criteria.push({
+      column: column,
+      type: item.getCriteriaType ? String(item.getCriteriaType() || '') : '',
+      values: item.getCriteriaValues
+        ? item.getCriteriaValues().map(sheetMigrationCanonicalValue_) : [],
+      hidden_values: item.getHiddenValues
+        ? item.getHiddenValues().map(String).sort() : [],
+    });
+  }
+  return { range: range.getA1Notation(), criteria: criteria };
+}
+
+function sheetMigrationProtectionFingerprint_(sheet) {
+  const describe = (protection, type) => ({
+    type: type,
+    range: type === 'range' ? protection.getRange().getA1Notation() : '',
+    description: protection.getDescription() || '',
+    warning_only: protection.isWarningOnly(),
+    domain_edit: protection.canDomainEdit(),
+    editors: protection.getEditors().map(user => user.getEmail()).filter(Boolean).sort(),
+    unprotected_ranges: type === 'sheet'
+      ? protection.getUnprotectedRanges().map(range => range.getA1Notation()).sort()
+      : [],
+  });
+  return []
+    .concat(sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+      .map(item => describe(item, 'range')))
+    .concat(sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)
+      .map(item => describe(item, 'sheet')))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+function sheetMigrationConditionalFingerprint_(sheet) {
+  const colorValue = color => {
+    if (!color) return '';
+    try {
+      return color.asRgbColor().asHexString();
+    } catch (e) {
+      return String(color);
+    }
+  };
+  const pointValue = point => point ? {
+    type: point.getType ? String(point.getType() || '') : '',
+    value: point.getValue ? String(point.getValue() || '') : '',
+    color: point.getColor ? colorValue(point.getColor()) : '',
+  } : null;
+  return sheet.getConditionalFormatRules().map(rule => {
+    const booleanCondition = rule.getBooleanCondition();
+    const gradientCondition = rule.getGradientCondition();
+    return {
+      ranges: rule.getRanges().map(range => range.getA1Notation()).sort(),
+      boolean: booleanCondition ? {
+        type: String(booleanCondition.getCriteriaType() || ''),
+        values: booleanCondition.getCriteriaValues().map(sheetMigrationCanonicalValue_),
+        background: booleanCondition.getBackground
+          ? String(booleanCondition.getBackground() || '') : '',
+        font_color: booleanCondition.getFontColor
+          ? String(booleanCondition.getFontColor() || '') : '',
+        bold: booleanCondition.isBold ? booleanCondition.isBold() : null,
+        italic: booleanCondition.isItalic ? booleanCondition.isItalic() : null,
+        strikethrough: booleanCondition.isStrikethrough
+          ? booleanCondition.isStrikethrough() : null,
+        underline: booleanCondition.isUnderline
+          ? booleanCondition.isUnderline() : null,
+      } : null,
+      gradient: gradientCondition ? {
+        min: pointValue(gradientCondition.getMinpoint()),
+        mid: pointValue(gradientCondition.getMidpoint()),
+        max: pointValue(gradientCondition.getMaxpoint()),
+      } : null,
+    };
+  });
+}
+
 function sheetMigrationBackupFingerprint_(sheet) {
   const rows = sheet.getMaxRows();
   const columns = sheet.getMaxColumns();
@@ -597,6 +691,9 @@ function sheetMigrationBackupFingerprint_(sheet) {
     notes: range.getNotes(),
     number_formats: range.getNumberFormats(),
     backgrounds: range.getBackgrounds(),
+    validations: range.getDataValidations().map(row =>
+      row.map(sheetMigrationValidationDescription_)
+    ),
     merged: range.getMergedRanges().map(item => item.getA1Notation()).sort(),
     row_heights: Array.from({ length: rows }, (_, index) =>
       [sheet.getRowHeight(index + 1), sheet.isRowHiddenByUser(index + 1)]
@@ -607,6 +704,9 @@ function sheetMigrationBackupFingerprint_(sheet) {
     frozen_rows: sheet.getFrozenRows(),
     frozen_columns: sheet.getFrozenColumns(),
     tab_color: sheet.getTabColor(),
+    conditional_formats: sheetMigrationConditionalFingerprint_(sheet),
+    filter: sheetMigrationFilterFingerprint_(sheet),
+    protections: sheetMigrationProtectionFingerprint_(sheet),
   });
 }
 
@@ -667,6 +767,8 @@ function executeOneTournamentSheetMigration_(ss, sheetName, expectedSignature) {
     }
     const v2Rows = tournamentSheetV2Rows_(snapshot);
     backup = sheet.copyTo(ss).setName(backupName);
+    // copyToの暗黙動作に依存せず、復元に必要な保護設定を明示的に複製する。
+    sheetMigrationCloneProtections_(sheet, backup);
     backup.hideSheet();
     history.getRange(historyRow, 1, 1, 10).setValues([[
       migrationId, sheetName, backupName, plan.edit_url_column,
@@ -679,8 +781,14 @@ function executeOneTournamentSheetMigration_(ss, sheetName, expectedSignature) {
       sheet.getRange(
         clearStartRow, 1,
         sheet.getMaxRows() - clearStartRow + 1, sheet.getMaxColumns()
-      ).clear();
+      ).breakApart().clear();
     }
+    sheet.getRange(
+      1,
+      plan.delete_start_column,
+      sheet.getMaxRows(),
+      plan.delete_column_count
+    ).breakApart();
     sheet.deleteColumns(plan.delete_start_column, plan.delete_column_count);
     if (sheet.getMaxColumns() < TOURNAMENT_SHEET_V2_WIDTH_) {
       sheet.insertColumnsAfter(
@@ -709,6 +817,14 @@ function executeOneTournamentSheetMigration_(ss, sheetName, expectedSignature) {
         || converted.management.announcements.length !== snapshot.announcements.length
         || converted.management.email_jobs.length !== snapshot.email_jobs.length) {
       throw new Error('大会管理データv2の再読取検証に失敗しました。');
+    }
+    const finalSnapshot = sheetMigrationSnapshot_(
+      sheet, converted, converted.management.legacy_records || []
+    );
+    if (sheetMigrationSnapshotSignature_(finalSnapshot) !== expectedSignature) {
+      throw new Error(
+        '書込み中にシートまたはAPIが変更されました。移行前の状態へ戻しました。'
+      );
     }
     history.getRange(historyRow, 7).setValue('success');
     return {

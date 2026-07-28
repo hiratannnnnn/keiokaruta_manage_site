@@ -248,62 +248,8 @@ function onConfirmOverlayClick(e) {
   if (e.target === document.getElementById('confirm-modal')) closeConfirmModal();
 }
 
-// ------------------------------------------------------------
-// 済ボタン（申込: col=7 / 振込: col=12）
-// ------------------------------------------------------------
-let _payMethodContext = null;
-
-function showPayMethodModal(name, btn) {
-  _payMethodContext = { name, btn };
-  document.getElementById('pay-method-message').textContent = `「${name}」の振込済みを入力します。`;
-  document.getElementById('pay-method-modal').style.display = 'flex';
-}
-
-function closePayMethodModal() {
-  document.getElementById('pay-method-modal').style.display = 'none';
-  _payMethodContext = null;
-}
-
-function onPayMethodOverlayClick(e) {
-  if (e.target === document.getElementById('pay-method-modal')) closePayMethodModal();
-}
-
-function executePayMethod(skipMinus) {
-  const { name, btn } = _payMethodContext;
-  closePayMethodModal();
-  btn.disabled = true;
-  google.script.run
-    .withSuccessHandler(res => {
-      const r = JSON.parse(res);
-      if (r.error) {
-        btn.disabled = false;
-        showAlertModal('エラー: ' + r.error);
-        return;
-      }
-      btn.textContent = '✓';
-      btn.classList.add('done-btn-done');
-      btn.onclick = function() { clearCalendarPayDone(name, this); };
-      const row     = btn.closest('tr');
-      const allDone = Array.from(row.querySelectorAll('.done-btn'))
-                           .every(b => b.classList.contains('done-btn-done'));
-      if (allDone) row.querySelector('.complete-btn').disabled = false;
-      _suAllData = null;
-    })
-    .withFailureHandler(e => {
-      btn.disabled = false;
-      showAlertModal('エラー: ' + e.message);
-    })
-    .setCalendarColumn(name, 12, '済', skipMinus);
-}
-
 function setCalendarDone(name, col, btn) {
   const label   = col === 7 ? '申込済' : '振込済';
-
-  // 振込済みは入力方法を選択させる
-  if (col === 12) {
-    showPayMethodModal(name, btn);
-    return;
-  }
 
   showConfirmModal(`「${name}」の${label}を入力しますか？`, () => {
     btn.disabled = true;
@@ -317,6 +263,9 @@ function setCalendarDone(name, col, btn) {
         }
         btn.textContent = '✓';
         btn.classList.add('done-btn-done');
+        if (col === 12) {
+          btn.onclick = function() { clearCalendarPayDone(name, this); };
+        }
         const row     = btn.closest('tr');
         const allDone = Array.from(row.querySelectorAll('.done-btn'))
                              .every(b => b.classList.contains('done-btn-done'));
@@ -509,6 +458,7 @@ function completeTournament(name, btn) {
 // ------------------------------------------------------------
 let detailColsHidden = false;
 let detailPaymentStatusIndex = 8;
+let detailNameColumnIndex = 2;
 let detailPendingNotice = null;
 let detailRequestSequence = 0;
 
@@ -627,6 +577,9 @@ function onDetailLoaded(json) {
   detailPaymentStatusIndex = Number.isInteger(res.paymentStatusIndex)
     ? res.paymentStatusIndex
     : 8;
+  detailNameColumnIndex = Number.isInteger(res.nameColumnIndex)
+    ? res.nameColumnIndex
+    : 2;
 
   // グレードサマリー
   const gradeSummary = res.gradeSummary || [];
@@ -640,16 +593,24 @@ function onDetailLoaded(json) {
       if (i === payColIdx) return `<th>${escHtml(h)}</th>${showPayBtns ? '<th></th>' : ''}`;
       return `<th>${escHtml(h)}</th>`;
     }).join('') + '</tr>';
+  const personRecords = Array.isArray(res.personRecords)
+    ? res.personRecords
+    : (res.personRows || []).map((values, index) => ({
+        source_row: index + 2,
+        entry_id: '',
+        name: String(values[detailNameColumnIndex] || ''),
+        values,
+      }));
   document.getElementById('detail-person-tbody').innerHTML =
-    res.personRows.map(row => {
-      const lastIdx = row.length - 1;
-      const name = String(row[2] || '');
+    personRecords.map(record => {
+      const row = record.values || [];
+      const name = String(record.name || row[detailNameColumnIndex] || '');
       return '<tr>' + row.map((cell, i) => {
-        if (i === lastIdx) {
+        if (i === detailNameColumnIndex) {
           return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
         }
         if (i === payColIdx) {
-          return `<td class="${payStatusCellClass(String(cell))}">${escHtml(String(cell))}</td>${showPayBtns ? renderPayButtonsTd(String(cell), String(row[2] || '')) : ''}`;
+          return `<td class="${payStatusCellClass(String(cell))}">${escHtml(String(cell))}</td>${showPayBtns ? renderPayButtonsTd(String(cell), name, record.source_row, record.entry_id, record.player_id) : ''}`;
         }
         return `<td>${escHtml(cell)}</td>`;
       }).join('') + '</tr>';
@@ -696,6 +657,11 @@ function onDetailLoaded(json) {
     button.dataset.defaultText = label;
     button.classList.remove('op-btn-done');
   });
+  const usesLegacySheetOperations = Number(res.sheetVersion || 1) === 1;
+  document.getElementById('btn-register').style.display =
+    usesLegacySheetOperations ? '' : 'none';
+  document.getElementById('btn-count').style.display =
+    usesLegacySheetOperations ? '' : 'none';
 
   // 登録済みならボタンを緑に
   const registerButton = document.getElementById('btn-register');
@@ -890,7 +856,7 @@ function triggerDeleteTournament() {
 }
 
 // ------------------------------------------------------------
-// 振込み済みか列のセル描画・書き込み
+// 選考・支払状態のセル描画・更新
 // ------------------------------------------------------------
 function payStatusCellClass(value) {
   if (value.includes('期限前キャンセル')) return 'cancel-status-cell cancel-status-before';
@@ -898,57 +864,50 @@ function payStatusCellClass(value) {
   return '';
 }
 
-function renderPayButtonsHtml(value, playerName) {
-  const esc = escAttr(playerName);
+function renderPayButtonsHtml(value, playerName, sourceRow, entryId, playerId) {
+  const identity = `data-player-name="${escAttr(playerName)}" data-source-row="${escAttr(sourceRow)}" data-entry-id="${escAttr(entryId)}" data-player-id="${escAttr(playerId)}"`;
   const isZumi   = value.includes('済');
   const isWaitlisted = value.includes('キャンセル待ち');
   const isBeforeCancel = value.includes('期限前キャンセル');
   const isAfterCancel = value.includes('期限後キャンセル');
   if (isZumi) {
-    return `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
+    return '<span class="pay-recorded-note">取消は出納管理から</span>';
   } else if (isWaitlisted) {
-    return `<button class="pay-btn" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'済',this)">済</button>`
-         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
+    return `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">済</button>`
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
   } else if (isBeforeCancel) {
-    return `<button class="pay-btn pay-btn-cancel-after" data-player-name="${esc}" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限後キャンセル',this)">期限後へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
+    return `<button class="pay-btn pay-btn-cancel-after" ${identity} title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限後キャンセル')">期限後へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
   } else if (isAfterCancel) {
-    return `<button class="pay-btn pay-btn-cancel-before" data-player-name="${esc}" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限前キャンセル',this)">期限前へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
+    return `<button class="pay-btn pay-btn-cancel-before" ${identity} title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限前キャンセル')">期限前へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
   } else {
-    return `<button class="pay-btn" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'済',this)">済</button>`
-         + `<button class="pay-btn pay-btn-cancel" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatusCancel(this.dataset.playerName,this)">キャンセル待ち</button>`
-         + `<button class="pay-btn pay-btn-cancel-before" data-player-name="${esc}" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限前キャンセル',this)">期限前キャンセル</button>`
-         + `<button class="pay-btn pay-btn-cancel-after" data-player-name="${esc}" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限後キャンセル',this)">期限後キャンセル</button>`;
+    return `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">済</button>`
+         + `<button class="pay-btn pay-btn-cancel" ${identity} onclick="event.stopPropagation();setPayStatusCancelFromButton(this)">キャンセル待ち</button>`
+         + `<button class="pay-btn pay-btn-cancel-before" ${identity} title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限前キャンセル')">期限前キャンセル</button>`
+         + `<button class="pay-btn pay-btn-cancel-after" ${identity} title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限後キャンセル')">期限後キャンセル</button>`;
   }
 }
 
-function renderPayButtonsTd(value, playerName) {
-  return `<td class="pay-cell">${renderPayButtonsHtml(value, playerName)}</td>`;
+function renderPayButtonsTd(value, playerName, sourceRow, entryId, playerId) {
+  return `<td class="pay-cell">${renderPayButtonsHtml(value, playerName, sourceRow, entryId, playerId)}</td>`;
 }
 
-function updateDetailPayCell(playerName, value) {
-  const payColIdx = detailPaymentStatusIndex;
-  const showPayBtns = true;
-  for (const row of document.getElementById('detail-person-tbody').querySelectorAll('tr')) {
-    const cells = row.querySelectorAll('td');
-    if (cells.length > 2 && cells[2].textContent.trim() === playerName) {
-      cells[payColIdx].textContent = value;
-      cells[payColIdx].className = payStatusCellClass(value);
-      if (showPayBtns && cells[payColIdx + 1]) {
-        cells[payColIdx + 1].className = 'pay-cell';
-        cells[payColIdx + 1].innerHTML = renderPayButtonsHtml(value, playerName);
-      }
-      break;
-    }
-  }
+function detailIdentityFromButton(btn) {
+  return {
+    playerName: String(btn.dataset.playerName || ''),
+    sourceRow: Number(btn.dataset.sourceRow),
+    entryId: String(btn.dataset.entryId || ''),
+    playerId: String(btn.dataset.playerId || ''),
+  };
 }
 
-function setPayStatusCancel(playerName, btn) {
+function setPayStatusCancelFromButton(btn) {
+  const identity = detailIdentityFromButton(btn);
   const tournamentName = document.getElementById('detail-title').textContent;
   showInputModal(
     'キャンセル待ち番号入力',
-    `「${playerName}」のキャンセル待ち番号を入力してください`,
+    `「${identity.playerName}」のキャンセル待ち番号を入力してください`,
     (num) => {
       const value = `キャンセル待ち${num}番`;
       btn.disabled = true;
@@ -963,7 +922,9 @@ function setPayStatusCancel(playerName, btn) {
           btn.disabled = false;
           showAlertModal('エラー: ' + e.message);
         })
-        .setDetailPayStatus(tournamentName, playerName, value);
+        .setDetailPayStatus(
+          tournamentName, identity.sourceRow, identity.entryId, value, false
+        );
     }
   );
 }
@@ -981,7 +942,7 @@ function executeDepositChoice(useDeposit) {
   if (_depositChoiceCallback) { _depositChoiceCallback(useDeposit); _depositChoiceCallback = null; }
 }
 
-function _doSetPayStatus(tournamentName, playerName, value, btn, useDeposit) {
+function _doSetPayStatus(tournamentName, identity, value, btn, useDeposit) {
   btn.disabled = true;
   google.script.run
     .withSuccessHandler(res => {
@@ -989,16 +950,20 @@ function _doSetPayStatus(tournamentName, playerName, value, btn, useDeposit) {
       const r = JSON.parse(res);
       if (r.error) { showAlertModal('エラー: ' + r.error); return; }
       if (value === '済') _suAllData = null;
-      updateDetailPayCell(playerName, value);
+      openTournamentDetail(tournamentName);
     })
     .withFailureHandler(e => {
       btn.disabled = false;
       showAlertModal('エラー: ' + e.message);
     })
-    .setDetailPayStatus(tournamentName, playerName, value, useDeposit);
+    .setDetailPayStatus(
+      tournamentName, identity.sourceRow, identity.entryId, value, useDeposit
+    );
 }
 
-function setPayStatus(playerName, value, btn) {
+function setPayStatusFromButton(btn, value) {
+  const identity = detailIdentityFromButton(btn);
+  const playerName = identity.playerName;
   const tournamentName = document.getElementById('detail-title').textContent;
   const label = value === '' ? 'クリア（空欄）' : `「${value}」`;
   const obligation = value === '期限前キャンセル'
@@ -1008,7 +973,7 @@ function setPayStatus(playerName, value, btn) {
       : '';
   showConfirmModal(`「${playerName}」の振込状況を${label}にしますか？${obligation}`, () => {
     if (value !== '済') {
-      _doSetPayStatus(tournamentName, playerName, value, btn, false);
+      _doSetPayStatus(tournamentName, identity, value, btn, false);
       return;
     }
     // 済の場合：デポジット存在確認
@@ -1016,18 +981,18 @@ function setPayStatus(playerName, value, btn) {
       .withSuccessHandler(res => {
         const r = JSON.parse(res);
         if (r.error || !r.deposit) {
-          _doSetPayStatus(tournamentName, playerName, value, btn, false);
+          _doSetPayStatus(tournamentName, identity, value, btn, false);
           return;
         }
         showDepositChoiceModal(
           `${playerName} さんのデポジット（${r.deposit.amount.toLocaleString()}円）が存在します。\nここから使いますか？`,
-          useDeposit => _doSetPayStatus(tournamentName, playerName, value, btn, useDeposit)
+          useDeposit => _doSetPayStatus(tournamentName, identity, value, btn, useDeposit)
         );
       })
       .withFailureHandler(() => {
-        _doSetPayStatus(tournamentName, playerName, value, btn, false);
+        _doSetPayStatus(tournamentName, identity, value, btn, false);
       })
-      .getPlayerDeposit(playerName);
+      .getPlayerDeposit(identity.playerId, playerName);
   });
 }
 

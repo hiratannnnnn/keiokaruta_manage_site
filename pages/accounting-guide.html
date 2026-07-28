@@ -8,51 +8,51 @@
       </button>
     </div>
     <p class="accounting-guide-lead">
-      出納管理では、選手ごとの参加費をプラスとマイナスの記録で管理します。
-      操作前に、どの記録が作られるかを確認してください。
+      出納管理では、DBに保存された選手ごとの請求額・支払い履歴・デポジット履歴を表示します。
+      大会シートの文字列や再計算結果は会計の正本にしません。
     </p>
 
     <div class="accounting-guide-summary" aria-label="基本的な記録の流れ">
       <div class="accounting-guide-step">
         <span class="accounting-guide-step-number">1</span>
         <div>
-          <strong>選手の支払いを確認</strong>
-          <p>大会詳細で選手を「済」にすると、その選手の参加費がプラスで記録されます。</p>
+          <strong>参加費を確定</strong>
+          <p>大会日程の参加費から、申込ごとの請求額が決まります。</p>
         </div>
       </div>
       <div class="accounting-guide-arrow" aria-hidden="true">→</div>
       <div class="accounting-guide-step">
         <span class="accounting-guide-step-number">2</span>
         <div>
-          <strong>主催者へ送金</strong>
-          <p>大会一覧で「通常の振込済み」にすると、対象者の参加費がマイナスで記録されます。</p>
+          <strong>入金を記録</strong>
+          <p>大会詳細または出納管理から、対象の申込IDへ支払いを記録します。</p>
         </div>
       </div>
       <div class="accounting-guide-arrow" aria-hidden="true">→</div>
       <div class="accounting-guide-step">
         <span class="accounting-guide-step-number">3</span>
         <div>
-          <strong>収支を確認</strong>
-          <p>同じ大会・選手のプラスとマイナスが対応すると、通常の参加費収支は0円になります。</p>
+          <strong>残額を確認</strong>
+          <p>請求額－有効な支払い額が0円になれば、支払い完了です。</p>
         </div>
       </div>
     </div>
 
     <div class="accounting-guide-grid">
       <section class="accounting-guide-card">
-        <h2>金額の符号</h2>
+        <h2>金額の見方</h2>
         <dl class="accounting-guide-definitions">
           <div>
-            <dt><span class="accounting-guide-sign is-positive">＋</span> プラス</dt>
-            <dd>選手から会へ入る予定・入った参加費を表します。</dd>
+            <dt>請求額</dt>
+            <dd>その申込に必要な参加費です。</dd>
           </div>
           <div>
-            <dt><span class="accounting-guide-sign is-negative">－</span> マイナス</dt>
-            <dd>会から大会主催者へ送る参加費や、デポジットの使用を表します。</dd>
+            <dt>支払済額</dt>
+            <dd>取消されていない支払い履歴の合計です。</dd>
           </div>
           <div>
-            <dt><span class="accounting-guide-sign is-zero">0</span> 残高</dt>
-            <dd>通常は受領と送金が対応した状態です。0円でない場合は、未回収・未送金・デポジットなどの理由を確認します。</dd>
+            <dt>残額</dt>
+            <dd>請求額から支払済額を引いた金額です。0円以下なら支払い完了です。</dd>
           </div>
         </dl>
       </section>
@@ -65,7 +65,7 @@
         </p>
         <p>
           選手を「済」にする際に利用可能なデポジットが見つかると、使用するか確認されます。
-          使用した場合は、デポジットのマイナス記録と大会参加費のプラス記録が追加されます。
+          使用した場合は、デポジットの利用履歴と対象申込への支払い履歴が対応して記録されます。
         </p>
         <div class="accounting-guide-warning">
           現在は一部だけを指定して充当する操作には対応しておらず、利用可能なデポジット残高の全額を使用します。
@@ -75,14 +75,13 @@
 
       <section class="accounting-guide-card">
         <h2>大会の「振込済み」</h2>
-        <p>大会一覧で振込済みを入力するときは、処理方法を選びます。</p>
-        <ul>
-          <li><strong>通常の振込済み：</strong>主催者へ送金した参加費をマイナス計上します。</li>
-          <li><strong>デポジットとして完了：</strong>大会分のマイナス計上を行わず、振込完了だけを記録します。</li>
-        </ul>
+        <p>
+          大会一覧の「振込済み」は、会から大会主催者への送金が完了したという大会状態です。
+          選手ごとの支払い履歴やデポジット履歴は追加・削除しません。
+        </p>
         <div class="accounting-guide-warning">
-          「デポジットとして完了」は、選手個人のデポジットを自動で探して消費する操作ではありません。
-          出納管理の残高が正しいことを確認して使用してください。
+          選手の入金訂正は大会の「振込済み」を取り消すのではなく、出納管理で対象履歴を
+          取り消し、正しい申込へ記録してください。
         </div>
       </section>
 
@@ -93,8 +92,8 @@
           <li><strong>期限後キャンセル：</strong>参加費の支払い義務ありとして扱います。</li>
         </ul>
         <div class="accounting-guide-warning">
-          期限後キャンセルへの変更だけでは、参加費のプラス記録は自動作成されません。
-          実際の入金状況を確認し、必要なトランザクションを出納管理で記録してください。
+          キャンセル状態の変更だけでは支払い履歴は作成されません。
+          実際の入金状況を確認し、必要な支払いを出納管理で記録してください。
         </div>
         <p>
           実際の入金や返金と画面の状態が一致しない場合は、自動処理だけで完結させず、
@@ -107,12 +106,12 @@
       <h2>大会を完了する前の確認</h2>
       <ol>
         <li>各選手の「済」「期限前キャンセル」「期限後キャンセル」が実態と一致している</li>
-        <li>大会主催者への振込方法と、作成されたマイナス記録が一致している</li>
+        <li>大会主催者への振込が完了している</li>
         <li>デポジットを使用した選手の残高に不自然な差額がない</li>
-        <li>大会ごとの参加費収支が精算済みになっている</li>
+        <li>各申込の請求額・支払済額・残額が実態と一致している</li>
       </ol>
       <p class="accounting-guide-note">
-        大会完了時にも収支の不一致が検査されます。エラーになった場合は、表示された選手の記録を出納管理で確認してください。
+        大会完了時は、DB上の申込処理完了・大会振込完了の両方を確認します。
       </p>
     </section>
   </div>

@@ -109,6 +109,45 @@ assert.deepStrictEqual(
   { 'first@example.com': 3 }
 );
 
+const recordStructure = {
+  version: 2,
+  data: [
+    ['送信日時', '参加級', '連絡用メールアドレス', '氏名'],
+    [new Date('2026-07-01T00:00:00Z'), 'A級', 'same@example.com', '旧回答'],
+    [new Date('2026-07-02T00:00:00Z'), 'A級', 'same@example.com', '最新回答'],
+    [new Date('2026-07-03T00:00:00Z'), 'B級', 'other@example.com', '別回答'],
+  ],
+  response_end_index: 4,
+  layout: { raw_response_column_count: 4 },
+  management: {
+    entries_by_source_row: {
+      2: { row: ['申込', 2, '', '', '', '', '', '', '', '', 2500, 0, 2500, 'unpaid', 'superseded'] },
+      3: { row: ['申込', 3, '', '', '', '済', 'p3', 'e3', 's3', '', 2500, 0, 2500, 'unpaid', 'synced'] },
+      4: { row: ['申込', 4, '', '', '', 'キャンセル待ち1番', 'p4', 'e4', 's4', '', 2500, 2500, 0, 'paid', 'synced'] },
+    },
+  },
+};
+const activeRecords = sandbox.tournamentSheetResponseRecords_(recordStructure, false);
+assert.strictEqual(activeRecords.length, 2);
+assert.strictEqual(activeRecords[0].source_row, 3);
+assert.strictEqual(activeRecords[0].selection_status, '');
+assert.strictEqual(activeRecords[0].is_paid, false);
+assert.strictEqual(sandbox.tournamentSheetRecordDisplayStatus_(activeRecords[0]), '');
+assert.strictEqual(activeRecords[1].selection_status, 'キャンセル待ち1番');
+assert.strictEqual(activeRecords[1].is_paid, true);
+assert.strictEqual(
+  sandbox.tournamentSheetRecordDisplayStatus_(activeRecords[1]),
+  'キャンセル待ち1番'
+);
+assert.strictEqual(
+  sandbox.tournamentSheetResponseRecord_(recordStructure, 4, 'e4').entry_id,
+  'e4'
+);
+assert.throws(
+  () => sandbox.tournamentSheetResponseRecord_(recordStructure, 4, 'wrong'),
+  /一意に特定/
+);
+
 const parsed = sandbox.tournamentSheetV2Parse_(
   [['送信日時', 'メールアドレス']].concat(rows), 1
 );
@@ -126,8 +165,17 @@ const responseSheet = {
   insertRowBefore(rowNumber) {
     writes.push({ method: 'insert', rowNumber });
   },
+  deleteRow(rowNumber) {
+    writes.push({ method: 'delete', rowNumber });
+  },
   getRange(rowNumber, column, rowCount, columnCount) {
     return {
+      getValue() {
+        return '';
+      },
+      getValues() {
+        return [new Array(columnCount || 1).fill('')];
+      },
       clearContent() {
         writes.push({ method: 'clear', rowNumber, column, rowCount, columnCount });
         return this;
@@ -166,6 +214,12 @@ const formStructure = {
     metadata_rows: { '同期状態': 10, '同期エラー': 11, '最終同期日時': 12 },
   },
 };
+sandbox.tournamentSheetStructure_ = () => ({
+  version: 2,
+  management: {
+    metadata_rows: { '同期状態': 11, '同期エラー': 12, '最終同期日時': 13 },
+  },
+});
 sandbox.recordFormResponseInTournamentSheetV2_(
   responseSheet,
   formStructure,
@@ -184,10 +238,13 @@ sandbox.recordFormResponseInTournamentSheetV2_(
   null
 );
 assert.ok(writes.some(item =>
-  item.method === 'value' && item.rowNumber === 7
-  && item.column === 15 && item.value === 'superseded'
+  item.method === 'values' && item.rowNumber === 7
+  && item.column === 7 && item.values[0][7] === 'superseded'
+  && item.values[0][8] === 'superseded'
 ));
-const insertedEntry = writes.find(item => item.method === 'values');
+const insertedEntry = writes.find(item =>
+  item.method === 'values' && item.rowNumber === 8 && item.column === 1
+);
 assert.strictEqual(insertedEntry.values[0][11], 1000);
 assert.strictEqual(insertedEntry.values[0][12], 1500);
 assert.strictEqual(insertedEntry.values[0][13], 'partial');
@@ -200,9 +257,11 @@ assert.match(migrationSource, /全セル再読取検証/);
 assert.match(migrationSource, /開催日または参加費がAPIと一致しません/);
 assert.match(migrationSource, /sheetMigrationRestoreFromBackup_/);
 assert.match(migrationSource, /sheetMigrationRestoreProtections_/);
+assert.match(migrationSource, /sheetMigrationCloneProtections_/);
 assert.match(migrationSource, /sheetMigrationVerifyBackupRestore_/);
 assert.match(migrationSource, /tournamentSheetV2Rows_\(snapshot\)/);
 assert.match(migrationSource, /大会管理データv2の再読取検証/);
+assert.match(migrationSource, /書込み中にシートまたはAPIが変更されました/);
 assert.match(migrationSource, /sheet\.deleteColumns\(plan\.delete_start_column/);
 assert.doesNotMatch(migrationSource, /sheetMigrationWriteAndVerifyArchive_/);
 assert.match(page, /全情報を[\s\S]*大会管理データv2として記録/);

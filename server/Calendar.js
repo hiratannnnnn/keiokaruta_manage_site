@@ -40,8 +40,8 @@ function getTournamentList() {
 
 // カレンダーシートの指定列に値を書き込む（大会名で行を特定）
 // colOneBased : 書き込む列番号（1-indexed）
-// skipMinus   : col=12 済入力時にマイナストランザクションを計上しない（デポジット完了用）
-function setCalendarColumn(name, colOneBased, value, skipMinus) {
+function setCalendarColumn(name, colOneBased, value) {
+  let apiUpdated = false;
   try {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
@@ -50,14 +50,53 @@ function setCalendarColumn(name, colOneBased, value, skipMinus) {
     const data = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
     for (let i = 2; i < data.length; i++) {
       if (String(data[i][0]) === name) {
+        if (colOneBased === 7 || colOneBased === 12) {
+          const tournament = taikaiFindTournament_(
+            String(name).replace(/[A-E]+級$/, '')
+          );
+          const field = colOneBased === 7
+            ? 'registration_completed' : 'payment_completed';
+          const update = {};
+          update[field] = String(value || '').trim() === '済';
+          taikaiApiRequest_(
+            'PATCH',
+            '/tournaments/' + encodeURIComponent(String(tournament.id)),
+            update
+          );
+          apiUpdated = true;
+        }
         sheet.getRange(i + 1, colOneBased).setValue(value);
-
+        const tournamentSheet = ss.getSheetByName(name);
+        if (tournamentSheet) {
+          const structure = tournamentSheetStructure_(tournamentSheet, false);
+          if (structure.version === 2 && (colOneBased === 7 || colOneBased === 12)) {
+            try {
+              refreshTournamentSheetV2FromApi_(tournamentSheet);
+            } catch (writebackError) {
+              markTournamentSheetV2SyncState_(
+                tournamentSheet,
+                'pending_sheet',
+                writebackError.message || writebackError
+              );
+              return JSON.stringify({
+                error: 'DBとカレンダーの更新は成功しましたが、大会シートへの書戻しに'
+                  + '失敗しました。同じ操作を再実行してください: ' + writebackError.message,
+                partial: true,
+              });
+            }
+          }
+        }
         return JSON.stringify({ ok: true });
       }
     }
     return JSON.stringify({ error: '大会が見つかりません' });
   } catch (e) {
-    return JSON.stringify({ error: e.message });
+    return JSON.stringify({
+      error: (apiUpdated
+        ? 'DB更新後にカレンダーの更新に失敗しました。同じ操作を再実行してください: '
+        : '') + e.message,
+      partial: apiUpdated,
+    });
   }
 }
 
@@ -65,42 +104,16 @@ function setCalendarColumn(name, colOneBased, value, skipMinus) {
 function completeTournament(name) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-
-    // 出納管理の収支チェック（当該大会の参加費合計が±ゼロでなければエラー）
-    const suitouCheckSheet = ss.getSheetByName('出納管理');
-    if (suitouCheckSheet && suitouCheckSheet.getLastRow() >= 7) {
-      const txRows = suitouCheckSheet.getRange(7, 1, suitouCheckSheet.getLastRow() - 6, 3).getValues();
-      const personNet = {};
-      for (const row of txRows) {
-        if (String(row[2]) !== name + '　参加費') continue;
-        const n = String(row[0]).trim();
-        if (!n) continue;
-        personNet[n] = (personNet[n] || 0) + (typeof row[1] === 'number' ? row[1] : Number(row[1]) || 0);
-      }
-      const unbalanced = Object.entries(personNet)
-        .filter(([, net]) => net !== 0)
-        .map(([n]) => n);
-      if (unbalanced.length > 0) {
-        return JSON.stringify({
-          error: '以下の参加者の収支が合っていません。デポジット処理を行ってから完了してください。\n' + unbalanced.join('、'),
-        });
-      }
+    const tournament = taikaiFindTournament_(
+      String(name).replace(/[A-E]+級$/, '')
+    );
+    if (!tournament.registration_completed || !tournament.payment_completed) {
+      return JSON.stringify({
+        error: 'DB上で申込処理・大会振込の両方が完了していないため、完了にできません。',
+      });
     }
 
-    // 大会登録済みチェック
     const tournamentSheet = ss.getSheetByName(name);
-    if (tournamentSheet) {
-      const structure = tournamentSheetStructure_(tournamentSheet, false);
-      let registered = false;
-      if (structure.register_database_row) {
-        registered = String(
-          (structure.data[structure.register_database_row] || [])[0] || ''
-        ).includes('登録済み');
-      }
-      if (!registered) {
-        return JSON.stringify({ error: '「大会として登録」が完了していないため、完了にできません' });
-      }
-    }
 
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
     if (!sheet) throw new Error(`「${CONFIG.SHEET_NAMES.CALENDAR}」シートが見つかりません`);
@@ -116,40 +129,18 @@ function completeTournament(name) {
     }
     if (!found) return JSON.stringify({ error: '大会が見つかりません' });
 
-    // メール管理シートから送信済み行を削除
-    const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
-    if (mailSheet && mailSheet.getLastRow() >= 6) {
-      const mailData = mailSheet.getRange(6, 1, mailSheet.getLastRow() - 5, 9).getValues();
-      const deleteRows = [];
-      for (let i = 0; i < mailData.length; i++) {
-        if (String(mailData[i][0]) + String(mailData[i][1]) === name && String(mailData[i][7]) === '済') {
-          deleteRows.push(i + 6); // 実際の行番号
-        }
-      }
-      for (let i = deleteRows.length - 1; i >= 0; i--) {
-        mailSheet.deleteRow(deleteRows[i]);
+    // メール履歴は削除しない。大会シートの非表示失敗は完了状態を巻き戻さない。
+    let warning = '';
+    if (tournamentSheet) {
+      try {
+        tournamentSheet.hideSheet();
+      } catch (hideError) {
+        warning = '大会は完了しましたが、シートを非表示にできませんでした: '
+          + hideError.message;
       }
     }
 
-    // 出納管理シートから当該大会のトランザクションを削除
-    const suitouSheet = ss.getSheetByName('出納管理');
-    if (suitouSheet && suitouSheet.getLastRow() >= 7) {
-      const txData = suitouSheet.getRange(7, 1, suitouSheet.getLastRow() - 6, 3).getValues();
-      const txDeleteRows = [];
-      for (let i = 0; i < txData.length; i++) {
-        if (String(txData[i][2]).startsWith(name)) {
-          txDeleteRows.push(i + 7);
-        }
-      }
-      for (let i = txDeleteRows.length - 1; i >= 0; i--) {
-        suitouSheet.deleteRow(txDeleteRows[i]);
-      }
-    }
-
-    // 大会シートを非表示
-    if (tournamentSheet) tournamentSheet.hideSheet();
-
-    return JSON.stringify({ ok: true });
+    return JSON.stringify({ ok: true, warning: warning });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }

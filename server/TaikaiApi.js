@@ -438,10 +438,9 @@ function taikaiFindTournamentEntry_(tournamentName, playerName) {
   , null);
 }
 
-function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit) {
-  const entry = taikaiFindTournamentEntry_(tournamentName, playerName);
+function taikaiRecordFullPaymentByEntry_(entryId, useDeposit) {
   const summary = taikaiApiRequest_(
-    'GET', '/entries/' + encodeURIComponent(String(entry.id)) + '/payment-summary'
+    'GET', '/entries/' + encodeURIComponent(String(entryId)) + '/payment-summary'
   );
   const balance = Number(summary.balance_yen);
   if (!Number.isFinite(balance)) {
@@ -465,16 +464,21 @@ function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit
     }
     return taikaiApiRequest_(
       'POST',
-      '/entries/' + encodeURIComponent(String(entry.id)) + '/deposit-application',
+      '/entries/' + encodeURIComponent(String(entryId)) + '/deposit-application',
       body
     );
   }
   body.method = 'bank_transfer';
   return taikaiApiRequest_(
     'POST',
-    '/entries/' + encodeURIComponent(String(entry.id)) + '/payments',
+    '/entries/' + encodeURIComponent(String(entryId)) + '/payments',
     body
   );
+}
+
+function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit) {
+  const entry = taikaiFindTournamentEntry_(tournamentName, playerName);
+  return taikaiRecordFullPaymentByEntry_(entry.id, useDeposit);
 }
 
 function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned) {
