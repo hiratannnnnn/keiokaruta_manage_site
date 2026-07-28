@@ -111,6 +111,9 @@ let currentPermissions = {
   operationPanel:          ['申込係', '振込係', '案内係', '会長副会長'],
   announcementDoubleCheck: ['案内係', '会長副会長'],
 };
+let permissionsLoaded = false;
+let permissionsLoading = false;
+let permissionLoadCallbacks = [];
 
 function hasPermission(key) {
   const allowed = currentPermissions[key];
@@ -119,12 +122,28 @@ function hasPermission(key) {
 }
 
 function loadAndApplyPermissions(callback) {
+  if (permissionsLoaded) {
+    if (callback) callback();
+    return;
+  }
+  if (callback) permissionLoadCallbacks.push(callback);
+  if (permissionsLoading) return;
+  permissionsLoading = true;
+
+  const finish = () => {
+    permissionsLoading = false;
+    permissionsLoaded = true;
+    const callbacks = permissionLoadCallbacks.splice(0);
+    callbacks.forEach(item => {
+      try { item(); } catch (e) {}
+    });
+  };
   google.script.run
     .withSuccessHandler(json => {
       try { currentPermissions = JSON.parse(json); } catch(e) {}
-      if (callback) callback();
+      finish();
     })
-    .withFailureHandler(() => { if (callback) callback(); })
+    .withFailureHandler(finish)
     .getPermissions();
 }
 
@@ -132,6 +151,7 @@ function loadAndApplyPermissions(callback) {
 // タブ切替
 // ------------------------------------------------------------
 let calendarLoaded    = false;
+let calendarLoading   = false;
 let makeEmailLoaded   = false;
 let participationMatrixLoaded = false;
 
@@ -143,6 +163,7 @@ document.querySelectorAll('nav button').forEach(btn => {
     const page = btn.dataset.page;
     document.getElementById('page-' + page).classList.add('active');
     if (page === 'calendar' && !calendarLoaded) loadCalendar();
+    if (page === 'player') ensureMembersLoaded();
     if (page === 'participation-matrix' && !participationMatrixLoaded) {
       loadParticipationMatrix();
       participationMatrixLoaded = true;
@@ -152,12 +173,12 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (page === 'mail-management') initMailManagement();
     if (page === 'suitou') initSuitou();
     if (page === 'database-admin') initDatabaseAdmin();
-    if (page === 'sheet-migration') initSheetMigration();
-    if (page === 'settings') {
-      loadEnvironmentConfigStatus();
-      renderPermTable();
-      loadRoleNamesSettings();
+    if (page === 'sheet-migration') {
+      initSheetMigration();
+      // 表示許可は一度タブを開いた時点で消費し、ナビゲーションを再び隠す。
+      consumeSheetMigrationNavigationActivation();
     }
+    if (page === 'settings') initSettingsPage();
   });
 });
 
@@ -175,37 +196,32 @@ function initApp() {
   const roleClass = roleClassMap[currentRole];
   if (roleClass) document.body.classList.add(roleClass);
 
-  loadAndApplyPermissions();
-  loadHeaderEnvironmentBadge();
-  loadMembers();
-  loadCalendar();
+  loadAndApplyPermissions(() => {
+    if (calendarLoaded) renderCalendar(allTournaments);
+  });
+  // 初期表示では外部APIを呼ばず、カレンダーシートの大会一覧を優先する。
+  if (calendarLoaded) {
+    renderCalendar(allTournaments);
+  } else {
+    loadCalendar();
+  }
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('nav-settings-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
   document.getElementById('nav-database-admin-btn').style.display =
     currentRole === '会長副会長' ? 'inline-block' : 'none';
-  document.getElementById('nav-sheet-migration-btn').style.display =
-    currentRole === '会長副会長' ? 'inline-block' : 'none';
+  applySheetMigrationNavigationVisibility();
   const isAnnouncer = currentRole === '案内係' || currentRole === '会長副会長';
   document.getElementById('nav-form-create-btn').style.display = isAnnouncer ? 'inline-block' : 'none';
   document.getElementById('nav-make-email-btn').style.display       = isAnnouncer ? 'inline-block' : 'none';
   document.getElementById('nav-mail-management-btn').style.display  = isAnnouncer ? 'inline-block' : 'none';
   const canSeeSuitou = currentRole === '会長副会長' || currentRole === '振込係';
   document.getElementById('nav-suitou-btn').style.display = canSeeSuitou ? 'inline-block' : 'none';
-  showHelpBtn();
 }
 
 window.addEventListener('load', () => {
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
-  // 前回の役職だけ復元する。アクセス認証はGoogle側で実施される。
-  try {
-    // 旧版が保存した平文パスワードを初回表示時に削除する。
-    localStorage.removeItem('karuta_pw');
-    const savedRole = localStorage.getItem('karuta_role');
-    if (savedRole) {
-      const roleBtn = document.querySelector(`.login-role-btn[data-role="${savedRole}"]`);
-      if (roleBtn) selectLoginRole(roleBtn);
-    }
-  } catch(e) {}
+  // 前回の役職が有効なら選択画面を省略する。アクセス認証はGoogle側で実施される。
+  restorePreviousRoleAndStart();
 });
 </script>

@@ -1,13 +1,31 @@
 <!-- ========== 設定 ========== -->
 <div id="page-settings" class="page">
   <div class="list-page">
-    <div class="page-title">設定</div>
+    <div class="page-title-row">
+      <div class="page-title">設定</div>
+      <button type="button" class="page-guide-back-btn" onclick="reloadSettingsPage()">再読込</button>
+    </div>
+    <div class="panel" style="max-width:640px;margin-bottom:16px;">
+      <div class="panel-header">高度な機能</div>
+      <div class="panel-body">
+        <label class="settings-feature-toggle">
+          <input id="settings-show-sheet-migration" type="checkbox"
+                 onchange="toggleSheetMigrationNavigation(this.checked)">
+          <span>
+            <strong>シート移行を表示する</strong>
+            <small>
+              「シート移行」を一時的に表示します。タブを開くと再び非表示になります。
+              実行機能の安全ゲートは別途維持されます。
+            </small>
+          </span>
+        </label>
+      </div>
+    </div>
     <div class="panel settings-environment-panel">
       <div class="panel-header">環境設定診断</div>
       <div class="panel-body">
         <div id="environment-status" class="status">設定状態を確認中...</div>
         <div id="environment-details" style="display:none;">
-          <p>現在の環境：<strong id="environment-name"></strong></p>
           <ul id="environment-property-list" class="environment-property-list"></ul>
           <div id="environment-warnings" class="environment-warnings"></div>
           <p class="environment-note">

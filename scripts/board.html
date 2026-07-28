@@ -3,8 +3,13 @@
 // 掲示板
 // ------------------------------------------------------------
 let _boardPosts = [];
+let _boardLoaded = false;
 
-function initBoard() {
+function initBoard(force) {
+  if (_boardLoaded && !force) {
+    boardRender();
+    return;
+  }
   _boardPosts = [];
   document.getElementById('board-feed').innerHTML = '';
   document.getElementById('board-status').style.display = 'block';
@@ -20,6 +25,7 @@ function initBoard() {
         return;
       }
       _boardPosts = r.posts;
+      _boardLoaded = true;
       boardRender();
     })
     .withFailureHandler(e => {

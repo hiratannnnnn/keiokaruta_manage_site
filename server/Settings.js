@@ -89,10 +89,7 @@ function getEnvironmentConfigurationStatus() {
     if (configuredResources < resourceKeys.length) {
       warnings.push('未登録の外部リソースIDがあります。登録するまで関連機能は実行できません。');
     }
-    const environment = String(props.getProperty('APP_ENVIRONMENT') || '').trim();
-    if (!environment) warnings.push('APP_ENVIRONMENTが未設定です。');
     return JSON.stringify({
-      environment: environment || 'legacy',
       items: items,
       warnings: warnings,
     });

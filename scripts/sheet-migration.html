@@ -1,12 +1,13 @@
 <script>
 let sheetMigrationExecutionEnabled = false;
+let sheetMigrationLoaded = false;
 
 function sheetMigrationEscAttr(value) {
   return escHtml(String(value)).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function initSheetMigration() {
-  sheetMigrationPreview();
+  if (!sheetMigrationLoaded) sheetMigrationPreview();
 }
 
 function sheetMigrationPreview() {
@@ -24,6 +25,7 @@ function sheetMigrationPreview() {
         return;
       }
       sheetMigrationExecutionEnabled = data.execution_enabled === true;
+      sheetMigrationLoaded = true;
       sheetMigrationRenderPlans(data.plans || []);
       sheetMigrationRenderHistory(data.history || []);
       const summary = data.summary || {};

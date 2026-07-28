@@ -12,9 +12,6 @@ function configValue_(propertyName) {
 }
 
 const CONFIG = {
-  get ENVIRONMENT() {
-    return configValue_('APP_ENVIRONMENT');
-  },
   get SPREADSHEET_ID() {
     return configValue_('MAIN_SPREADSHEET_ID');
   },

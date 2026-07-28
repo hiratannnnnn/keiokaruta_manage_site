@@ -4,15 +4,46 @@
 // ------------------------------------------------------------
 let allMembers = [];
 let selectedMemberId = '';
+let membersLoaded = false;
+let membersLoading = false;
+let memberLoadCallbacks = [];
 
-function loadMembers() {
+function ensureMembersLoaded(callback) {
+  if (membersLoaded) {
+    if (callback) callback();
+    return;
+  }
+  if (callback) memberLoadCallbacks.push(callback);
+  if (!membersLoading) loadMembers(false);
+}
+
+function finishMemberLoadCallbacks() {
+  const callbacks = memberLoadCallbacks.splice(0);
+  callbacks.forEach(callback => {
+    try { callback(); } catch (e) {}
+  });
+}
+
+function loadMembers(force) {
+  if (membersLoading) return;
+  if (membersLoaded && !force) {
+    renderMemberSuggestions();
+    renderMembers(allMembers);
+    return;
+  }
+  membersLoading = true;
+  membersLoaded = false;
   allMembers = [];
   renderMemberSuggestions();
   document.getElementById('member-count').style.display = 'none';
   setStatus('members', 'loading');
   google.script.run
     .withSuccessHandler(onMembersLoaded)
-    .withFailureHandler(err => setStatus('members', 'error', err.message))
+    .withFailureHandler(err => {
+      membersLoading = false;
+      setStatus('members', 'error', err.message);
+      finishMemberLoadCallbacks();
+    })
     .getMembers();
 }
 
@@ -21,16 +52,32 @@ function onMembersLoaded(json) {
   try {
     data = JSON.parse(json);
   } catch (e) {
+    membersLoading = false;
     setStatus('members', 'error', '名簿の応答を解析できませんでした。');
+    finishMemberLoadCallbacks();
     return;
   }
-  if (data.error) { setStatus('members', 'error', data.error); return; }
-  if (!data.length) { setStatus('members', 'empty', 'データがありません'); return; }
+  if (data.error) {
+    membersLoading = false;
+    setStatus('members', 'error', data.error);
+    finishMemberLoadCallbacks();
+    return;
+  }
+  if (!data.length) {
+    membersLoading = false;
+    membersLoaded = true;
+    setStatus('members', 'empty', 'データがありません');
+    finishMemberLoadCallbacks();
+    return;
+  }
   allMembers = data.sort((a, b) =>
     String(a.name).localeCompare(String(b.name), 'ja')
   );
+  membersLoading = false;
+  membersLoaded = true;
   renderMemberSuggestions();
   renderMembers(allMembers);
+  finishMemberLoadCallbacks();
 }
 
 function memberSuggestionLabel(member) {

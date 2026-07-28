@@ -5,13 +5,15 @@
     <!-- 左：名簿 -->
     <div class="panel">
       <div class="panel-header">
-        名簿
-        <span id="member-count" class="count-badge" style="display:none;"></span>
+        <span>
+          名簿
+          <span id="member-count" class="count-badge" style="display:none;"></span>
+        </span>
+        <button type="button" class="panel-header-action" onclick="loadMembers(true)">再読込</button>
       </div>
       <div class="panel-body">
         <div class="search-bar">
           <input type="text" id="member-search" placeholder="氏名・読みで絞り込み..." oninput="filterMembers()">
-          <button onclick="loadMembers()">再読込</button>
         </div>
         <div class="table-wrap">
           <div id="members-status" class="status"><span class="spinner"></span> 読み込み中...</div>

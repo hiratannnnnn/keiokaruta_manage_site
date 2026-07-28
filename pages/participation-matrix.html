@@ -1,7 +1,12 @@
 <!-- ========== 選手別出場一覧 ========== -->
 <div id="page-participation-matrix" class="page">
   <div class="list-page">
-    <div class="page-title">選手別 出場大会一覧</div>
+    <div class="page-title-row">
+      <div class="page-title">選手別 出場大会一覧</div>
+      <button id="participation-matrix-reload" type="button"
+              class="page-guide-back-btn"
+              onclick="loadParticipationMatrix(true)">再読込</button>
+    </div>
 
     <div class="panel participation-matrix-panel">
       <div class="panel-header">
@@ -16,8 +21,6 @@
           <input id="participation-matrix-tournament-filter" type="text"
                  placeholder="大会名で絞り込み"
                  oninput="filterParticipationMatrix()">
-          <button id="participation-matrix-reload" type="button"
-                  onclick="loadParticipationMatrix(true)">再読込</button>
         </div>
         <p class="participation-matrix-note">
           ○ 公認大会／△ 非公認大会／○△ 公認・非公認の両方。キャンセル済みは空欄です。

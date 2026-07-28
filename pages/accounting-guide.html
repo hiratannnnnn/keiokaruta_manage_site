@@ -1,0 +1,119 @@
+<!-- ========== 参加費・支払い・デポジットの説明 ========== -->
+<div id="page-accounting-guide" class="page">
+  <div class="list-page accounting-guide-page">
+    <div class="page-title-row">
+      <div class="page-title">参加費・支払い・デポジット</div>
+      <button type="button" class="page-guide-back-btn" onclick="returnToSuitou()">
+        ← 出納管理へ戻る
+      </button>
+    </div>
+    <p class="accounting-guide-lead">
+      出納管理では、選手ごとの参加費をプラスとマイナスの記録で管理します。
+      操作前に、どの記録が作られるかを確認してください。
+    </p>
+
+    <div class="accounting-guide-summary" aria-label="基本的な記録の流れ">
+      <div class="accounting-guide-step">
+        <span class="accounting-guide-step-number">1</span>
+        <div>
+          <strong>選手の支払いを確認</strong>
+          <p>大会詳細で選手を「済」にすると、その選手の参加費がプラスで記録されます。</p>
+        </div>
+      </div>
+      <div class="accounting-guide-arrow" aria-hidden="true">→</div>
+      <div class="accounting-guide-step">
+        <span class="accounting-guide-step-number">2</span>
+        <div>
+          <strong>主催者へ送金</strong>
+          <p>大会一覧で「通常の振込済み」にすると、対象者の参加費がマイナスで記録されます。</p>
+        </div>
+      </div>
+      <div class="accounting-guide-arrow" aria-hidden="true">→</div>
+      <div class="accounting-guide-step">
+        <span class="accounting-guide-step-number">3</span>
+        <div>
+          <strong>収支を確認</strong>
+          <p>同じ大会・選手のプラスとマイナスが対応すると、通常の参加費収支は0円になります。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="accounting-guide-grid">
+      <section class="accounting-guide-card">
+        <h2>金額の符号</h2>
+        <dl class="accounting-guide-definitions">
+          <div>
+            <dt><span class="accounting-guide-sign is-positive">＋</span> プラス</dt>
+            <dd>選手から会へ入る予定・入った参加費を表します。</dd>
+          </div>
+          <div>
+            <dt><span class="accounting-guide-sign is-negative">－</span> マイナス</dt>
+            <dd>会から大会主催者へ送る参加費や、デポジットの使用を表します。</dd>
+          </div>
+          <div>
+            <dt><span class="accounting-guide-sign is-zero">0</span> 残高</dt>
+            <dd>通常は受領と送金が対応した状態です。0円でない場合は、未回収・未送金・デポジットなどの理由を確認します。</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="accounting-guide-card">
+        <h2>デポジットとは</h2>
+        <p>
+          返金せず、次回以降の参加費に充てるため会で預かっている金額です。
+          年度をまたいでも保持する情報なので、年度完全同期で削除しません。
+        </p>
+        <p>
+          選手を「済」にする際に利用可能なデポジットが見つかると、使用するか確認されます。
+          使用した場合は、デポジットのマイナス記録と大会参加費のプラス記録が追加されます。
+        </p>
+        <div class="accounting-guide-warning">
+          現在は一部だけを指定して充当する操作には対応しておらず、利用可能なデポジット残高の全額を使用します。
+          デポジット額と充当したい参加費が異なる場合は実行せず、出納管理で個別に調整してください。
+        </div>
+      </section>
+
+      <section class="accounting-guide-card">
+        <h2>大会の「振込済み」</h2>
+        <p>大会一覧で振込済みを入力するときは、処理方法を選びます。</p>
+        <ul>
+          <li><strong>通常の振込済み：</strong>主催者へ送金した参加費をマイナス計上します。</li>
+          <li><strong>デポジットとして完了：</strong>大会分のマイナス計上を行わず、振込完了だけを記録します。</li>
+        </ul>
+        <div class="accounting-guide-warning">
+          「デポジットとして完了」は、選手個人のデポジットを自動で探して消費する操作ではありません。
+          出納管理の残高が正しいことを確認して使用してください。
+        </div>
+      </section>
+
+      <section class="accounting-guide-card">
+        <h2>キャンセル時の考え方</h2>
+        <ul>
+          <li><strong>期限前キャンセル：</strong>参加費の支払い義務なしとして扱います。</li>
+          <li><strong>期限後キャンセル：</strong>参加費の支払い義務ありとして扱います。</li>
+        </ul>
+        <div class="accounting-guide-warning">
+          期限後キャンセルへの変更だけでは、参加費のプラス記録は自動作成されません。
+          実際の入金状況を確認し、必要なトランザクションを出納管理で記録してください。
+        </div>
+        <p>
+          実際の入金や返金と画面の状態が一致しない場合は、自動処理だけで完結させず、
+          出納管理のトランザクションを確認してください。
+        </p>
+      </section>
+    </div>
+
+    <section class="accounting-guide-checklist">
+      <h2>大会を完了する前の確認</h2>
+      <ol>
+        <li>各選手の「済」「期限前キャンセル」「期限後キャンセル」が実態と一致している</li>
+        <li>大会主催者への振込方法と、作成されたマイナス記録が一致している</li>
+        <li>デポジットを使用した選手の残高に不自然な差額がない</li>
+        <li>大会ごとの参加費収支が精算済みになっている</li>
+      </ol>
+      <p class="accounting-guide-note">
+        大会完了時にも収支の不一致が検査されます。エラーになった場合は、表示された選手の記録を出納管理で確認してください。
+      </p>
+    </section>
+  </div>
+</div>

@@ -69,21 +69,30 @@ function addSuitouRow(json) {
 
 
 
-// 指定プレイヤーのデポジット行を出納管理から検索して返す
+// 指定プレイヤーのデポジット純残高を取得する。
+// 使用時はマイナス行を追加するため、正の元行だけでなく正負全行を合算する。
+function getPlayerDepositBalance_(rows, playerName) {
+  const normalizedName = normalizeName_(playerName);
+  return (rows || []).reduce((total, row) => {
+    if (normalizeName_(String(row[0])) !== normalizedName
+        || String(row[2]).trim() !== 'デポジット') return total;
+    const amount = Number(row[1]);
+    return total + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
+}
+
+// 指定プレイヤーの利用可能なデポジット残高を返す
 function getPlayerDeposit(playerName) {
   try {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName('出納管理');
     if (!sheet || sheet.getLastRow() < 7) return JSON.stringify({ ok: true, deposit: null });
     const rows = sheet.getRange(7, 1, sheet.getLastRow() - 6, 3).getValues();
-    for (let i = 0; i < rows.length; i++) {
-      if (normalizeName_(String(rows[i][0])) === normalizeName_(playerName) &&
-          String(rows[i][2]).trim() === 'デポジット' &&
-          Number(rows[i][1]) > 0) {
-        return JSON.stringify({ ok: true, deposit: { rowNum: i + 7, amount: Number(rows[i][1]) } });
-      }
-    }
-    return JSON.stringify({ ok: true, deposit: null });
+    const balance = getPlayerDepositBalance_(rows, playerName);
+    return JSON.stringify({
+      ok: true,
+      deposit: balance > 0 ? { amount: balance } : null,
+    });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }

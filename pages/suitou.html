@@ -1,7 +1,15 @@
 <!-- ========== 出納管理・残高記録 ========== -->
 <div id="page-suitou" class="page">
   <div class="list-page">
-    <div class="page-title">出納管理</div>
+    <div class="page-title-row">
+      <div class="page-title">出納管理</div>
+      <div class="page-title-actions">
+        <button type="button" class="page-guide-back-btn" onclick="reloadSuitou()">再読込</button>
+        <button type="button" class="page-guide-btn" onclick="showAccountingGuide()">
+          参加費・デポジットの仕組み
+        </button>
+      </div>
+    </div>
 
     <div class="su-toolbar">
       <button class="su-update-btn" onclick="suUpdate()">シートから再計算</button>

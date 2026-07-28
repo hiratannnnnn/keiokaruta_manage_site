@@ -9,7 +9,6 @@ const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
 const claspignore = fs.readFileSync(path.join(root, '.claspignore'), 'utf8');
 
 [
-  'APP_ENVIRONMENT',
   'MAIN_SPREADSHEET_ID',
   'FORM_FOLDER_ID',
   'FORM_TEMPLATE_ID',

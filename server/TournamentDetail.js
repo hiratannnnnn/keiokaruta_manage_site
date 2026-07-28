@@ -172,20 +172,16 @@ function setDetailPayStatus(sheetName, playerName, value, useDeposit) {
           if (fee > 0) {
             const normalizedName = normalizeName_(playerName);
             if (useDeposit) {
-              // デポジットをマイナスで相殺してから参加費をプラス追加
+              // 利用可能なデポジット純残高をマイナスで相殺してから参加費をプラス追加
               const suitouSheet = ss.getSheetByName('出納管理');
               if (suitouSheet && suitouSheet.getLastRow() >= 7) {
                 const txRows = suitouSheet.getRange(7, 1, suitouSheet.getLastRow() - 6, 3).getValues();
-                for (let j = 0; j < txRows.length; j++) {
-                  if (normalizeName_(String(txRows[j][0])) === normalizedName &&
-                      String(txRows[j][2]).trim() === 'デポジット' &&
-                      Number(txRows[j][1]) > 0) {
-                    const depositAmt = Number(txRows[j][1]);
-                    const today = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd');
-                    const lastRow = Math.max(suitouSheet.getLastRow(), 6);
-                    suitouSheet.getRange(lastRow + 1, 1, 1, 4).setValues([[normalizedName, -depositAmt, 'デポジット', today]]);
-                    break;
-                  }
+                const depositBalance = getPlayerDepositBalance_(txRows, normalizedName);
+                if (depositBalance > 0) {
+                  const today = Utilities.formatDate(new Date(), 'JST', 'yyyy/MM/dd');
+                  const lastRow = Math.max(suitouSheet.getLastRow(), 6);
+                  suitouSheet.getRange(lastRow + 1, 1, 1, 4)
+                    .setValues([[normalizedName, -depositBalance, 'デポジット', today]]);
                 }
               }
             }

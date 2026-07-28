@@ -15,22 +15,55 @@ const PERM_LABELS = {
 const ALL_ROLES_LIST = ['申込係', '振込係', '案内係', '会長副会長'];
 
 let _initialPermState = '';
+let settingsPageLoaded = false;
+const SHEET_MIGRATION_NAV_KEY = 'karuta_show_sheet_migration';
 
-function loadHeaderEnvironmentBadge() {
-  google.script.run
-    .withSuccessHandler(json => {
-      try {
-        const data = JSON.parse(json);
-        if (data.error) return;
-        const badge = document.getElementById('environment-badge');
-        badge.textContent = String(data.environment || 'legacy').toUpperCase();
-        badge.className = 'environment-badge environment-' + String(
-          data.environment || 'legacy'
-        ).toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-        badge.style.display = 'inline-block';
-      } catch (e) {}
-    })
-    .getEnvironmentConfigurationStatus();
+function isSheetMigrationNavigationEnabled() {
+  try {
+    return sessionStorage.getItem(SHEET_MIGRATION_NAV_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function applySheetMigrationNavigationVisibility() {
+  const visible = currentRole === '会長副会長'
+    && isSheetMigrationNavigationEnabled();
+  document.getElementById('nav-sheet-migration-btn').style.display =
+    visible ? 'inline-block' : 'none';
+}
+
+function toggleSheetMigrationNavigation(enabled) {
+  try {
+    if (enabled) {
+      sessionStorage.setItem(SHEET_MIGRATION_NAV_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(SHEET_MIGRATION_NAV_KEY);
+    }
+  } catch (e) {}
+  applySheetMigrationNavigationVisibility();
+}
+
+function consumeSheetMigrationNavigationActivation() {
+  try { sessionStorage.removeItem(SHEET_MIGRATION_NAV_KEY); } catch (e) {}
+  const checkbox = document.getElementById('settings-show-sheet-migration');
+  if (checkbox) checkbox.checked = false;
+  applySheetMigrationNavigationVisibility();
+}
+
+function initSettingsPage() {
+  document.getElementById('settings-show-sheet-migration').checked =
+    isSheetMigrationNavigationEnabled();
+  if (settingsPageLoaded) return;
+  settingsPageLoaded = true;
+  loadEnvironmentConfigStatus();
+  renderPermTable();
+  loadRoleNamesSettings();
+}
+
+function reloadSettingsPage() {
+  settingsPageLoaded = false;
+  initSettingsPage();
 }
 
 function loadEnvironmentConfigStatus() {
@@ -53,7 +86,6 @@ function loadEnvironmentConfigStatus() {
         status.textContent = 'エラー: ' + data.error;
         return;
       }
-      document.getElementById('environment-name').textContent = data.environment;
       const list = document.getElementById('environment-property-list');
       list.replaceChildren();
       data.items.forEach(item => {

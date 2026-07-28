@@ -131,20 +131,6 @@
     gap: 14px;
   }
   header h1 { font-size: 1.1rem; font-weight: 600; }
-  .environment-badge {
-    padding: 2px 8px;
-    border: 1px solid rgba(255,255,255,0.55);
-    border-radius: 4px;
-    background: #5d6d7e;
-    color: #fff;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
-  .environment-production { background: #a93226; }
-  .environment-validation,
-  .environment-development,
-  .environment-local { background: #1f6fa8; }
   .current-role-badge {
     background: #3498db;
     color: #fff;
@@ -400,7 +386,8 @@
     .db-admin-editors { grid-template-columns: 1fr; }
   }
   body[class*="role-"] .panel-header           { background: var(--role-color-dark); }
-  body[class*="role-"] .list-page .page-title  { border-bottom-color: var(--role-color); }
+  body[class*="role-"] .list-page .page-title,
+  body[class*="role-"] .list-page .page-title-row { border-bottom-color: var(--role-color); }
   body[class*="role-"] .me-type-btn:hover      { border-color: var(--role-color); background: color-mix(in srgb, var(--role-color) 10%, #fff); color: var(--role-color-dark); }
   body[class*="role-"] .me-back-btn:focus,
   body[class*="role-"] .me-copy-btn:focus      { outline-color: var(--role-color); }
@@ -462,6 +449,52 @@
     padding-bottom: 8px;
     border-bottom: 2px solid #3498db;
   }
+  .page-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #3498db;
+  }
+  .list-page .page-title-row .page-title {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .page-guide-btn,
+  .page-guide-back-btn {
+    padding: 7px 13px;
+    border: 1px solid #9eb4c5;
+    border-radius: 5px;
+    background: #f4f8fb;
+    color: #34495e;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .page-guide-btn:hover,
+  .page-guide-back-btn:hover {
+    border-color: #6889a3;
+    background: #e8f1f7;
+  }
+  .page-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-header-action {
+    margin-left: auto;
+    padding: 5px 10px;
+    border: 1px solid rgba(255,255,255,0.65);
+    border-radius: 4px;
+    background: rgba(255,255,255,0.16);
+    color: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .panel-header-action:hover { background: rgba(255,255,255,0.3); }
 
   /* 検索バー */
   .search-bar {
@@ -848,9 +881,6 @@
     font-size: 0.88rem;
   }
   .status.error { color: #e74c3c; }
-  .help-empty { color: #777; font-size: 0.9rem; }
-  .help-error { color: #c0392b; font-size: 0.9rem; }
-
   /* 詳細ビュー：左右レイアウト */
   .detail-columns {
     display: flex;
@@ -1225,6 +1255,27 @@
     color: #667085;
     font-size: 0.8rem;
   }
+  .settings-feature-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+  }
+  .settings-feature-toggle input { margin-top: 4px; }
+  .settings-feature-toggle span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .settings-feature-toggle strong {
+    color: #34495e;
+    font-size: 0.9rem;
+  }
+  .settings-feature-toggle small {
+    color: #66737d;
+    font-size: 0.8rem;
+    line-height: 1.55;
+  }
 
   /* 案内ダブルチェックモーダル（大きめ） */
   .double-check-box {
@@ -1461,49 +1512,6 @@
     font-size: 0.9rem;
     cursor: pointer;
   }
-  /* ===== ヘルプ ===== */
-  .help-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.6);
-    background: rgba(255,255,255,0.15);
-    color: #fff;
-    font-size: 0.9rem;
-    font-weight: 700;
-    cursor: pointer;
-    margin-left: 10px;
-    transition: background 0.2s;
-    flex-shrink: 0;
-  }
-  .help-btn:hover { background: rgba(255,255,255,0.3); }
-  .help-box { max-width: 480px; }
-  .help-section { margin-bottom: 16px; }
-  .help-section:last-child { margin-bottom: 0; }
-  .help-heading {
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 6px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #eee;
-  }
-  .help-list {
-    margin: 0;
-    padding-left: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .help-list li {
-    font-size: 0.88rem;
-    line-height: 1.65;
-    color: #444;
-  }
-
   /* ===== 掲示板 ===== */
   .board-compose {
     background: #fff;
@@ -2321,6 +2329,152 @@
   .su-amount-neg { color: #e74c3c; }
   .su-tournaments { font-size: 0.82rem; color: #666; }
   .su-date { font-size: 0.85rem; color: #888; white-space: nowrap; }
+
+  /* 参加費・支払い・デポジット説明 */
+  .accounting-guide-page { max-width: 1180px; }
+  .accounting-guide-lead {
+    margin: 0 0 18px;
+    color: #465766;
+    font-size: 0.95rem;
+    line-height: 1.8;
+  }
+  .accounting-guide-summary {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding: 14px;
+    border: 1px solid #ccd8e2;
+    border-radius: 8px;
+    background: #f7fafc;
+  }
+  .accounting-guide-step {
+    display: flex;
+    flex: 1;
+    gap: 10px;
+    min-width: 210px;
+    padding: 12px;
+    border: 1px solid #dce4ea;
+    border-radius: 6px;
+    background: #fff;
+  }
+  .accounting-guide-step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #34495e;
+    color: #fff;
+    font-weight: 700;
+  }
+  .accounting-guide-step strong { color: #263746; }
+  .accounting-guide-step p {
+    margin: 5px 0 0;
+    color: #536574;
+    font-size: 0.85rem;
+    line-height: 1.65;
+  }
+  .accounting-guide-arrow {
+    align-self: center;
+    color: #7b8b98;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+  .accounting-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .accounting-guide-card,
+  .accounting-guide-checklist {
+    border: 1px solid #d6dee5;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .accounting-guide-card { padding: 17px 18px; }
+  .accounting-guide-card h2,
+  .accounting-guide-checklist h2 {
+    margin: 0 0 11px;
+    color: #263746;
+    font-size: 1rem;
+  }
+  .accounting-guide-card p,
+  .accounting-guide-card li,
+  .accounting-guide-checklist li {
+    color: #465766;
+    font-size: 0.88rem;
+    line-height: 1.75;
+  }
+  .accounting-guide-card p { margin: 8px 0; }
+  .accounting-guide-card ul,
+  .accounting-guide-checklist ol {
+    margin: 7px 0;
+    padding-left: 1.5rem;
+  }
+  .accounting-guide-definitions { margin: 0; }
+  .accounting-guide-definitions > div {
+    display: grid;
+    grid-template-columns: 115px 1fr;
+    gap: 8px;
+    padding: 9px 0;
+    border-bottom: 1px solid #edf0f2;
+  }
+  .accounting-guide-definitions > div:last-child { border-bottom: 0; }
+  .accounting-guide-definitions dt {
+    color: #34495e;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+  .accounting-guide-definitions dd {
+    margin: 0;
+    color: #536574;
+    font-size: 0.85rem;
+    line-height: 1.65;
+  }
+  .accounting-guide-sign {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    border-radius: 50%;
+    color: #fff;
+  }
+  .accounting-guide-sign.is-positive { background: #247a4d; }
+  .accounting-guide-sign.is-negative { background: #b13c35; }
+  .accounting-guide-sign.is-zero { background: #60717e; }
+  .accounting-guide-warning {
+    margin-top: 11px;
+    padding: 9px 11px;
+    border-left: 4px solid #d49b22;
+    background: #fff8e8;
+    color: #674c15;
+    font-size: 0.83rem;
+    line-height: 1.65;
+  }
+  .accounting-guide-checklist {
+    margin-top: 14px;
+    padding: 17px 20px;
+    border-color: #a9c8dc;
+    background: #f5fafe;
+  }
+  .accounting-guide-note {
+    margin: 10px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid #d8e7f0;
+    color: #40596a;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 900px) {
+    .accounting-guide-summary { min-width: 900px; }
+    .accounting-guide-grid { min-width: 900px; }
+  }
 
   /* スピナー */
   .spinner {

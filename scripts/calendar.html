@@ -2,6 +2,7 @@
 // ------------------------------------------------------------
 // 役職選択（アクセス認証はGoogle側で実施）
 // ------------------------------------------------------------
+const SELECTABLE_ROLES = ['申込係', '振込係', '案内係', '会長副会長'];
 let currentRole = '申込係';
 let appInitialized = false;
 
@@ -38,9 +39,32 @@ function submitRoleSelection() {
     document.getElementById('page-calendar').classList.add('active');
     document.getElementById('calendar-detail-view').classList.remove('active');
     document.getElementById('calendar-list-view').style.display = '';
-    calendarLoaded = false;
     initApp();
   }
+}
+
+function restorePreviousRoleAndStart() {
+  let savedRole = '';
+  try {
+    // 旧版が保存した平文パスワードは使用しない。
+    localStorage.removeItem('karuta_pw');
+    savedRole = String(localStorage.getItem('karuta_role') || '');
+  } catch (e) {
+    return false;
+  }
+
+  // localStorageは利用者が変更できるため、表示用として許可済みの役職だけを復元する。
+  if (!SELECTABLE_ROLES.includes(savedRole)) {
+    if (savedRole) {
+      try { localStorage.removeItem('karuta_role'); } catch (e) {}
+    }
+    return false;
+  }
+  const roleBtn = document.querySelector(`.login-role-btn[data-role="${savedRole}"]`);
+  if (!roleBtn) return false;
+  selectLoginRole(roleBtn);
+  submitRoleSelection();
+  return true;
 }
 
 // ------------------------------------------------------------
@@ -51,17 +75,35 @@ let currentTournamentApplyStart = '';
 let currentTournamentIsOfficial = true;
 
 function loadCalendar() {
-  calendarLoaded = true;
+  if (calendarLoading) return;
+  calendarLoading = true;
   setStatus('calendar', 'loading');
   google.script.run
     .withSuccessHandler(onCalendarLoaded)
-    .withFailureHandler(err => setStatus('calendar', 'error', err.message))
+    .withFailureHandler(err => {
+      calendarLoading = false;
+      calendarLoaded = false;
+      setStatus('calendar', 'error', err.message);
+    })
     .getTournamentList();
 }
 
 function onCalendarLoaded(json) {
-  const data = JSON.parse(json);
-  if (data.error) { setStatus('calendar', 'error', data.error); return; }
+  calendarLoading = false;
+  let data;
+  try {
+    data = JSON.parse(json);
+  } catch (e) {
+    calendarLoaded = false;
+    setStatus('calendar', 'error', '大会一覧の応答を解析できませんでした。');
+    return;
+  }
+  if (data.error) {
+    calendarLoaded = false;
+    setStatus('calendar', 'error', data.error);
+    return;
+  }
+  calendarLoaded = true;
   allTournaments = data;
   renderCalendar(allTournaments);
   mePopulateTournamentSelect();
@@ -80,7 +122,11 @@ function dateTdClass(dateStr) {
 }
 
 function renderCalendar(list) {
-  if (!list.length) { setStatus('calendar', 'empty', 'データがありません'); return; }
+  if (!list.length) {
+    document.getElementById('calendar-count').style.display = 'none';
+    setStatus('calendar', 'empty', 'データがありません');
+    return;
+  }
 
   document.getElementById('calendar-tbody').innerHTML =
     list.map(t => {
@@ -1229,6 +1275,11 @@ function showCalendarList() {
 let modalSelectedMemberId = '';
 
 function goToPlayerSearch(name) {
+  // 大会一覧の初期表示では名簿APIを呼ばず、選手照会を使う時点で取得する。
+  ensureMembersLoaded(() => goToPlayerSearchWithMembers(name));
+}
+
+function goToPlayerSearchWithMembers(name) {
   const matches = allMembers.filter(member => member.name === name);
   modalSelectedMemberId = matches.length === 1 ? matches[0].id : '';
   document.getElementById('modal-player-name').textContent = name + ' の出場大会';

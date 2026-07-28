@@ -9,6 +9,7 @@ let _mmAllData = [];
 let _mmDatabaseSyncPreviewValid = false;
 let _mmGmailLinkPreviewValid = false;
 let _mmGmailAuditData = null;
+let _mmLoaded = false;
 
 function mmEscAttr(value) {
   return escHtml(String(value || '')).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -16,6 +17,10 @@ function mmEscAttr(value) {
 
 // ---- 初期化 ----
 function initMailManagement() {
+  if (_mmLoaded) {
+    mmRenderTable();
+    return;
+  }
   loadMailManagement();
 }
 
@@ -332,6 +337,7 @@ function mmOnLoaded(json) {
   if (data.error) { setStatus('mail-management', 'error', data.error); return; }
 
   _mmAllData = data;
+  _mmLoaded = true;
   mmRenderTable();
 }
 
