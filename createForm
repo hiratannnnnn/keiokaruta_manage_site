@@ -200,40 +200,6 @@ function highlightDuplicateNames() {
   }
 }
 
-function memoForm(e) { // フォーム入力履歴一覧
-  Logger.log("memoForm");
-  var ss = SpreadsheetApp.openById(ids[4]);
-  var formSheet = ss.getSheetByName("フォーム作成");
-  const tournamentName = e.range.getSheet().getName();
-  formSheet.insertRows(25,1);
-  formSheet.getRange(25,1,1,3).setValues([[e.values[2],tournamentName,e.values[0]]]);
-
-  countMatches(state=true);
-  maintainRoster(e.values[2]);
-
-  // 追加20241130
-  // 申し込みが済んでいたらメールを送る
-  const calendarSheet = ss.getSheetByName("カレンダー");
-  calendarSheet.getDataRange().getValues().forEach((row) => {
-    if (row[0] === tournamentName) {
-      const today = new Date();
-      let targetDate = new Date(row[5]);
-      targetDate.setHours(23);
-      targetDate.setMinutes(59,59,999);
-      if (row[6] === "済" && today.getTime() - targetDate.getTime() < 0) {
-        var body = e.values.join("\n");
-        MailApp.sendEmail({
-          to: "keiokaruta@gmail.com",
-          name: "慶應かるた会",
-          subject: tournamentName + "　追加申込",
-          body: body,
-          htmlBody: body
-        });
-      }
-    }
-  });
-}
-
 function findLastDataRow(sheet, column) {
   var data = sheet.getRange(column + "1:" + column).getValues(); // 例えばA列のデータを取得
   var lastDataRow = 0;

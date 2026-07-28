@@ -276,6 +276,7 @@ sandbox.tournamentSheetStructure_ = () => ({
   version: 2,
   management: {
     metadata_rows: { '同期状態': 11, '同期エラー': 12, '最終同期日時': 13 },
+    entries_by_source_row: {},
   },
 });
 sandbox.recordFormResponseInTournamentSheetV2_(
@@ -306,13 +307,57 @@ const insertedEntry = writes.find(item =>
 assert.strictEqual(insertedEntry.values[0][11], 1000);
 assert.strictEqual(insertedEntry.values[0][12], 1500);
 assert.strictEqual(insertedEntry.values[0][13], 'partial');
+const pendingStructure = Object.assign({}, formStructure, {
+  management: Object.assign({}, formStructure.management, {
+    entries_by_source_row: Object.assign(
+      {}, formStructure.management.entries_by_source_row, {
+        3: {
+          row_number: 8,
+          row: [
+            '申込', 3, 'same@example.com', '山田 太郎', 'A', '',
+            '', '', '20', '', 2500, 0, 2500, 'unpaid',
+            'pending_api', '', 'temporary failure',
+          ],
+        },
+      }
+    ),
+  }),
+});
+const insertsBeforeRetry = writes.filter(item => item.method === 'insert').length;
+sandbox.recordFormResponseInTournamentSheetV2_(
+  responseSheet,
+  pendingStructure,
+  3,
+  { email: 'same@example.com', name: '山田 太郎', grade: 'A' },
+  {
+    player: { id: '30' },
+    entry: { id: '40', schedule_id: '20' },
+    payment_summary: {
+      participation_fee_yen: 2500,
+      paid_yen: 1000,
+      balance_yen: 1500,
+      status: 'partial',
+    },
+  },
+  null
+);
+assert.strictEqual(
+  writes.filter(item => item.method === 'insert').length,
+  insertsBeforeRetry
+);
+const retriedEntry = writes.filter(item =>
+  item.method === 'values' && item.rowNumber === 8 && item.column === 7
+).pop();
+assert.strictEqual(retriedEntry.values[0][0], '30');
+assert.strictEqual(retriedEntry.values[0][1], '40');
+assert.strictEqual(retriedEntry.values[0][8], 'synced');
 assert.match(
   formSubmitSource,
   /refreshSiblingTournamentSheetsV2AfterResponse_\(sheet\)/
 );
 assert.match(
   formSubmitSource,
-  /String\(existingManagement\.row\[7\] \|\| ''\) === expectedEntryId/
+  /pending_api行は同じ行を成功値で更新する/
 );
 
 assert.match(migrationSource, /admin\/tournament-sheet-snapshot/);
