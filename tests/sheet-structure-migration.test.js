@@ -132,12 +132,14 @@ assert.strictEqual(activeRecords.length, 2);
 assert.strictEqual(activeRecords[0].source_row, 3);
 assert.strictEqual(activeRecords[0].selection_status, '');
 assert.strictEqual(activeRecords[0].is_paid, false);
-assert.strictEqual(sandbox.tournamentSheetRecordDisplayStatus_(activeRecords[0]), '');
+assert.strictEqual(
+  sandbox.tournamentSheetPaymentDisplayStatus_(activeRecords[0]), '未払い'
+);
 assert.strictEqual(activeRecords[1].selection_status, 'キャンセル待ち1番');
 assert.strictEqual(activeRecords[1].is_paid, true);
 assert.strictEqual(
-  sandbox.tournamentSheetRecordDisplayStatus_(activeRecords[1]),
-  'キャンセル待ち1番'
+  sandbox.tournamentSheetPaymentDisplayStatus_(activeRecords[1]),
+  '済'
 );
 assert.strictEqual(
   sandbox.tournamentSheetResponseRecord_(recordStructure, 4, 'e4').entry_id,

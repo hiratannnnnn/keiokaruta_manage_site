@@ -40,6 +40,21 @@ function getTournamentList() {
 
 // カレンダーシートの指定列に値を書き込む（大会名で行を特定）
 // colOneBased : 書き込む列番号（1-indexed）
+function calendarTournamentSiblingRows_(data, sheetName) {
+  const baseName = tournamentSheetBaseName_(sheetName);
+  return (data || []).slice(2).filter(row =>
+    row[0] && tournamentSheetBaseName_(row[0]) === baseName
+  );
+}
+
+function calendarAggregatedCompletion_(rows, targetName, colOneBased, value) {
+  return (rows || []).length > 0 && rows.every(row =>
+    String(row[0]) === String(targetName)
+      ? String(value || '').trim() === '済'
+      : String(row[colOneBased - 1] || '').trim() === '済'
+  );
+}
+
 function setCalendarColumn(name, colOneBased, value) {
   let apiUpdated = false;
   try {
@@ -47,17 +62,21 @@ function setCalendarColumn(name, colOneBased, value) {
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
     if (!sheet) throw new Error(`「${CONFIG.SHEET_NAMES.CALENDAR}」シートが見つかりません`);
 
-    const data = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    const data = sheet.getRange(1, 1, sheet.getLastRow(), 13).getValues();
     for (let i = 2; i < data.length; i++) {
       if (String(data[i][0]) === name) {
+        const baseName = tournamentSheetBaseName_(name);
+        const siblingRows = calendarTournamentSiblingRows_(data, name);
         if (colOneBased === 7 || colOneBased === 12) {
           const tournament = taikaiFindTournament_(
-            String(name).replace(/[A-E]+級$/, '')
+            baseName
           );
           const field = colOneBased === 7
             ? 'registration_completed' : 'payment_completed';
           const update = {};
-          update[field] = String(value || '').trim() === '済';
+          update[field] = calendarAggregatedCompletion_(
+            siblingRows, name, colOneBased, value
+          );
           taikaiApiRequest_(
             'PATCH',
             '/tournaments/' + encodeURIComponent(String(tournament.id)),
@@ -66,24 +85,38 @@ function setCalendarColumn(name, colOneBased, value) {
           apiUpdated = true;
         }
         sheet.getRange(i + 1, colOneBased).setValue(value);
-        const tournamentSheet = ss.getSheetByName(name);
-        if (tournamentSheet) {
-          const structure = tournamentSheetStructure_(tournamentSheet, false);
-          if (structure.version === 2 && (colOneBased === 7 || colOneBased === 12)) {
+        if (colOneBased === 7 || colOneBased === 12) {
+          const writebackErrors = [];
+          siblingRows.forEach(row => {
+            const siblingName = String(row[0]);
+            const tournamentSheet = ss.getSheetByName(siblingName);
             try {
+              if (!tournamentSheet) {
+                throw new Error('大会シートが見つかりません。');
+              }
+              const structure = tournamentSheetStructure_(tournamentSheet, false);
+              if (structure.version !== 2) return;
               refreshTournamentSheetV2FromApi_(tournamentSheet);
             } catch (writebackError) {
-              markTournamentSheetV2SyncState_(
-                tournamentSheet,
-                'pending_sheet',
-                writebackError.message || writebackError
-              );
-              return JSON.stringify({
-                error: 'DBとカレンダーの更新は成功しましたが、大会シートへの書戻しに'
-                  + '失敗しました。同じ操作を再実行してください: ' + writebackError.message,
-                partial: true,
-              });
+              if (tournamentSheet) {
+                try {
+                  markTournamentSheetV2SyncState_(
+                    tournamentSheet,
+                    'pending_sheet',
+                    writebackError.message || writebackError
+                  );
+                } catch (markError) {}
+              }
+              writebackErrors.push(siblingName + ': ' + writebackError.message);
             }
+          });
+          if (writebackErrors.length) {
+            return JSON.stringify({
+              error: 'DBとカレンダーの更新は成功しましたが、大会シートへの書戻しに'
+                + '失敗しました。同じ操作を再実行してください: '
+                + writebackErrors.join(' / '),
+              partial: true,
+            });
           }
         }
         return JSON.stringify({ ok: true });
@@ -105,7 +138,7 @@ function completeTournament(name) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const tournament = taikaiFindTournament_(
-      String(name).replace(/[A-E]+級$/, '')
+      tournamentSheetBaseName_(name)
     );
     if (!tournament.registration_completed || !tournament.payment_completed) {
       return JSON.stringify({

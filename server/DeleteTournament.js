@@ -24,9 +24,23 @@ function deleteTournament(name) {
     const formId = tournamentSheetFormId_(structure);
     if (!formId) throw new Error('フォームIDが取得できません');
 
+    const tournamentName = tournamentSheetBaseName_(name);
+    const siblingSheets = ss.getSheets().filter(candidate =>
+      candidate.getName() !== name
+      && tournamentSheetBaseName_(candidate.getName()) === tournamentName
+      && /[A-E]+級$/.test(candidate.getName())
+    );
+    if (siblingSheets.length) {
+      throw new Error(
+        '同じ大会の別フォーム（'
+        + siblingSheets.map(candidate => candidate.getName()).join('、')
+        + '）が存在するため、このフォームだけを削除できません。'
+        + 'DBの日程・申込を誤削除しないため、大会単位の削除手順を使用してください。'
+      );
+    }
+
     // シート名末尾の「ABC級」を除いた大会名がAPI上の大会名。
     // API削除が失敗した場合は、フォーム・シートを残して再試行できるようにする。
-    const tournamentName = String(name).replace(/[A-E]+級$/, '');
     const deletedDatabase = taikaiDeleteTournament_(tournamentName);
 
     // フォームをゴミ箱へ移動

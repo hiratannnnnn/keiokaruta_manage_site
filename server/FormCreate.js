@@ -94,6 +94,15 @@ function createFormFromWeb(paramsJson) {
     const moshiDead      = new Date(moshiDeadStr);
     const raffle         = raffleStr   ? new Date(raffleStr)   : null;
     const huriDead       = huriDeadStr ? new Date(huriDeadStr) : null;
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const calendarSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
+    const sheetName = title + grades;
+    if (ss.getSheetByName(sheetName)) {
+      throw new Error('同名の大会フォームが既に存在します: ' + sheetName);
+    }
+    tournamentSheetValidateGradeOwnership_(
+      ss.getSheets().map(sheet => sheet.getName()).concat([sheetName])
+    );
 
     // フォーム作成だけは回答シートを作る必要があるが、大会本体は先に新DBへ登録する。
     // 級別日程は開催日が確定するまで作成できないため、後のsaveTournamentDatesで登録する。
@@ -113,8 +122,6 @@ function createFormFromWeb(paramsJson) {
         + ' API復旧後に「今年度のシート→DB完全同期」を実行してください。';
     }
 
-    const ss            = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const calendarSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
     const formTitle     = title + grades + '\u3000参加表明フォーム';
 
     // フォームをテンプレートからコピー
@@ -161,7 +168,7 @@ function createFormFromWeb(paramsJson) {
     if (!responseSheet) {
       throw new Error('新しく作成されたフォーム回答シートを特定できません。');
     }
-    responseSheet.setName(title + grades);
+    responseSheet.setName(sheetName);
     const responseColumnCount = responseSheet.getLastColumn();
 
     // メール管理シートへ書き込み
@@ -169,7 +176,7 @@ function createFormFromWeb(paramsJson) {
     if (mailSheet) {
       const nextRow = mailSheet.getLastRow() + 1;
       mailSheet.getRange(nextRow, 1, 1, 6).setValues(
-        [[title, grades, '', 'リマインダー', title + grades + '\u3000案内', formUrl]]
+        [[title, grades, '', 'リマインダー', sheetName + '\u3000案内', formUrl]]
       );
       mailSheet.getRange(2, 3).setValue(nextRow);
     }
@@ -177,7 +184,7 @@ function createFormFromWeb(paramsJson) {
     if (responseColumnCount > 4) {
       responseSheet.hideColumns(4, responseColumnCount - 4);
     }
-    const grades2 = ['A', 'B', 'C', 'D', 'E'];
+    const grades2 = tournamentSheetDeclaredGrades_(sheetName);
     const cd = title.includes('鳳玉') ? 3000 : 2000;
     const eFee = title.includes('鳳玉') ? 2500 : 1500;
     const initialFees = { A: 2500, B: 2500, C: cd, D: cd, E: eFee };
@@ -239,7 +246,7 @@ function createFormFromWeb(paramsJson) {
     tournamentSheetStructure_(responseSheet, true);
 
     // カレンダーシートへの書き込み
-    const rowNum = findFromCalendar(calendarSheet, title + grades);
+    const rowNum = findFromCalendar(calendarSheet, sheetName);
     calendarSheet.getRange(rowNum, 3).setValue(Utilities.formatDate(moshikomiStart, 'JST', 'y/M/d'));
     calendarSheet.getRange(rowNum, 6).setValue(moshiDead);
     calendarSheet.getRange(rowNum, 8).setValue(raffle  || '未定');

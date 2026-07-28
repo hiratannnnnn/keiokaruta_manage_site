@@ -31,11 +31,13 @@ assert.match(script, /detailPendingNotice\.tournamentName/);
 assert.match(script, /data-source-row=/);
 assert.match(script, /data-entry-id=/);
 assert.match(script, /data-player-id=/);
+assert.match(script, /detailSelectionStatusIndex/);
+assert.match(script, /selectionValue,\s*paymentValue/);
 assert.match(script, /function detailIdentityFromButton/);
 assert.match(script, /setDetailPayStatus\(\s*tournamentName, identity\.sourceRow, identity\.entryId/);
 assert.doesNotMatch(script, /function updateDetailPayCell/);
 assert.doesNotMatch(script, /String\(row\[2\] \|\| ''\)/);
-assert.match(script, /取消は出納管理から/);
+assert.match(script, /入金取消は出納管理から/);
 assert.match(script, /\.getPlayerDeposit\(identity\.playerId, playerName\)/);
 assert.match(page, /管理操作はPCから行うことを推奨します/);
 

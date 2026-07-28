@@ -481,15 +481,29 @@ function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit
   return taikaiRecordFullPaymentByEntry_(entry.id, useDeposit);
 }
 
-function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned) {
+function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned, grades) {
   const tournament = taikaiFindTournament_(tournamentName);
   const schedules = taikaiApiRequest_('GET', '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules') || [];
-  schedules.forEach(schedule => {
+  const gradeSet = (grades || []).map(grade =>
+    String(grade || '').replace('級', '').toUpperCase()
+  );
+  const targets = gradeSet.length
+    ? schedules.filter(schedule =>
+      gradeSet.includes(String(schedule.grade || '').toUpperCase())
+    )
+    : schedules;
+  if (!targets.length) {
+    throw new Error(
+      '対象級の大会日程がDBに登録されていません: '
+      + tournamentName + ' ' + gradeSet.join('') + '級'
+    );
+  }
+  targets.forEach(schedule => {
     taikaiApiRequest_('PATCH', '/schedules/' + encodeURIComponent(String(schedule.id)), {
       is_sanctioned: Boolean(isSanctioned),
     });
   });
-  return schedules.length;
+  return targets.length;
 }
 
 function taikaiGradeFeesFromSheetData_(data, sheetName, grades) {
@@ -528,7 +542,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const tournamentSheet = ss.getSheetByName(sheetName);
   if (!calendar || !tournamentSheet) throw new Error('大会情報シートが見つかりません。');
 
-  const baseName = String(sheetName).replace(/[A-E]+級$/, '');
+  const baseName = tournamentSheetBaseName_(sheetName);
   const tournament = taikaiEnsureTournament_(baseName);
   const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues();
   const calendarRow = calendarRows.slice(2).find(row => String(row[0]) === sheetName);
@@ -543,6 +557,15 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const targetGrades = Object.keys(gradeDates || {}).filter(grade =>
     Boolean(taikaiFormatDate_(gradeDates[grade]))
   );
+  const declaredGrades = tournamentSheetDeclaredGrades_(sheetName);
+  const outOfScopeGrades = targetGrades.filter(
+    grade => !declaredGrades.includes(grade)
+  );
+  if (outOfScopeGrades.length) {
+    throw new Error(
+      'このフォームの担当外の級は同期できません: ' + outOfScopeGrades.join(',')
+    );
+  }
   const feeResult = taikaiGradeFeesFromSheetData_(tournamentData, sheetName, targetGrades);
   if (feeResult.errors.length) throw new Error(feeResult.errors.join('\n'));
   const paymentInstructions = tournamentSheetPaymentInstructionsFromStructure_(structure);

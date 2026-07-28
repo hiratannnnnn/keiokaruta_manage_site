@@ -95,6 +95,13 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
   const grouped = {};
   const errors = [];
   const warnings = [];
+  try {
+    tournamentSheetValidateGradeOwnership_(
+      calendarRows.map(row => String(row[0] || '').trim()).filter(Boolean)
+    );
+  } catch (ownershipError) {
+    errors.push(ownershipError.message);
+  }
   let internalPaymentDeadlineIndex = null;
   try {
     internalPaymentDeadlineIndex = fiscalSyncCalendarColumn_(
@@ -270,11 +277,11 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 
       const selectionStatus = record.selection_status;
       const isCarriedOver = structure.version === 1
-        && ((selectionStatus.includes('繰') && selectionStatus.includes('越'))
-          || selectionStatus === 'くりこし');
+        && ((record.raw_sheet_status.includes('繰')
+            && record.raw_sheet_status.includes('越'))
+          || record.raw_sheet_status === 'くりこし');
       const isTarget = selectionStatus === ''
-        || (structure.version === 1
-          && (selectionStatus === '済' || isCarriedOver));
+        || (structure.version === 1 && isCarriedOver);
 
       const email = record.email;
       const grade = record.grade;

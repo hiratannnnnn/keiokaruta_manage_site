@@ -2,6 +2,45 @@
 // 大会フォーム回答シートの共通構造判定
 // ============================================================
 
+function tournamentSheetBaseName_(sheetName) {
+  return String(sheetName || '').replace(/[A-E]+級$/, '');
+}
+
+function tournamentSheetDeclaredGrades_(sheetName) {
+  const match = String(sheetName || '').match(/([A-E]+)級$/);
+  if (!match) {
+    throw new Error('大会シート名から担当級を特定できません: ' + sheetName);
+  }
+  const seen = {};
+  return match[1].split('').map(grade => {
+    if (seen[grade]) {
+      throw new Error('大会シート名の担当級が重複しています: ' + sheetName);
+    }
+    seen[grade] = true;
+    return grade;
+  });
+}
+
+function tournamentSheetValidateGradeOwnership_(sheetNames) {
+  const owners = {};
+  (sheetNames || []).forEach(sheetName => {
+    const name = String(sheetName || '').trim();
+    if (!/[A-E]+級$/.test(name)) return;
+    const baseName = tournamentSheetBaseName_(name);
+    tournamentSheetDeclaredGrades_(name).forEach(grade => {
+      const key = baseName + '|' + grade;
+      if (owners[key] && owners[key] !== name) {
+        throw new Error(
+          baseName + grade + '級が複数フォームに重複しています: '
+          + owners[key] + ' / ' + name
+        );
+      }
+      owners[key] = name;
+    });
+  });
+  return owners;
+}
+
 function tournamentSheetGoogleFormIdFromEditUrl_(value) {
   if (typeof value !== 'string') return null;
   const match = value.trim().match(
@@ -226,8 +265,7 @@ function tournamentSheetSelectionStatus_(structure, sourceRow) {
   const value = String(
     tournamentSheetRawSheetStatus_(structure, sourceRow) || ''
   ).trim();
-  if (structure.version === 2
-      && (value === '済' || value === '繰越' || value === 'くりこし')) {
+  if (value === '済' || value === '繰越' || value === 'くりこし') {
     return '';
   }
   return value;
@@ -247,17 +285,15 @@ function tournamentSheetEntryPaymentStatus_(structure, sourceRow) {
 
 function tournamentSheetPaymentIsPaid_(record) {
   return record.payment_status === 'paid'
-    || record.payment_status === 'overpaid'
-    || (record.balance_yen !== null
-      && record.balance_yen !== ''
-      && Number(record.balance_yen) <= 0);
+    || record.payment_status === 'overpaid';
 }
 
-function tournamentSheetRecordDisplayStatus_(record) {
-  if (record.selection_status) return record.selection_status;
-  if (record.is_paid) return '済';
+function tournamentSheetPaymentDisplayStatus_(record) {
+  if (record.payment_status === 'overpaid') return '過払い';
+  if (record.payment_status === 'paid') return '済';
   if (record.payment_status === 'partial') return '一部入金';
   if (record.payment_status === 'unpriced') return '参加費未設定';
+  if (record.payment_status === 'unpaid') return '未払い';
   return '';
 }
 
@@ -293,6 +329,9 @@ function tournamentSheetResponseRecords_(structure, includeSuperseded) {
       email: email,
       name: name,
       grade: String(raw[columns.grade] || '').replace(/級/g, '').trim().toUpperCase(),
+      raw_sheet_status: String(
+        tournamentSheetRawSheetStatus_(structure, sourceRow) || ''
+      ).trim(),
       selection_status: tournamentSheetSelectionStatus_(structure, sourceRow),
       payment_status: tournamentSheetEntryPaymentStatus_(structure, sourceRow),
       player_id: structure.version === 2 ? String(managementRow[6] || '') : '',

@@ -142,7 +142,10 @@ function sheetMigrationLatestSourceRowsByEmail_(structure, emailColumn) {
 }
 
 function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
-  const baseName = String(sheet.getName()).replace(/[A-E]+級$/, '');
+  const baseName = tournamentSheetBaseName_(sheet.getName());
+  const declaredGrades = tournamentSheetDeclaredGrades_(sheet.getName());
+  const declaredGradeSet = {};
+  declaredGrades.forEach(grade => { declaredGradeSet[grade] = true; });
   const tournament = taikaiFindTournament_(baseName);
   const responseColumns = tournamentSheetResponseColumns_(structure);
   const api = taikaiApiRequest_(
@@ -169,6 +172,7 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     : null;
   api.schedules.forEach(schedule => {
     const grade = String(schedule.grade || '').trim().toUpperCase();
+    if (!declaredGradeSet[grade]) return;
     if (!/^[A-E]$/.test(grade) || apiSchedules[grade]) {
       throw new Error('APIの日程を級で一意に対応できません: ' + grade);
     }
@@ -206,12 +210,22 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     }
     apiSchedules[grade] = schedule;
   });
-  if (!Object.keys(apiSchedules).length) {
-    throw new Error('APIに大会日程がありません。');
+  const missingScheduleGrades = declaredGrades.filter(grade => !apiSchedules[grade]);
+  if (missingScheduleGrades.length) {
+    throw new Error(
+      'APIにこのシートの担当日程がありません: ' + missingScheduleGrades.join(',')
+    );
   }
 
+  const ownedScheduleIds = {};
+  Object.keys(apiSchedules).forEach(grade => {
+    ownedScheduleIds[String(apiSchedules[grade].id)] = true;
+  });
+  const ownedApiEntries = api.entries.filter(entry =>
+    ownedScheduleIds[String(entry.schedule_id)]
+  );
   const apiEntries = {};
-  api.entries.forEach(entry => {
+  ownedApiEntries.forEach(entry => {
     const key = String(entry.player_email || '').toLowerCase()
       + '|' + String(entry.grade || '').toUpperCase();
     if (!apiEntries[key]) apiEntries[key] = [];
@@ -243,6 +257,11 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     if (!email || !name || !/^[A-E]$/.test(grade)) {
       throw new Error('回答行' + (index + 1) + 'のメール・氏名・級が不足しています。');
     }
+    if (!declaredGradeSet[grade]) {
+      throw new Error(
+        '回答行' + (index + 1) + 'の級がシート担当範囲外です: ' + grade
+      );
+    }
     const isLatest = latestSourceRowByEmail[email.toLowerCase()] === index + 1;
     const key = pseudonymousEmailFor_(email).toLowerCase() + '|' + grade;
     const apiEntry = isLatest ? apiEntries[key] : null;
@@ -258,6 +277,12 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
       ? '' : rawSheetStatus;
     if (isLatest && !apiEntry && requiresApiEntry) {
       throw new Error('回答行' + (index + 1) + 'をAPI申込へ対応できません。');
+    }
+    if (isLatest && apiEntry && !requiresApiEntry && !apiEntry.canceled_at) {
+      throw new Error(
+        '回答行' + (index + 1)
+        + 'は選考対象外ですが、API申込が有効です。先に完全同期してください。'
+      );
     }
     entries.push({
       source_row: index + 1,
@@ -282,7 +307,7 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
       sync_error: '',
     });
   }
-  const unmatchedActiveEntries = api.entries.filter(entry =>
+  const unmatchedActiveEntries = ownedApiEntries.filter(entry =>
     !entry.canceled_at && !matchedApiEntries[String(entry.entry_id)]
   );
   if (unmatchedActiveEntries.length) {
@@ -294,6 +319,32 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   const formId = tournamentSheetFormId_(structure);
   const editUrl = tournamentSheetFormEditUrl_(structure);
   const form = FormApp.openById(formId);
+  const localEntryIds = {};
+  entries.forEach(entry => {
+    if (entry.entry_id) localEntryIds[String(entry.entry_id)] = true;
+  });
+  const announcements = api.announcements.filter(item =>
+    (item.schedule_ids || []).some(id => ownedScheduleIds[String(id)])
+  ).map(item => Object.assign({}, item, {
+    schedule_ids: (item.schedule_ids || []).filter(
+      id => ownedScheduleIds[String(id)]
+    ),
+  }));
+  const announcementIds = {};
+  announcements.forEach(item => { announcementIds[String(item.id)] = true; });
+  const emailJobs = api.email_jobs.filter(item =>
+    (item.schedule_ids || []).some(id => ownedScheduleIds[String(id)])
+  ).map(item => Object.assign({}, item, {
+    schedule_ids: (item.schedule_ids || []).filter(
+      id => ownedScheduleIds[String(id)]
+    ),
+    announcement_id: item.announcement_id
+      && announcementIds[String(item.announcement_id)]
+      ? item.announcement_id : null,
+    deliveries: (item.deliveries || []).filter(delivery =>
+      localEntryIds[String(delivery.entry_id)]
+    ),
+  }));
   const snapshot = {
     tournament_name: baseName,
     tournament_id: api.tournament.id,
@@ -306,13 +357,13 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     sync_status: 'synced',
     synced_at: now,
     sync_error: '',
-    schedules: api.schedules.map(schedule => Object.assign({}, schedule, {
+    schedules: declaredGrades.map(grade => Object.assign({}, apiSchedules[grade], {
       sync_status: 'synced',
       synced_at: now,
     })),
     entries: entries,
-    announcements: api.announcements,
-    email_jobs: api.email_jobs,
+    announcements: announcements,
+    email_jobs: emailJobs,
     legacy_records: legacyRecords,
   };
   tournamentSheetV2ValidateSnapshot_(snapshot, true);
@@ -332,11 +383,13 @@ function tournamentSheetNamesForMigration_() {
   if (!calendar || calendar.getLastRow() < 3) return [];
   const values = calendar.getRange(3, 1, calendar.getLastRow() - 2, 1).getValues();
   const seen = {};
-  return values.map(row => String(row[0] || '').trim()).filter(name => {
+  const names = values.map(row => String(row[0] || '').trim()).filter(name => {
     if (!name || seen[name]) return false;
     seen[name] = true;
     return true;
   });
+  tournamentSheetValidateGradeOwnership_(names);
+  return names;
 }
 
 function inspectTournamentSheetMigration_(sheet) {
@@ -927,6 +980,7 @@ function refreshTournamentSheetV2FromApi_(sheet) {
   const oldValues = sheet.getRange(
     startRow, 1, oldRowCount, TOURNAMENT_SHEET_V2_WIDTH_
   ).getValues();
+  const originalMaxRows = sheet.getMaxRows();
   try {
     const requiredLastRow = startRow + Math.max(rows.length, oldRowCount) - 1;
     if (sheet.getMaxRows() < requiredLastRow) {
@@ -954,6 +1008,11 @@ function refreshTournamentSheetV2FromApi_(sheet) {
     sheet.getRange(
       startRow, 1, oldRowCount, TOURNAMENT_SHEET_V2_WIDTH_
     ).setValues(oldValues);
+    if (sheet.getMaxRows() > originalMaxRows) {
+      sheet.deleteRows(
+        originalMaxRows + 1, sheet.getMaxRows() - originalMaxRows
+      );
+    }
     throw writeError;
   }
   return {

@@ -22,9 +22,10 @@ function getTournamentDetail(name) {
     const rawColumnCount = structure.version === 2
       ? structure.layout.raw_response_column_count
       : structure.layout.payment_status_column - 1;
-    const paymentStatusIndex = rawColumnCount;
+    const selectionStatusIndex = rawColumnCount;
+    const paymentStatusIndex = rawColumnCount + 1;
     const personHeaders = headerRow.slice(0, rawColumnCount)
-      .concat(['選考・支払状態']);
+      .concat(['選考状態', '支払状態']);
     const responseRecords = tournamentSheetResponseRecords_(structure, false);
     const personRecords = responseRecords.map(record => ({
       source_row: record.source_row,
@@ -35,9 +36,10 @@ function getTournamentDetail(name) {
       payment_status: record.payment_status,
       paid_yen: record.paid_yen,
       balance_yen: record.balance_yen,
-      display_status: tournamentSheetRecordDisplayStatus_(record),
+      payment_display_status: tournamentSheetPaymentDisplayStatus_(record),
       values: record.raw_values.map(formatCell).concat([
-        tournamentSheetRecordDisplayStatus_(record),
+        record.selection_status,
+        tournamentSheetPaymentDisplayStatus_(record),
       ]),
     }));
     const personRows = personRecords.map(record => record.values);
@@ -100,6 +102,7 @@ function getTournamentDetail(name) {
     return JSON.stringify({
       name,
       sheetVersion: structure.version,
+      selectionStatusIndex,
       paymentStatusIndex,
       isOfficial,
       isRegistered,
@@ -124,11 +127,20 @@ function toggleOfficialStatus(name) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    const declaredGrades = tournamentSheetDeclaredGrades_(name);
     if (structure.version === 2) {
       const newIsOfficial = !tournamentSheetIsSanctioned_(structure);
+      const missingGrades = declaredGrades.filter(
+        grade => !structure.management.schedules[grade]
+      );
+      if (missingGrades.length) {
+        throw new Error(
+          name + ': 日程管理行がありません: ' + missingGrades.join(',')
+        );
+      }
       const metadataRow = structure.management.metadata_rows['公認'];
       sheet.getRange(metadataRow, 3).setValue(newIsOfficial);
-      Object.keys(structure.management.schedules).forEach(grade => {
+      declaredGrades.forEach(grade => {
         sheet.getRange(structure.management.schedules[grade].row_number, 12)
           .setValue(newIsOfficial);
         sheet.getRange(structure.management.schedules[grade].row_number, 14)
@@ -138,7 +150,7 @@ function toggleOfficialStatus(name) {
         .setValue('pending_api');
       try {
         taikaiSetTournamentSanctioned_(
-          String(name).replace(/[A-E]+級$/, ''), newIsOfficial
+          tournamentSheetBaseName_(name), newIsOfficial, declaredGrades
         );
       } catch (syncError) {
         sheet.getRange(structure.management.metadata_rows['同期エラー'], 3)
@@ -149,7 +161,7 @@ function toggleOfficialStatus(name) {
       sheet.getRange(structure.management.metadata_rows['最終同期日時'], 3)
         .setValue(new Date());
       sheet.getRange(structure.management.metadata_rows['同期エラー'], 3).setValue('');
-      Object.keys(structure.management.schedules).forEach(grade => {
+      declaredGrades.forEach(grade => {
         sheet.getRange(structure.management.schedules[grade].row_number, 14)
           .setValue('synced');
         sheet.getRange(structure.management.schedules[grade].row_number, 15)
@@ -163,7 +175,9 @@ function toggleOfficialStatus(name) {
     }
     const isCurrentlyOfficial = String(structure.data[row][1] || '') === '';
     const newIsOfficial = !isCurrentlyOfficial;
-    taikaiSetTournamentSanctioned_(String(name).replace(/[A-E]+級$/, ''), newIsOfficial);
+    taikaiSetTournamentSanctioned_(
+      tournamentSheetBaseName_(name), newIsOfficial, declaredGrades
+    );
     sheet.getRange(row + 1, 2).setValue(isCurrentlyOfficial ? '非公認' : '');
     return JSON.stringify({ ok: true, isOfficial: newIsOfficial });
   } catch (e) {
@@ -219,11 +233,6 @@ function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
 
     const structure = tournamentSheetStructure_(sheet, false);
     const record = tournamentSheetResponseRecord_(structure, sourceRow, entryId);
-    if (record.is_paid && value === '') {
-      throw new Error(
-        '支払い履歴は削除できません。出納管理から対象履歴を取り消してください。'
-      );
-    }
     if (isPaid && structure.version === 2) {
       if (!record.entry_id) {
         throw new Error(

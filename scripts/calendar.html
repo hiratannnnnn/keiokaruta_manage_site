@@ -457,6 +457,7 @@ function completeTournament(name, btn) {
 // 大会詳細
 // ------------------------------------------------------------
 let detailColsHidden = false;
+let detailSelectionStatusIndex = 7;
 let detailPaymentStatusIndex = 8;
 let detailNameColumnIndex = 2;
 let detailPendingNotice = null;
@@ -577,6 +578,9 @@ function onDetailLoaded(json) {
   detailPaymentStatusIndex = Number.isInteger(res.paymentStatusIndex)
     ? res.paymentStatusIndex
     : 8;
+  detailSelectionStatusIndex = Number.isInteger(res.selectionStatusIndex)
+    ? res.selectionStatusIndex
+    : detailPaymentStatusIndex - 1;
   detailNameColumnIndex = Number.isInteger(res.nameColumnIndex)
     ? res.nameColumnIndex
     : 2;
@@ -587,6 +591,7 @@ function onDetailLoaded(json) {
 
   // 参加者一覧
   const payColIdx = detailPaymentStatusIndex;
+  const selectionColIdx = detailSelectionStatusIndex;
   const showPayBtns = true;
   document.getElementById('detail-person-thead').innerHTML =
     '<tr>' + res.personHeaders.map((h, i) => {
@@ -599,6 +604,8 @@ function onDetailLoaded(json) {
         source_row: index + 2,
         entry_id: '',
         name: String(values[detailNameColumnIndex] || ''),
+        selection_status: String(values[selectionColIdx] || ''),
+        payment_display_status: String(values[payColIdx] || ''),
         values,
       }));
   document.getElementById('detail-person-tbody').innerHTML =
@@ -609,8 +616,11 @@ function onDetailLoaded(json) {
         if (i === detailNameColumnIndex) {
           return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
         }
+        if (i === selectionColIdx) {
+          return `<td class="${payStatusCellClass(String(cell))}">${escHtml(String(cell))}</td>`;
+        }
         if (i === payColIdx) {
-          return `<td class="${payStatusCellClass(String(cell))}">${escHtml(String(cell))}</td>${showPayBtns ? renderPayButtonsTd(String(cell), name, record.source_row, record.entry_id, record.player_id) : ''}`;
+          return `<td>${escHtml(String(cell))}</td>${showPayBtns ? renderPayButtonsTd(String(record.selection_status || ''), String(record.payment_display_status || cell), name, record.source_row, record.entry_id, record.player_id) : ''}`;
         }
         return `<td>${escHtml(cell)}</td>`;
       }).join('') + '</tr>';
@@ -864,33 +874,40 @@ function payStatusCellClass(value) {
   return '';
 }
 
-function renderPayButtonsHtml(value, playerName, sourceRow, entryId, playerId) {
+function renderPayButtonsHtml(
+  selectionValue, paymentValue, playerName, sourceRow, entryId, playerId
+) {
   const identity = `data-player-name="${escAttr(playerName)}" data-source-row="${escAttr(sourceRow)}" data-entry-id="${escAttr(entryId)}" data-player-id="${escAttr(playerId)}"`;
-  const isZumi   = value.includes('済');
-  const isWaitlisted = value.includes('キャンセル待ち');
-  const isBeforeCancel = value.includes('期限前キャンセル');
-  const isAfterCancel = value.includes('期限後キャンセル');
-  if (isZumi) {
-    return '<span class="pay-recorded-note">取消は出納管理から</span>';
-  } else if (isWaitlisted) {
-    return `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">済</button>`
-         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
+  const isZumi = paymentValue.includes('済') || paymentValue.includes('過払い');
+  const isWaitlisted = selectionValue.includes('キャンセル待ち');
+  const isBeforeCancel = selectionValue.includes('期限前キャンセル');
+  const isAfterCancel = selectionValue.includes('期限後キャンセル');
+  const paymentAction = isZumi
+    ? '<span class="pay-recorded-note">入金取消は出納管理から</span>'
+    : `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">入金済みにする</button>`;
+  if (isWaitlisted) {
+    return paymentAction
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">選考状態をクリア</button>`;
   } else if (isBeforeCancel) {
-    return `<button class="pay-btn pay-btn-cancel-after" ${identity} title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限後キャンセル')">期限後へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
+    return paymentAction
+         + `<button class="pay-btn pay-btn-cancel-after" ${identity} title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限後キャンセル')">期限後へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">選考状態をクリア</button>`;
   } else if (isAfterCancel) {
-    return `<button class="pay-btn pay-btn-cancel-before" ${identity} title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限前キャンセル')">期限前へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">クリア</button>`;
+    return paymentAction
+         + `<button class="pay-btn pay-btn-cancel-before" ${identity} title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限前キャンセル')">期限前へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">選考状態をクリア</button>`;
   } else {
-    return `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">済</button>`
+    return paymentAction
          + `<button class="pay-btn pay-btn-cancel" ${identity} onclick="event.stopPropagation();setPayStatusCancelFromButton(this)">キャンセル待ち</button>`
          + `<button class="pay-btn pay-btn-cancel-before" ${identity} title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限前キャンセル')">期限前キャンセル</button>`
          + `<button class="pay-btn pay-btn-cancel-after" ${identity} title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatusFromButton(this,'期限後キャンセル')">期限後キャンセル</button>`;
   }
 }
 
-function renderPayButtonsTd(value, playerName, sourceRow, entryId, playerId) {
-  return `<td class="pay-cell">${renderPayButtonsHtml(value, playerName, sourceRow, entryId, playerId)}</td>`;
+function renderPayButtonsTd(
+  selectionValue, paymentValue, playerName, sourceRow, entryId, playerId
+) {
+  return `<td class="pay-cell">${renderPayButtonsHtml(selectionValue, paymentValue, playerName, sourceRow, entryId, playerId)}</td>`;
 }
 
 function detailIdentityFromButton(btn) {
@@ -966,12 +983,13 @@ function setPayStatusFromButton(btn, value) {
   const playerName = identity.playerName;
   const tournamentName = document.getElementById('detail-title').textContent;
   const label = value === '' ? 'クリア（空欄）' : `「${value}」`;
+  const statusKind = value === '済' ? '支払状態' : '選考状態';
   const obligation = value === '期限前キャンセル'
     ? '\n参加費の支払い義務なしとして扱います。'
     : value === '期限後キャンセル'
       ? '\n参加費の支払い義務ありとして扱います。'
       : '';
-  showConfirmModal(`「${playerName}」の振込状況を${label}にしますか？${obligation}`, () => {
+  showConfirmModal(`「${playerName}」の${statusKind}を${label}にしますか？${obligation}`, () => {
     if (value !== '済') {
       _doSetPayStatus(tournamentName, identity, value, btn, false);
       return;
