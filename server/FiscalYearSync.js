@@ -244,9 +244,10 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       if (!playerName || !/[ 　]/.test(playerName)) continue;
 
       const payStatus = String(row[paymentStatusIndex] || '').trim();
-      const isTarget = payStatus === '' || payStatus === '済'
-        || (payStatus.includes('繰') && payStatus.includes('越'))
+      const isCarriedOver = (payStatus.includes('繰') && payStatus.includes('越'))
         || payStatus === 'くりこし';
+      const isTarget = payStatus === '' || payStatus === '済'
+        || isCarriedOver;
 
       const email = String(row[1] || '').trim();
       const grade = String(row[4] || '').replace(/級/g, '').trim().toUpperCase();
@@ -272,9 +273,8 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
           club: clubIndex >= 0 ? String(row[clubIndex] || '').trim() || null : null,
           grade: grade,
           held_on: heldOn,
-          is_paid: payStatus === '済'
-            || (payStatus.includes('繰') && payStatus.includes('越'))
-            || payStatus === 'くりこし',
+          is_paid: payStatus === '済' || isCarriedOver,
+          payment_method: isCarriedOver ? 'carried_over' : 'bank_transfer',
           source_sheet: sheetName,
           source_row: i + 1,
           // 同一人物・同一大会の重複時は、回答時刻が新しい行を正とする。
