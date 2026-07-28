@@ -369,10 +369,6 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   const formId = tournamentSheetFormId_(structure);
   const editUrl = tournamentSheetFormEditUrl_(structure);
   const form = FormApp.openById(formId);
-  const localEntryIds = {};
-  entries.forEach(entry => {
-    if (entry.entry_id) localEntryIds[String(entry.entry_id)] = true;
-  });
   const announcements = api.announcements.filter(item =>
     (item.schedule_ids || []).some(id => ownedScheduleIds[String(id)])
   ).map(item => Object.assign({}, item, {
@@ -391,8 +387,9 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
     announcement_id: item.announcement_id
       && announcementIds[String(item.announcement_id)]
       ? item.announcement_id : null,
-    deliveries: (item.deliveries || []).filter(delivery =>
-      localEntryIds[String(delivery.entry_id)]
+    // jobの履歴は現在のentry所属で削らない。級変更後も同じdelivery IDを保持する。
+    deliveries: (item.deliveries || []).map(delivery =>
+      Object.assign({}, delivery)
     ),
   }));
   const snapshot = {

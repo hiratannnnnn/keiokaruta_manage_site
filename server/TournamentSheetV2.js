@@ -319,8 +319,9 @@ function tournamentSheetV2ValidateSnapshot_(snapshot, requireSynced) {
       }
     });
     (item.deliveries || []).forEach(delivery => {
+      const entryRequired = String(item.mail_type || '') !== 'reminder';
       if (!delivery.id || deliveryIds[String(delivery.id)]
-          || !delivery.entry_id) {
+          || (entryRequired && !delivery.entry_id)) {
         throw new Error('大会管理データv2の配信識別情報が不足または重複しています。');
       }
       deliveryIds[String(delivery.id)] = true;

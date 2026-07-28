@@ -220,8 +220,9 @@ assert.strictEqual(projected.entries.length, 1);
 assert.strictEqual(projected.entries[0].entry_id, 'eA');
 assert.strictEqual(projected.announcements.length, 1);
 assert.strictEqual(projected.announcements[0].id, 'aA');
-assert.strictEqual(projected.email_jobs[0].deliveries.length, 1);
+assert.strictEqual(projected.email_jobs[0].deliveries.length, 2);
 assert.strictEqual(projected.email_jobs[0].deliveries[0].entry_id, 'eA');
+assert.strictEqual(projected.email_jobs[0].deliveries[1].entry_id, 'eC');
 assert.throws(
   () => {
     sheet.structure = structure('キャンセル待ち1番');

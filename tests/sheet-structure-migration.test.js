@@ -77,6 +77,32 @@ const snapshot = {
   legacy_records: [['Q1', '"旧列"', 'string', '"記帳済"', '""', '""', '"@"', '"#fff"', '']],
 };
 assert.strictEqual(sandbox.tournamentSheetV2ValidateSnapshot_(snapshot, true), true);
+const reminderSnapshot = Object.assign({}, snapshot, {
+  email_jobs: [{
+    id: 'job-reminder',
+    mail_type: 'reminder',
+    schedule_ids: ['20'],
+    deliveries: [{ id: 'delivery-reminder', entry_id: null }],
+  }],
+});
+assert.strictEqual(
+  sandbox.tournamentSheetV2ValidateSnapshot_(reminderSnapshot, true),
+  true
+);
+const invalidPaymentDeliverySnapshot = Object.assign({}, snapshot, {
+  email_jobs: [{
+    id: 'job-payment',
+    mail_type: 'payment_confirmation',
+    schedule_ids: ['20'],
+    deliveries: [{ id: 'delivery-payment', entry_id: null }],
+  }],
+});
+assert.throws(
+  () => sandbox.tournamentSheetV2ValidateSnapshot_(
+    invalidPaymentDeliverySnapshot, true
+  ),
+  /配信識別情報が不足/
+);
 const rows = sandbox.tournamentSheetV2Rows_(snapshot);
 assert.strictEqual(rows[0][0], '__TAIKAI_MANAGEMENT_V2__');
 assert.ok(rows.some(row => row[0] === 'A' && row[3] === '20'));
