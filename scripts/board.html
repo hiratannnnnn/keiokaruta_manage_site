@@ -42,7 +42,8 @@ function boardRender() {
   }
 
   statusEl.style.display = 'none';
-  feedEl.innerHTML = _boardPosts.map(p => boardPostHtml(p)).join('');
+  feedEl.replaceChildren();
+  _boardPosts.forEach(post => feedEl.appendChild(boardPostElement(post)));
 }
 
 const BOARD_ROLE_CLASS = {
@@ -54,22 +55,35 @@ const BOARD_ROLE_CLASS = {
   '副会長':   'board-role-president',
 };
 
-function boardPostHtml(p) {
+function boardPostElement(p) {
   const roleClass = BOARD_ROLE_CLASS[p.role] || 'board-role-other';
   const canDelete = currentRole === '会長副会長' || currentRole === p.role;
-  const delBtn = canDelete
-    ? `<button class="board-del-btn" onclick="boardDelete('${p.id}', this)" title="削除">✕</button>`
-    : '';
   const displayName = p.name ? p.name + '（' + p.role + '）' : p.role;
-  return `<div class="board-card" id="board-post-${p.id}">
-    <div class="board-card-header">
-      <span class="board-role-badge ${roleClass}">${escHtml(p.role)}</span>
-      <span class="board-poster">${escHtml(displayName)}</span>
-      <span class="board-datetime">${escHtml(p.datetime)}</span>
-      ${delBtn}
-    </div>
-    <div class="board-content">${escHtml(p.content).replace(/\n/g, '<br>')}</div>
-  </div>`;
+  const card = document.createElement('div');
+  card.className = 'board-card';
+  card.dataset.postId = String(p.id);
+  const header = document.createElement('div');
+  header.className = 'board-card-header';
+  [['board-role-badge ' + roleClass, p.role], ['board-poster', displayName],
+    ['board-datetime', p.datetime]].forEach(([className, text]) => {
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = text || '';
+    header.appendChild(span);
+  });
+  if (canDelete) {
+    const button = document.createElement('button');
+    button.className = 'board-del-btn';
+    button.title = '削除';
+    button.textContent = '✕';
+    button.addEventListener('click', () => boardDelete(String(p.id), button));
+    header.appendChild(button);
+  }
+  const content = document.createElement('div');
+  content.className = 'board-content';
+  content.textContent = p.content || '';
+  card.append(header, content);
+  return card;
 }
 
 function boardToggleTournamentPicker() {
@@ -83,11 +97,14 @@ function boardToggleTournamentPicker() {
     picker.style.display = 'block';
     return;
   }
-  picker.innerHTML = allTournaments.map(t =>
-    `<div class="board-picker-item" onclick="boardInsertTournament('${t.name.replace(/'/g, "\\'")}')">
-      ${escHtml(t.name)}
-    </div>`
-  ).join('');
+  picker.replaceChildren();
+  allTournaments.forEach(tournament => {
+    const item = document.createElement('div');
+    item.className = 'board-picker-item';
+    item.textContent = tournament.name;
+    item.addEventListener('click', () => boardInsertTournament(tournament.name));
+    picker.appendChild(item);
+  });
   picker.style.display = 'block';
 }
 

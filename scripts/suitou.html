@@ -54,26 +54,52 @@ function suRenderTx(transactions) {
     return;
   }
   statusEl.style.display = 'none';
-  tbody.innerHTML = transactions.map(t => {
+  tbody.replaceChildren();
+  transactions.forEach(t => {
     const isDeposit  = t.reason === 'デポジット';
     const canConvert = t.amount > 0 && !isDeposit;
     const isPending  = t.rowNum === 0;
-    const actionBtn  = isPending ? '<span style="font-size:0.78rem;color:#999;">同期中...</span>' : (canConvert
-      ? `<button class="su-deposit-btn" onclick="suConvertToDeposit(${t.rowNum}, this)">デポジット化</button>`
-      : '')
-      + `<button class="su-del-btn" onclick="suDeleteRow(${t.rowNum}, this)">削除</button>`;
-    const reasonHtml   = isDeposit
-      ? `<span class="su-deposit-badge">デポジット</span>`
-      : escHtml(t.reason);
-    const escapedName  = t.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return `<tr>
-      <td class="su-name-link" onclick="suShowAddModal('${escapedName}')">${escHtml(t.name)}</td>
-      <td class="su-amount ${t.amount < 0 ? 'su-amount-neg' : ''}">${t.amount.toLocaleString()}円</td>
-      <td>${reasonHtml}</td>
-      <td class="su-date">${escHtml(t.date)}</td>
-      <td style="white-space:nowrap;">${actionBtn}</td>
-    </tr>`;
-  }).join('');
+    const tr = document.createElement('tr');
+    const name = document.createElement('td');
+    name.className = 'su-name-link';
+    name.textContent = t.name || '';
+    name.addEventListener('click', () => suShowAddModal(t.name));
+    const amount = document.createElement('td');
+    amount.className = 'su-amount' + (t.amount < 0 ? ' su-amount-neg' : '');
+    amount.textContent = Number(t.amount || 0).toLocaleString() + '円';
+    const reason = document.createElement('td');
+    if (isDeposit) {
+      const badge = document.createElement('span');
+      badge.className = 'su-deposit-badge';
+      badge.textContent = 'デポジット';
+      reason.appendChild(badge);
+    } else {
+      reason.textContent = t.reason || '';
+    }
+    const date = document.createElement('td');
+    date.className = 'su-date';
+    date.textContent = t.date || '';
+    const actions = document.createElement('td');
+    actions.style.whiteSpace = 'nowrap';
+    if (isPending) {
+      actions.textContent = '同期中...';
+    } else {
+      if (canConvert) {
+        const deposit = document.createElement('button');
+        deposit.className = 'su-deposit-btn';
+        deposit.textContent = 'デポジット化';
+        deposit.addEventListener('click', () => suConvertToDeposit(t.rowNum, deposit));
+        actions.appendChild(deposit);
+      }
+      const remove = document.createElement('button');
+      remove.className = 'su-del-btn';
+      remove.textContent = '削除';
+      remove.addEventListener('click', () => suDeleteRow(t.rowNum, remove));
+      actions.appendChild(remove);
+    }
+    tr.append(name, amount, reason, date, actions);
+    tbody.appendChild(tr);
+  });
   wrapEl.style.display = '';
 }
 
@@ -88,12 +114,21 @@ function suRenderBalance(balances) {
     return;
   }
   statusEl.style.display = 'none';
-  tbody.innerHTML = balances.map(b => `
-    <tr>
-      <td>${escHtml(b.name)}</td>
-      <td class="su-amount ${b.balance < 0 ? 'su-amount-neg' : ''}">${b.balance.toLocaleString()}円</td>
-      <td class="su-tournaments">${escHtml(b.tournaments)}</td>
-    </tr>`).join('');
+  tbody.replaceChildren();
+  balances.forEach(balance => {
+    const tr = document.createElement('tr');
+    const name = document.createElement('td');
+    name.textContent = balance.name || '';
+    const amount = document.createElement('td');
+    amount.className = 'su-amount'
+      + (balance.balance < 0 ? ' su-amount-neg' : '');
+    amount.textContent = Number(balance.balance || 0).toLocaleString() + '円';
+    const tournaments = document.createElement('td');
+    tournaments.className = 'su-tournaments';
+    tournaments.textContent = balance.tournaments || '';
+    tr.append(name, amount, tournaments);
+    tbody.appendChild(tr);
+  });
   wrapEl.style.display = '';
 }
 
@@ -183,14 +218,20 @@ function suFilterNameSuggestions() {
   const q    = document.getElementById('su-add-name').value.trim();
   const list = document.getElementById('su-name-suggest-list');
   if (!q || !allMembers.length) { list.style.display = 'none'; return; }
-  const nameKey = Object.keys(allMembers[0])[0];
   const matched = allMembers
-    .map(m => String(m[nameKey]))
+    .map(m => String(m.name || ''))
     .filter(n => n.includes(q));
   if (!matched.length) { list.style.display = 'none'; return; }
-  list.innerHTML = matched.slice(0, 10).map(n =>
-    `<li onmousedown="suSelectName('${n.replace(/'/g, "\\'")}')">${escHtml(n)}</li>`
-  ).join('');
+  list.replaceChildren();
+  matched.slice(0, 10).forEach(name => {
+    const item = document.createElement('li');
+    item.textContent = name;
+    item.addEventListener('mousedown', event => {
+      event.preventDefault();
+      suSelectName(name);
+    });
+    list.appendChild(item);
+  });
   list.style.display = 'block';
 }
 

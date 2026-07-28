@@ -84,19 +84,19 @@ function renderCalendar(list) {
 
   document.getElementById('calendar-tbody').innerHTML =
     list.map(t => {
-      const safeName    = escHtml(t.name).replace(/'/g, "&#39;");
+      const safeName = escAttr(t.name);
       const bothDone    = t.applyDone && t.payDone;
 
       // 済ボタンのレンダリングヘルパー
       const doneBtn = (col, isDone) => {
         if (isDone && col === 12) {
           // 振込済みは取り消し可能
-          return `<button class="done-btn done-btn-done" onclick="clearCalendarPayDone('${safeName}', this)">✓</button>`;
+          return `<button class="done-btn done-btn-done" data-name="${safeName}" onclick="clearCalendarPayDone(this.dataset.name, this)">✓</button>`;
         }
         const cls = isDone ? 'done-btn done-btn-done' : 'done-btn';
         const txt = isDone ? '✓' : '済';
         const dis = isDone ? 'disabled' : '';
-        return `<button class="${cls}" ${dis} onclick="setCalendarDone('${safeName}', ${col}, this)">${txt}</button>`;
+        return `<button class="${cls}" ${dis} data-name="${safeName}" onclick="setCalendarDone(this.dataset.name, ${col}, this)">${txt}</button>`;
       };
 
       // 案内ダブルチェックセル
@@ -104,23 +104,23 @@ function renderCalendar(list) {
       if (t.doubleChecked) {
         dcCell = `<td><span class="dc-done">✓</span></td>`;
       } else if (hasPermission('announcementDoubleCheck')) {
-        dcCell = `<td onclick="event.stopPropagation()"><button class="dc-btn" onclick="openDoubleCheckModal('${safeName}')">チェック</button></td>`;
+        dcCell = `<td onclick="event.stopPropagation()"><button class="dc-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button></td>`;
       } else {
         dcCell = `<td></td>`;
       }
 
-      return `<tr class="clickable" onclick="openTournamentDetail('${safeName}')">
+      return `<tr class="clickable" data-name="${safeName}" onclick="openTournamentDetail(this.dataset.name)">
         <td>${escHtml(t.name)}</td>
         ${dcCell}
-        <td class="${dateTdClass(t.applyStart)}">${t.applyStart}</td>
-        <td class="${dateTdClass(t.applyDeadline)}">${t.applyDeadline}</td>
+        <td class="${dateTdClass(t.applyStart)}">${escHtml(t.applyStart)}</td>
+        <td class="${dateTdClass(t.applyDeadline)}">${escHtml(t.applyDeadline)}</td>
         <td onclick="event.stopPropagation()">${doneBtn(7, t.applyDone)}</td>
-        <td class="${dateTdClass(t.lottery)}">${t.lottery}</td>
-        <td class="${dateTdClass(t.payDeadline)}">${t.payDeadline}</td>
+        <td class="${dateTdClass(t.lottery)}">${escHtml(t.lottery)}</td>
+        <td class="${dateTdClass(t.payDeadline)}">${escHtml(t.payDeadline)}</td>
         <td onclick="event.stopPropagation()">${doneBtn(12, t.payDone)}</td>
-        <td class="${dateTdClass(t.date)}">${t.date}</td>
+        <td class="${dateTdClass(t.date)}">${escHtml(t.date)}</td>
         <td onclick="event.stopPropagation()">
-          <button class="complete-btn" onclick="completeTournament('${safeName}', this)" ${bothDone ? '' : 'disabled'}>完了</button>
+          <button class="complete-btn" data-name="${safeName}" onclick="completeTournament(this.dataset.name, this)" ${bothDone ? '' : 'disabled'}>完了</button>
         </td>
       </tr>`;
     }).join('');
@@ -471,13 +471,6 @@ function completeTournament(name, btn) {
   });
 }
 
-function filterCalendar() {
-  const q = document.getElementById('calendar-search').value.trim().toLowerCase();
-  renderCalendar(q ? allTournaments.filter(t =>
-    String(t.name).toLowerCase().includes(q)
-  ) : allTournaments);
-}
-
 // ------------------------------------------------------------
 // 大会詳細
 // ------------------------------------------------------------
@@ -570,10 +563,10 @@ function onDetailLoaded(json) {
   document.getElementById('detail-person-tbody').innerHTML =
     res.personRows.map(row => {
       const lastIdx = row.length - 1;
-      const name = String(row[2] || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const name = String(row[2] || '');
       return '<tr>' + row.map((cell, i) => {
         if (i === lastIdx) {
-          return `<td class="name-link" title="選手大会照会で検索" onclick="goToPlayerSearch('${name}')">${escHtml(cell)}</td>`;
+          return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
         }
         if (i === payColIdx) {
           return `<td class="${payStatusCellClass(String(cell))}">${escHtml(String(cell))}</td>${showPayBtns ? renderPayButtonsTd(String(cell), String(row[2] || '')) : ''}`;
@@ -794,27 +787,27 @@ function payStatusCellClass(value) {
 }
 
 function renderPayButtonsHtml(value, playerName) {
-  const esc = playerName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const esc = escAttr(playerName);
   const isZumi   = value.includes('済');
   const isWaitlisted = value.includes('キャンセル待ち');
   const isBeforeCancel = value.includes('期限前キャンセル');
   const isAfterCancel = value.includes('期限後キャンセル');
   if (isZumi) {
-    return `<button class="pay-btn pay-btn-clear" onclick="event.stopPropagation();setPayStatus('${esc}','',this)">クリア</button>`;
+    return `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
   } else if (isWaitlisted) {
-    return `<button class="pay-btn" onclick="event.stopPropagation();setPayStatus('${esc}','済',this)">済</button>`
-         + `<button class="pay-btn pay-btn-clear" onclick="event.stopPropagation();setPayStatus('${esc}','',this)">クリア</button>`;
+    return `<button class="pay-btn" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'済',this)">済</button>`
+         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
   } else if (isBeforeCancel) {
-    return `<button class="pay-btn pay-btn-cancel-after" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus('${esc}','期限後キャンセル',this)">期限後へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" onclick="event.stopPropagation();setPayStatus('${esc}','',this)">クリア</button>`;
+    return `<button class="pay-btn pay-btn-cancel-after" data-player-name="${esc}" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限後キャンセル',this)">期限後へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
   } else if (isAfterCancel) {
-    return `<button class="pay-btn pay-btn-cancel-before" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus('${esc}','期限前キャンセル',this)">期限前へ変更</button>`
-         + `<button class="pay-btn pay-btn-clear" onclick="event.stopPropagation();setPayStatus('${esc}','',this)">クリア</button>`;
+    return `<button class="pay-btn pay-btn-cancel-before" data-player-name="${esc}" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限前キャンセル',this)">期限前へ変更</button>`
+         + `<button class="pay-btn pay-btn-clear" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'',this)">クリア</button>`;
   } else {
-    return `<button class="pay-btn" onclick="event.stopPropagation();setPayStatus('${esc}','済',this)">済</button>`
-         + `<button class="pay-btn pay-btn-cancel" onclick="event.stopPropagation();setPayStatusCancel('${esc}',this)">キャンセル待ち</button>`
-         + `<button class="pay-btn pay-btn-cancel-before" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus('${esc}','期限前キャンセル',this)">期限前キャンセル</button>`
-         + `<button class="pay-btn pay-btn-cancel-after" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus('${esc}','期限後キャンセル',this)">期限後キャンセル</button>`;
+    return `<button class="pay-btn" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'済',this)">済</button>`
+         + `<button class="pay-btn pay-btn-cancel" data-player-name="${esc}" onclick="event.stopPropagation();setPayStatusCancel(this.dataset.playerName,this)">キャンセル待ち</button>`
+         + `<button class="pay-btn pay-btn-cancel-before" data-player-name="${esc}" title="参加費の支払い義務なし" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限前キャンセル',this)">期限前キャンセル</button>`
+         + `<button class="pay-btn pay-btn-cancel-after" data-player-name="${esc}" title="参加費の支払い義務あり" onclick="event.stopPropagation();setPayStatus(this.dataset.playerName,'期限後キャンセル',this)">期限後キャンセル</button>`;
   }
 }
 
@@ -978,10 +971,12 @@ function openDoubleCheckModal(name) {
   _doubleCheckTarget = name;
   document.getElementById('double-check-name').textContent = name;
   const t = allTournaments.find(x => x.name === name);
-  document.getElementById('double-check-content').innerHTML =
-    (t && t.announcementHtml)
-      ? t.announcementHtml
-      : '<p style="color:#aaa;font-size:0.85rem;">案内コンテンツがありません</p>';
+  const content = document.getElementById('double-check-content');
+  if (t && t.announcementHtml) {
+    setSanitizedRichText(content, t.announcementHtml);
+  } else {
+    content.textContent = '案内コンテンツがありません';
+  }
   document.getElementById('double-check-modal').style.display = 'flex';
 }
 
@@ -1004,7 +999,7 @@ function executeDoubleCheck() {
       if (r.error) { showAlertModal('エラー: ' + r.error); return; }
       const t = allTournaments.find(x => x.name === name);
       if (t) t.doubleChecked = true;
-      filterCalendar();
+      renderCalendar(allTournaments);
       // 詳細ページが同じ大会を表示中なら必要タスクを更新
       if (document.getElementById('detail-title').textContent === name) {
         renderDetailTasks(name);
@@ -1022,12 +1017,12 @@ function renderDetailTasks(name) {
   const section = document.getElementById('detail-tasks-section');
   if (!t) { section.style.display = 'none'; return; }
 
-  const safeName = escHtml(name).replace(/'/g, "&#39;");
+  const safeName = escAttr(name);
   const items = [];
 
   if (!t.doubleChecked) {
     const btnHtml = hasPermission('announcementDoubleCheck')
-      ? `<button class="task-btn" onclick="openDoubleCheckModal('${safeName}')">チェック</button>`
+      ? `<button class="task-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button>`
       : '';
     items.push(`<div class="task-item"><span class="task-label">□ 案内のダブルチェック</span>${btnHtml}</div>`);
   }

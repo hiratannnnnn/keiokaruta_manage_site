@@ -22,7 +22,52 @@ function setStatus(key, type, msg) {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s === undefined || s === null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escAttr(s) {
+  return escHtml(s);
+}
+
+function isSafeHttpUrl(value) {
+  const text = String(value || '').trim();
+  if (!/^https?:\/\//i.test(text)) return false;
+  try {
+    const url = new URL(text);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch (e) {
+    return false;
+  }
+}
+
+function setSanitizedRichText(target, html) {
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  const allowed = new Set([
+    'P', 'BR', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U',
+    'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'A',
+  ]);
+  Array.from(template.content.querySelectorAll('*')).forEach(element => {
+    if (!allowed.has(element.tagName)) {
+      element.replaceWith(document.createTextNode(element.textContent || ''));
+      return;
+    }
+    const href = element.tagName === 'A' ? element.getAttribute('href') : '';
+    Array.from(element.attributes).forEach(attribute =>
+      element.removeAttribute(attribute.name)
+    );
+    if (element.tagName === 'A' && isSafeHttpUrl(href)) {
+      element.href = href;
+      element.target = '_blank';
+      element.rel = 'noopener noreferrer';
+    }
+  });
+  target.replaceChildren(template.content.cloneNode(true));
 }
 
 // ------------------------------------------------------------

@@ -252,7 +252,7 @@ function mmRenderGmailAudit() {
     const current = item.gmail_message_id || '';
     tr.innerHTML =
       '<td><div>' + escHtml(item.subject) + '</div>'
-        + (item.form_url
+        + (isSafeHttpUrl(item.form_url)
           ? '<a href="' + mmEscAttr(item.form_url)
             + '" target="_blank" rel="noopener">フォーム</a>'
           : '') + '</td>'
@@ -371,14 +371,20 @@ function mmRenderTable() {
       <td class="mm-datetime">${escHtml(row.sendDateTime) || '未設定'}</td>
       <td><span class="mm-badge mm-badge-${row.mailType === 'リマインダー' ? 'reminder' : 'payment'}">${escHtml(row.mailType)}</span></td>
       <td class="mm-truncate">${escHtml(row.threadTitle)}</td>
-      <td class="mm-truncate">${row.formLink ? `<a href="${escHtml(row.formLink)}" target="_blank">リンク</a>` : ''}</td>
+      <td class="mm-truncate">${isSafeHttpUrl(row.formLink) ? `<a href="${escAttr(row.formLink)}" target="_blank" rel="noopener">リンク</a>` : ''}</td>
       <td class="mm-center">${isReminderSet ? '<span class="mm-check">済</span>' : '<span class="mm-pending">—</span>'}</td>
       <td class="mm-center">${isSent ? '<span class="mm-check">済</span>' : '<span class="mm-pending">—</span>'}</td>
       <td class="mm-center">
-        <button class="mm-set-btn" onclick="mmOpenPreviewModal(${row.rowNum}, '${row.sendDateTime}', '${row.mailType}')">${isReminderSet || isSent ? '再設定' : '設定'}</button>
-        <button class="mm-del-btn" onclick="mmDeleteRow(${row.rowNum})">削除</button>
+        <button class="mm-set-btn" data-row-num="${Number(row.rowNum)}">${isReminderSet || isSent ? '再設定' : '設定'}</button>
+        <button class="mm-del-btn">削除</button>
       </td>
     `;
+    tr.querySelector('.mm-set-btn').addEventListener('click', () => {
+      mmOpenPreviewModal(row.rowNum, row.sendDateTime, row.mailType);
+    });
+    tr.querySelector('.mm-del-btn').addEventListener('click', () => {
+      mmDeleteRow(row.rowNum);
+    });
     tbody.appendChild(tr);
   });
 }
