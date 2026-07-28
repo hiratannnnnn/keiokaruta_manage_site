@@ -105,4 +105,61 @@ const uiSource = read('scripts/calendar.html');
 assert.match(apiSource, /DELETE[\s\S]*schedule_ids: ids/);
 assert.match(uiSource, /兄弟フォームの大会データは維持されています/);
 
+let googleWritesAfterApiFailure = 0;
+const apiFailureSandbox = Object.assign({}, sandbox, {
+  taikaiDeleteTournamentSchedules_: () => {
+    throw new Error('API unavailable');
+  },
+  FormApp: {
+    DestinationType: { SPREADSHEET: 'spreadsheet' },
+    openById: () => {
+      googleWritesAfterApiFailure++;
+      return { setDestination() {} };
+    },
+  },
+  DriveApp: {
+    getFileById: () => ({
+      isTrashed: () => false,
+      setTrashed: () => { googleWritesAfterApiFailure++; },
+    }),
+  },
+});
+vm.runInNewContext(read('server/DeleteTournament.js'), apiFailureSandbox);
+const apiFailure = JSON.parse(
+  apiFailureSandbox.deleteTournament('第1回大会AB級')
+);
+assert.strictEqual(apiFailure.partial, false);
+assert.match(apiFailure.error, /API unavailable/);
+assert.strictEqual(googleWritesAfterApiFailure, 0);
+
+let sheetDeletesAfterPartial = 0;
+const partialSpreadsheet = Object.assign({}, spreadsheet, {
+  deleteSheet: () => { sheetDeletesAfterPartial++; },
+});
+const partialSandbox = Object.assign({}, sandbox, {
+  SpreadsheetApp: {
+    openById: id => id === 'main'
+      ? partialSpreadsheet : { getId: () => 'trash' },
+  },
+  FormApp: {
+    DestinationType: { SPREADSHEET: 'spreadsheet' },
+    openById: () => ({
+      setDestination: () => { throw new Error('destination failed'); },
+    }),
+  },
+  DriveApp: {
+    getFileById: () => ({
+      isTrashed: () => false,
+      setTrashed() {},
+    }),
+  },
+});
+vm.runInNewContext(read('server/DeleteTournament.js'), partialSandbox);
+const partial = JSON.parse(
+  partialSandbox.deleteTournament('第1回大会AB級')
+);
+assert.strictEqual(partial.partial, true);
+assert.match(partial.error, /同じ削除操作を再実行/);
+assert.strictEqual(sheetDeletesAfterPartial, 0);
+
 console.log('Tournament schedule deletion checks passed.');

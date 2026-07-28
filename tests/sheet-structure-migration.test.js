@@ -143,6 +143,27 @@ const latestResponses = sandbox.tournamentLatestByEmail_([
   },
 ]);
 assert.strictEqual(latestResponses['first@example.com'].source_row, 3);
+const tieBrokenResponses = sandbox.tournamentLatestByEmail_([
+  {
+    email: 'tie@example.com',
+    registered_at_ms: null,
+    source_order: 9,
+    source_row: 9,
+  },
+  {
+    email: 'tie@example.com',
+    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
+    source_order: 1,
+    source_row: 2,
+  },
+  {
+    email: 'tie@example.com',
+    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
+    source_order: 2,
+    source_row: 3,
+  },
+]);
+assert.strictEqual(tieBrokenResponses['tie@example.com'].source_row, 3);
 
 const recordStructure = {
   version: 2,

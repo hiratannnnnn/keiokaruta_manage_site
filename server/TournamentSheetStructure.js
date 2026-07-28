@@ -48,6 +48,8 @@ function tournamentResponseTimestampMs_(value) {
 }
 
 function tournamentLatestByEmail_(items) {
+  // 解釈可能な新しい日時を優先する。同時刻・日時不明同士は、大会の
+  // カレンダー順→シート行順で割り当てたsource_orderの後勝ちとする。
   const latestByEmail = {};
   (items || []).forEach(item => {
     const key = String(item.email || '').trim().toLowerCase();
