@@ -102,12 +102,21 @@ assert.deepStrictEqual(
   JSON.parse(JSON.stringify(responseColumns)),
   { timestamp: 0, email: 2, name: 3, grade: 1 }
 );
-assert.deepStrictEqual(
-  JSON.parse(JSON.stringify(sandbox.sheetMigrationLatestSourceRowsByEmail_(
-    rawStructure, responseColumns.email
-  ))),
-  { 'first@example.com': 3 }
-);
+const latestResponses = sandbox.tournamentLatestByEmail_([
+  {
+    email: 'FIRST@example.com',
+    registered_at_ms: new Date('2026-07-01T00:00:00Z').getTime(),
+    source_order: 0,
+    source_row: 2,
+  },
+  {
+    email: 'first@example.com',
+    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
+    source_order: 1,
+    source_row: 3,
+  },
+]);
+assert.strictEqual(latestResponses['first@example.com'].source_row, 3);
 
 const recordStructure = {
   version: 2,
@@ -250,6 +259,14 @@ const insertedEntry = writes.find(item =>
 assert.strictEqual(insertedEntry.values[0][11], 1000);
 assert.strictEqual(insertedEntry.values[0][12], 1500);
 assert.strictEqual(insertedEntry.values[0][13], 'partial');
+assert.match(
+  formSubmitSource,
+  /refreshSiblingTournamentSheetsV2AfterResponse_\(sheet\)/
+);
+assert.match(
+  formSubmitSource,
+  /String\(existingManagement\.row\[7\] \|\| ''\) === expectedEntryId/
+);
 
 assert.match(migrationSource, /admin\/tournament-sheet-snapshot/);
 assert.match(migrationSource, /APIが大会シート移行用の全件スナップショット/);

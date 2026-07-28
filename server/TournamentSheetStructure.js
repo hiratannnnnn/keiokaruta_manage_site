@@ -41,6 +41,31 @@ function tournamentSheetValidateGradeOwnership_(sheetNames) {
   return owners;
 }
 
+function tournamentResponseTimestampMs_(value) {
+  return value && typeof value.getTime === 'function'
+    && !isNaN(value.getTime())
+    ? value.getTime() : null;
+}
+
+function tournamentLatestByEmail_(items) {
+  const latestByEmail = {};
+  (items || []).forEach(item => {
+    const key = String(item.email || '').trim().toLowerCase();
+    if (!key) return;
+    const current = latestByEmail[key];
+    const itemTime = item.registered_at_ms === null
+      ? -Infinity : Number(item.registered_at_ms);
+    const currentTime = !current || current.registered_at_ms === null
+      ? -Infinity : Number(current.registered_at_ms);
+    if (!current || itemTime > currentTime
+        || (itemTime === currentTime
+          && Number(item.source_order) > Number(current.source_order))) {
+      latestByEmail[key] = item;
+    }
+  });
+  return latestByEmail;
+}
+
 function tournamentSheetGoogleFormIdFromEditUrl_(value) {
   if (typeof value !== 'string') return null;
   const match = value.trim().match(

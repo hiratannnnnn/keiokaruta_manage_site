@@ -117,8 +117,9 @@ const apiSnapshot = {
     ],
   }],
 };
+let currentApiSnapshot = apiSnapshot;
 sandbox.taikaiFindTournament_ = () => ({ id: '1', name: '第1回大会' });
-sandbox.taikaiApiRequest_ = () => apiSnapshot;
+sandbox.taikaiApiRequest_ = () => currentApiSnapshot;
 sandbox.pseudonymousEmailFor_ = email => 'pseudo-' + email;
 sandbox.taikaiCompareIds_ = (left, right) => String(left).localeCompare(String(right));
 
@@ -130,7 +131,7 @@ const structure = selectionStatus => ({
   version: 2,
   data: [
     ['送信日時', '参加級', 'メールアドレス', '氏名'],
-    ['2026-07-01', 'A級', 'a@example.com', '山田 太郎'],
+    [new Date('2026-07-01T00:00:00Z'), 'A級', 'a@example.com', '山田 太郎'],
     [], [], [], [], [], [], [],
     ['A', 2500, '2026-08-01', 'sA', '', '', '', '', '', '', '', true,
       'テスト口座'],
@@ -164,7 +165,54 @@ const structure = selectionStatus => ({
     },
   },
 });
-const sheet = { getName: () => '第1回大会A級' };
+const siblingStructure = {
+  version: 2,
+  data: [
+    ['送信日時', '参加級', 'メールアドレス', '氏名'],
+    [new Date('2026-07-02T00:00:00Z'), 'C級', 'c@example.com', '佐藤 花子'],
+    [],
+  ],
+  response_end_index: 2,
+  layout: { raw_response_column_count: 4 },
+  management: {
+    schedules: {
+      C: {
+        row_number: 10,
+        row: ['C', 2500, '2026-08-02', 'sC'],
+      },
+    },
+    entries_by_source_row: {},
+  },
+};
+const sheet = {
+  getName: () => '第1回大会A級',
+  structure: structure(''),
+};
+const siblingSheet = {
+  getName: () => '第1回大会C級',
+  structure: siblingStructure,
+};
+const calendarSheet = {
+  getLastRow: () => 4,
+  getRange: () => ({
+    getValues: () => [['第1回大会A級'], ['第1回大会C級']],
+  }),
+};
+sandbox.CONFIG = {
+  SPREADSHEET_ID: 'main',
+  SHEET_NAMES: { CALENDAR: 'カレンダー' },
+};
+sandbox.SpreadsheetApp = {
+  openById: () => ({
+    getSheetByName(name) {
+      if (name === 'カレンダー') return calendarSheet;
+      if (name === '第1回大会A級') return sheet;
+      if (name === '第1回大会C級') return siblingSheet;
+      return null;
+    },
+  }),
+};
+sandbox.tournamentSheetStructure_ = target => target.structure;
 const projected = sandbox.sheetMigrationSnapshot_(sheet, structure(''), []);
 assert.strictEqual(projected.schedules.length, 1);
 assert.strictEqual(projected.schedules[0].grade, 'A');
@@ -175,11 +223,32 @@ assert.strictEqual(projected.announcements[0].id, 'aA');
 assert.strictEqual(projected.email_jobs[0].deliveries.length, 1);
 assert.strictEqual(projected.email_jobs[0].deliveries[0].entry_id, 'eA');
 assert.throws(
-  () => sandbox.sheetMigrationSnapshot_(
-    sheet, structure('キャンセル待ち1番'), []
-  ),
+  () => {
+    sheet.structure = structure('キャンセル待ち1番');
+    return sandbox.sheetMigrationSnapshot_(sheet, sheet.structure, []);
+  },
   /選考対象外ですが、API申込が有効/
 );
+
+// 同じ人が兄弟フォームへ新しく回答した場合、旧フォーム行をsupersededにする。
+sheet.structure = structure('');
+siblingSheet.structure = Object.assign({}, siblingStructure, {
+  data: [
+    ['送信日時', '参加級', 'メールアドレス', '氏名'],
+    [new Date('2026-07-03T00:00:00Z'), 'C級', 'a@example.com', '山田 太郎'],
+    [],
+  ],
+});
+currentApiSnapshot = Object.assign({}, apiSnapshot, {
+  entries: [
+    entry('eC', 'sC', 'C', 'pseudo-a@example.com'),
+  ],
+});
+const correctedProjection = sandbox.sheetMigrationSnapshot_(
+  sheet, sheet.structure, []
+);
+assert.strictEqual(correctedProjection.entries[0].sync_status, 'superseded');
+assert.strictEqual(correctedProjection.entries[0].entry_id, '');
 
 const sanctionRequests = [];
 sandbox.taikaiFindTournament_ = () => ({ id: '1' });
@@ -210,6 +279,7 @@ assert.match(
   /const grades2 = tournamentSheetDeclaredGrades_\(sheetName\)/
 );
 assert.match(formCreateSource, /tournamentSheetValidateGradeOwnership_/);
-assert.match(deleteSource, /同じ大会の別フォーム/);
+assert.match(deleteSource, /taikaiDeleteTournamentSchedules_/);
+assert.match(deleteSource, /先に大会シートv2へ移行してください/);
 
 console.log('Tournament multi-sheet ownership checks passed.');

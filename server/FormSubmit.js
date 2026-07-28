@@ -29,7 +29,15 @@ function recordFormResponseInTournamentSheetV2_(
   sheet, structure, sourceRow, response, apiResult, apiError
 ) {
   if (!structure || structure.version !== 2) return;
-  if (structure.management.entries_by_source_row[sourceRow]) {
+  const existingManagement =
+    structure.management.entries_by_source_row[sourceRow];
+  if (existingManagement) {
+    const expectedEntryId = apiResult && apiResult.entry
+      ? String(apiResult.entry.id || '') : '';
+    if (!apiError && expectedEntryId
+        && String(existingManagement.row[7] || '') === expectedEntryId) {
+      return;
+    }
     throw new Error('回答行' + sourceRow + 'の申込管理行が既に存在します。');
   }
   let insertRow = null;
@@ -147,6 +155,52 @@ function recordFormResponseInTournamentSheetV2_(
   }
 }
 
+function refreshSiblingTournamentSheetsV2AfterResponse_(sourceSheet) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const calendar = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
+  if (!calendar || calendar.getLastRow() < 3) return [];
+  const sourceName = sourceSheet.getName();
+  const baseName = tournamentSheetBaseName_(sourceName);
+  const names = calendar.getRange(
+    3, 1, calendar.getLastRow() - 2, 1
+  ).getValues().map(row => String(row[0] || '').trim());
+  const seen = {};
+  const results = [];
+  const errors = [];
+  names.forEach(name => {
+    if (!name || name === sourceName || seen[name]
+        || tournamentSheetBaseName_(name) !== baseName
+        || !/[A-E]+級$/.test(name)) {
+      return;
+    }
+    seen[name] = true;
+    const sibling = ss.getSheetByName(name);
+    if (!sibling) {
+      errors.push(name + ': 大会シートが見つかりません。');
+      return;
+    }
+    try {
+      const structure = tournamentSheetStructure_(sibling, false);
+      if (structure.version === 2) {
+        results.push(refreshTournamentSheetV2FromApi_(sibling));
+      }
+    } catch (error) {
+      try {
+        markTournamentSheetV2SyncState_(
+          sibling, 'pending_sheet', error.message || error
+        );
+      } catch (markError) {}
+      errors.push(name + ': ' + error.message);
+    }
+  });
+  if (errors.length) {
+    throw new Error(
+      '兄弟フォームへの書戻しに失敗しました: ' + errors.join(' / ')
+    );
+  }
+  return results;
+}
+
 function registerFormResponseToDatabaseUnlocked_(e) {
   if (!e || !e.range) throw new Error('フォーム回答イベントがありません。');
   const sheetName = e.range.getSheet().getName();
@@ -198,6 +252,9 @@ function registerFormResponseToDatabaseUnlocked_(e) {
     apiError
   );
   if (apiError && structure.version !== 2) throw apiError;
+  if (!apiError) {
+    refreshSiblingTournamentSheetsV2AfterResponse_(sheet);
+  }
   return apiError
     ? { pending: true, error: apiError.message }
     : result;

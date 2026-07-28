@@ -315,11 +315,9 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
           source_row: record.source_row,
           // 同一人物・同一大会の重複時は、回答時刻が新しい行を正とする。
           // 時刻がない場合も後から読み込んだ行を採用できるよう順序を保持する。
-          registered_at_ms: row[responseColumns.timestamp]
-            && typeof row[responseColumns.timestamp].getTime === 'function'
-            && !isNaN(row[responseColumns.timestamp].getTime())
-            ? row[responseColumns.timestamp].getTime()
-            : null,
+          registered_at_ms: tournamentResponseTimestampMs_(
+            row[responseColumns.timestamp]
+          ),
           source_order: entrySourceOrder++,
           is_sync_target: isTarget,
         });
@@ -392,19 +390,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 }
 
 function fiscalSyncLatestEntries_(entries) {
-  const latestByEmail = {};
-  (entries || []).forEach(entry => {
-    const key = String(entry.email || '').trim().toLowerCase();
-    const current = latestByEmail[key];
-    const entryTime = entry.registered_at_ms === null ? -Infinity : Number(entry.registered_at_ms);
-    const currentTime = !current || current.registered_at_ms === null
-      ? -Infinity
-      : Number(current.registered_at_ms);
-    if (!current || entryTime > currentTime ||
-        (entryTime === currentTime && Number(entry.source_order) > Number(current.source_order))) {
-      latestByEmail[key] = entry;
-    }
-  });
+  const latestByEmail = tournamentLatestByEmail_(entries);
   return Object.keys(latestByEmail).map(key => latestByEmail[key]);
 }
 

@@ -130,15 +130,60 @@ function sheetMigrationSnapshotSignature_(snapshot) {
   }).join('');
 }
 
-function sheetMigrationLatestSourceRowsByEmail_(structure, emailColumn) {
-  const latest = {};
-  for (let index = 1; index < structure.response_end_index; index++) {
-    const email = String(
-      (structure.data[index] || [])[emailColumn] || ''
-    ).trim().toLowerCase();
-    if (email) latest[email] = index + 1;
+function sheetMigrationTournamentLatestResponses_(sheet) {
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const calendar = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
+  if (!calendar || calendar.getLastRow() < 3) {
+    throw new Error('カレンダーから兄弟フォームを特定できません。');
   }
-  return latest;
+  const baseName = tournamentSheetBaseName_(sheet.getName());
+  const calendarNames = calendar.getRange(
+    3, 1, calendar.getLastRow() - 2, 1
+  ).getValues().map(row => String(row[0] || '').trim());
+  const seen = {};
+  const siblingNames = calendarNames.filter(name => {
+    if (!name || seen[name] || tournamentSheetBaseName_(name) !== baseName) {
+      return false;
+    }
+    seen[name] = true;
+    return /[A-E]+級$/.test(name);
+  });
+  if (!siblingNames.includes(sheet.getName())) {
+    throw new Error(
+      '対象シートがカレンダーの大会フォーム一覧に存在しません: '
+      + sheet.getName()
+    );
+  }
+
+  const candidates = [];
+  let sourceOrder = 0;
+  siblingNames.forEach(siblingName => {
+    const siblingSheet = ss.getSheetByName(siblingName);
+    if (!siblingSheet) {
+      throw new Error('兄弟フォームの大会シートがありません: ' + siblingName);
+    }
+    const siblingStructure = tournamentSheetStructure_(siblingSheet, false);
+    const columns = tournamentSheetResponseColumns_(siblingStructure);
+    for (
+      let index = 1;
+      index < siblingStructure.response_end_index;
+      index++
+    ) {
+      const row = siblingStructure.data[index] || [];
+      const email = String(row[columns.email] || '').trim();
+      if (!email) continue;
+      candidates.push({
+        email: email,
+        sheet_name: siblingName,
+        source_row: index + 1,
+        registered_at_ms: tournamentResponseTimestampMs_(
+          row[columns.timestamp]
+        ),
+        source_order: sourceOrder++,
+      });
+    }
+  });
+  return tournamentLatestByEmail_(candidates);
 }
 
 function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
@@ -243,9 +288,8 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
   });
   const now = new Date();
   const entries = [];
-  const latestSourceRowByEmail = sheetMigrationLatestSourceRowsByEmail_(
-    structure, responseColumns.email
-  );
+  const latestTournamentResponseByEmail =
+    sheetMigrationTournamentLatestResponses_(sheet);
   const matchedApiEntries = {};
   for (let index = 1; index < structure.response_end_index; index++) {
     const row = structure.data[index] || [];
@@ -262,7 +306,13 @@ function sheetMigrationSnapshot_(sheet, structure, legacyRecords) {
         '回答行' + (index + 1) + 'の級がシート担当範囲外です: ' + grade
       );
     }
-    const isLatest = latestSourceRowByEmail[email.toLowerCase()] === index + 1;
+    const tournamentWinner =
+      latestTournamentResponseByEmail[email.toLowerCase()];
+    const isLatest = Boolean(
+      tournamentWinner
+      && tournamentWinner.sheet_name === sheet.getName()
+      && tournamentWinner.source_row === index + 1
+    );
     const key = pseudonymousEmailFor_(email).toLowerCase() + '|' + grade;
     const apiEntry = isLatest ? apiEntries[key] : null;
     if (apiEntry) matchedApiEntries[String(apiEntry.entry_id)] = true;
