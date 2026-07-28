@@ -131,6 +131,20 @@
     gap: 14px;
   }
   header h1 { font-size: 1.1rem; font-weight: 600; }
+  .environment-badge {
+    padding: 2px 8px;
+    border: 1px solid rgba(255,255,255,0.55);
+    border-radius: 4px;
+    background: #5d6d7e;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .environment-production { background: #a93226; }
+  .environment-validation,
+  .environment-development,
+  .environment-local { background: #1f6fa8; }
   .current-role-badge {
     background: #3498db;
     color: #fff;
@@ -1133,6 +1147,27 @@
   }
   .perm-label { text-align: left !important; font-weight: 500; color: #333; }
   .perm-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+  .settings-environment-panel {
+    max-width: 640px;
+    margin-bottom: 16px;
+  }
+  .environment-property-list {
+    margin: 8px 0 4px 1.3rem;
+    line-height: 1.7;
+    font-size: 0.86rem;
+  }
+  .environment-property-list .configured { color: #1e6b3a; }
+  .environment-property-list .fallback { color: #8a4b08; }
+  .environment-warnings {
+    margin-top: 8px;
+    color: #9b2c2c;
+    font-size: 0.86rem;
+  }
+  .environment-note {
+    margin-top: 10px;
+    color: #667085;
+    font-size: 0.8rem;
+  }
 
   /* 案内ダブルチェックモーダル（大きめ） */
   .double-check-box {

@@ -16,6 +16,71 @@ const ALL_ROLES_LIST = ['申込係', '振込係', '案内係', '会長副会長'
 
 let _initialPermState = '';
 
+function loadHeaderEnvironmentBadge() {
+  google.script.run
+    .withSuccessHandler(json => {
+      try {
+        const data = JSON.parse(json);
+        if (data.error) return;
+        const badge = document.getElementById('environment-badge');
+        badge.textContent = String(data.environment || 'legacy').toUpperCase();
+        badge.className = 'environment-badge environment-' + String(
+          data.environment || 'legacy'
+        ).toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+        badge.style.display = 'inline-block';
+      } catch (e) {}
+    })
+    .getEnvironmentConfigurationStatus();
+}
+
+function loadEnvironmentConfigStatus() {
+  const status = document.getElementById('environment-status');
+  const details = document.getElementById('environment-details');
+  status.style.display = 'block';
+  details.style.display = 'none';
+  google.script.run
+    .withSuccessHandler(json => {
+      let data;
+      try {
+        data = JSON.parse(json);
+      } catch (e) {
+        status.className = 'status error';
+        status.textContent = '環境設定の応答を解析できませんでした。';
+        return;
+      }
+      if (data.error) {
+        status.className = 'status error';
+        status.textContent = 'エラー: ' + data.error;
+        return;
+      }
+      document.getElementById('environment-name').textContent = data.environment;
+      const list = document.getElementById('environment-property-list');
+      list.replaceChildren();
+      data.items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = item.configured ? 'configured' : 'fallback';
+        li.textContent = item.key + '：'
+          + (item.configured ? 'Script Properties登録済み'
+            : '未設定');
+        list.appendChild(li);
+      });
+      const warnings = document.getElementById('environment-warnings');
+      warnings.replaceChildren();
+      (data.warnings || []).forEach(message => {
+        const p = document.createElement('p');
+        p.textContent = '警告：' + message;
+        warnings.appendChild(p);
+      });
+      status.style.display = 'none';
+      details.style.display = '';
+    })
+    .withFailureHandler(error => {
+      status.className = 'status error';
+      status.textContent = 'エラー: ' + error.message;
+    })
+    .getEnvironmentConfigurationStatus();
+}
+
 // チェックボックスの現在状態を JSON 文字列で取得
 function getPermTableState() {
   const state = {};

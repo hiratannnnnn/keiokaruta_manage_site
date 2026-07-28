@@ -62,3 +62,41 @@ function saveRoleNames(json) {
     return JSON.stringify({ error: e.message });
   }
 }
+
+function getEnvironmentConfigurationStatus() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const resourceKeys = [
+      'MAIN_SPREADSHEET_ID',
+      'FORM_FOLDER_ID',
+      'FORM_TEMPLATE_ID',
+      'TRASH_SPREADSHEET_ID',
+      'BOARD_SPREADSHEET_ID',
+    ];
+    const requiredKeys = resourceKeys.concat([
+      'TAIKAI_API_BASE_URL',
+      'TAIKAI_API_ALERT_EMAIL',
+      'PSEUDO_EMAIL_SECRET',
+    ]);
+    const items = requiredKeys.map(key => ({
+      key: key,
+      configured: Boolean(String(props.getProperty(key) || '').trim()),
+      fallback: false,
+    }));
+    const configuredResources = items
+      .filter(item => resourceKeys.includes(item.key) && item.configured).length;
+    const warnings = [];
+    if (configuredResources < resourceKeys.length) {
+      warnings.push('未登録の外部リソースIDがあります。登録するまで関連機能は実行できません。');
+    }
+    const environment = String(props.getProperty('APP_ENVIRONMENT') || '').trim();
+    if (!environment) warnings.push('APP_ENVIRONMENTが未設定です。');
+    return JSON.stringify({
+      environment: environment || 'legacy',
+      items: items,
+      warnings: warnings,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}

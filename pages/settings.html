@@ -2,6 +2,20 @@
 <div id="page-settings" class="page">
   <div class="list-page">
     <div class="page-title">設定</div>
+    <div class="panel settings-environment-panel">
+      <div class="panel-header">環境設定診断</div>
+      <div class="panel-body">
+        <div id="environment-status" class="status">設定状態を確認中...</div>
+        <div id="environment-details" style="display:none;">
+          <p>現在の環境：<strong id="environment-name"></strong></p>
+          <ul id="environment-property-list" class="environment-property-list"></ul>
+          <div id="environment-warnings" class="environment-warnings"></div>
+          <p class="environment-note">
+            値そのものは表示しません。.envの内容を同名のScript Propertiesへ登録してください。
+          </p>
+        </div>
+      </div>
+    </div>
     <div class="panel" style="max-width:640px;margin-bottom:16px;">
       <div class="panel-header">役職者苗字</div>
       <div class="panel-body">

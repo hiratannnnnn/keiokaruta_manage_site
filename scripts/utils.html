@@ -153,7 +153,11 @@ document.querySelectorAll('nav button').forEach(btn => {
     if (page === 'suitou') initSuitou();
     if (page === 'database-admin') initDatabaseAdmin();
     if (page === 'sheet-migration') initSheetMigration();
-    if (page === 'settings') { renderPermTable(); loadRoleNamesSettings(); }
+    if (page === 'settings') {
+      loadEnvironmentConfigStatus();
+      renderPermTable();
+      loadRoleNamesSettings();
+    }
   });
 });
 
@@ -172,6 +176,7 @@ function initApp() {
   if (roleClass) document.body.classList.add(roleClass);
 
   loadAndApplyPermissions();
+  loadHeaderEnvironmentBadge();
   loadMembers();
   loadCalendar();
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);

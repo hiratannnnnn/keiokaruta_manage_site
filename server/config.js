@@ -1,15 +1,35 @@
 // ============================================================
-// 静的設定値（定数）
-// GASサービスを呼ばない純粋な定数のみ置く → ロード順の影響なし
+// 環境別設定。ローカル.envと同名のScript Propertiesから取得する。
 // ============================================================
 
-const CONFIG = {
+function configValue_(propertyName) {
+  const value = PropertiesService.getScriptProperties().getProperty(propertyName);
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    throw new Error(propertyName + ' がScript Propertiesに設定されていません。');
+  }
+  return normalized;
+}
 
-  // スプレッドシートID（固定値・非機密なので直接記載）
-  SPREADSHEET_ID:       '1KfxkE6RdW-u0AciuqGUMH9P1zeuOkBVa5Y6iTOzy6Hc',
-  FORM_FOLDER_TO:       '1uoJJyxsjb63ewkjsv3NzZHwQ1l_DOkf8',
-  FORM_TEMPLATE_ID:     '1eDEcwPhpMJu3nDtqoa-zy1t4eQTQE7hzPQ0snL5XRtw',
-  TRASH_SPREADSHEET_ID: '1PYFau8GFIaHHq0FQP8yViteyG5ewI08thDsHcbb93Hs',  // ゴミ箱用スプレッドシートID (ids[0])
+const CONFIG = {
+  get ENVIRONMENT() {
+    return configValue_('APP_ENVIRONMENT');
+  },
+  get SPREADSHEET_ID() {
+    return configValue_('MAIN_SPREADSHEET_ID');
+  },
+  get FORM_FOLDER_TO() {
+    return configValue_('FORM_FOLDER_ID');
+  },
+  get FORM_TEMPLATE_ID() {
+    return configValue_('FORM_TEMPLATE_ID');
+  },
+  get TRASH_SPREADSHEET_ID() {
+    return configValue_('TRASH_SPREADSHEET_ID');
+  },
+  get BOARD_SPREADSHEET_ID() {
+    return configValue_('BOARD_SPREADSHEET_ID');
+  },
 
   // スプレッドシート内のシート名
   SHEET_NAMES: {

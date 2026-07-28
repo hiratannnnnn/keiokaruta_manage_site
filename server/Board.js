@@ -6,11 +6,9 @@
 //   row 2+: データ
 
 var BOARD_SHEET_NAME_  = '掲示板';
-var BOARD_SPREADSHEET_ID_ = '1FmndV7ZmlKKMDU4ElExHHZWqVrDHRf4Veg7K4QrJDzg';
-
 function getBoardPosts() {
   try {
-    const ss    = SpreadsheetApp.openById(BOARD_SPREADSHEET_ID_);
+    const ss    = SpreadsheetApp.openById(CONFIG.BOARD_SPREADSHEET_ID);
     let sheet   = ss.getSheetByName(BOARD_SHEET_NAME_);
     if (!sheet) {
       // シートがなければ作成
@@ -46,7 +44,7 @@ function addBoardPost(json) {
     const { content, role } = JSON.parse(json);
     if (!content || !content.trim()) return JSON.stringify({ error: '内容が空です' });
 
-    const ss    = SpreadsheetApp.openById(BOARD_SPREADSHEET_ID_);
+    const ss    = SpreadsheetApp.openById(CONFIG.BOARD_SPREADSHEET_ID);
     let sheet   = ss.getSheetByName(BOARD_SHEET_NAME_);
     if (!sheet) {
       sheet = ss.insertSheet(BOARD_SHEET_NAME_);
@@ -97,7 +95,7 @@ var HELP_DEFAULT_ROWS_  = [
 
 function getHelpContent() {
   try {
-    const ss  = SpreadsheetApp.openById(BOARD_SPREADSHEET_ID_);
+    const ss  = SpreadsheetApp.openById(CONFIG.BOARD_SPREADSHEET_ID);
     let sheet = ss.getSheetByName(HELP_SHEET_NAME_);
 
     // シートがなければ作成してデフォルトデータを投入
@@ -138,7 +136,7 @@ function getHelpContent() {
 
 function deleteBoardPost(postId) {
   try {
-    const ss    = SpreadsheetApp.openById(BOARD_SPREADSHEET_ID_);
+    const ss    = SpreadsheetApp.openById(CONFIG.BOARD_SPREADSHEET_ID);
     const sheet = ss.getSheetByName(BOARD_SHEET_NAME_);
     if (!sheet) return JSON.stringify({ error: 'シートが見つかりません' });
 

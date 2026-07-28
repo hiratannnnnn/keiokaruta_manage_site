@@ -12,3 +12,7 @@ suitouSample
 createDraft2
 dupName
 tmp.txt
+.env
+.env.example
+.gitignore
+tests/**
