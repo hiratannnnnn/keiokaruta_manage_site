@@ -112,6 +112,7 @@ assert.strictEqual(
 
 assert.match(fiscalSource, /internal_payment_deadline/);
 assert.match(fiscalSource, /payment_instructions/);
+assert.match(fiscalSource, /payment_method: isCarriedOver \? 'carried_over' : 'bank_transfer'/);
 assert.match(taikaiSource, /internal_payment_deadline/);
 assert.match(taikaiSource, /payment_instructions/);
 assert.match(databaseAdminSource, /internal_payment_deadline/);
