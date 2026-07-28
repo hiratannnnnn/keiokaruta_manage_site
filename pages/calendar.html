@@ -40,6 +40,46 @@
         <div id="detail-title" class="detail-title"></div>
         <div id="detail-title-badges" class="detail-title-badges"></div>
       </div>
+      <div class="detail-desktop-note">管理操作はPCから行うことを推奨します。</div>
+
+      <!-- 上部操作バー -->
+      <div id="detail-ops-section" class="detail-action-panel" style="display:none;">
+        <div class="detail-action-group">
+          <div class="detail-action-heading">大会設定</div>
+          <div class="official-toggle-row">
+            <div id="detail-official-badge" class="official-badge"></div>
+            <button class="official-toggle-btn" id="btn-toggle-official"
+                    onclick="triggerToggleOfficial()">公認状態を切替</button>
+          </div>
+          <div id="toggle-official-status" class="op-status" aria-live="polite"></div>
+        </div>
+        <div class="detail-action-group">
+          <div class="detail-action-heading">データ更新</div>
+          <button class="op-btn" id="btn-register" onclick="triggerRegisterDatabase()">回答をDBへ同期</button>
+          <div id="register-status" class="op-status" aria-live="polite"></div>
+          <button class="op-btn" id="btn-count" onclick="triggerCountMatches()">出場履歴を更新</button>
+          <div id="count-status" class="op-status" aria-live="polite"></div>
+        </div>
+        <div class="detail-action-group detail-action-accounting">
+          <div class="detail-action-heading">会計</div>
+          <button class="op-btn" id="btn-pay-done" onclick="triggerPayDoneFromDetail()"
+                  style="display:none;">大会への振込み</button>
+          <div id="pay-done-status" class="op-status" aria-live="polite"></div>
+        </div>
+        <div id="detail-complete-section" class="detail-action-group" style="display:none;">
+          <div class="detail-action-heading">大会終了</div>
+          <button class="op-btn complete-btn" id="btn-complete-detail"
+                  onclick="triggerCompleteTournamentFromDetail()">大会を完了とする</button>
+          <div id="complete-detail-status" class="op-status" aria-live="polite"></div>
+        </div>
+        <div id="detail-delete-section"
+             class="detail-action-group detail-action-danger" style="display:none;">
+          <div class="detail-action-heading">危険な操作</div>
+          <button class="op-btn op-btn-danger" id="btn-delete"
+                  onclick="triggerDeleteTournament()">大会データ・シート・フォームを削除</button>
+          <div id="delete-status" class="op-status" aria-live="polite"></div>
+        </div>
+      </div>
 
       <div class="detail-columns">
 
@@ -96,29 +136,6 @@
             <div id="detail-tasks-list"></div>
           </div>
 
-          <!-- 操作パネル -->
-          <div id="detail-ops-section" style="display:none;">
-            <div class="detail-section-title" style="margin-top:14px;">操作</div>
-            <div class="official-toggle-row">
-              <div id="detail-official-badge" class="official-badge"></div>
-              <button class="official-toggle-btn" id="btn-toggle-official" onclick="triggerToggleOfficial()">切替</button>
-            </div>
-            <div id="toggle-official-status" class="op-status"></div>
-            <button class="op-btn" id="btn-register" onclick="triggerRegisterDatabase()">回答をDBへ同期</button>
-            <div id="register-status" class="op-status"></div>
-            <button class="op-btn" id="btn-count" onclick="triggerCountMatches()">出場履歴を更新</button>
-            <div id="count-status" class="op-status"></div>
-            <button class="op-btn" id="btn-pay-done" onclick="triggerPayDoneFromDetail()" style="display:none;">大会への振込み</button>
-            <div id="pay-done-status" class="op-status"></div>
-            <div id="detail-complete-section" style="display:none;margin-top:10px;border-top:1px solid #ddd;padding-top:10px;">
-              <button class="op-btn complete-btn" id="btn-complete-detail" onclick="triggerCompleteTournamentFromDetail()">大会を完了とする</button>
-              <div id="complete-detail-status" class="op-status"></div>
-            </div>
-            <div id="detail-delete-section" style="display:none;margin-top:10px;border-top:1px solid #ddd;padding-top:10px;">
-              <button class="op-btn op-btn-danger" id="btn-delete" onclick="triggerDeleteTournament()">大会データ・シート・フォームを削除</button>
-              <div id="delete-status" class="op-status"></div>
-            </div>
-          </div>
         </div>
 
       </div>

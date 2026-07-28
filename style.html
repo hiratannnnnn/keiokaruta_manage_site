@@ -796,6 +796,37 @@
     flex-wrap: wrap;
     align-items: center;
   }
+  .detail-desktop-note { display: none; }
+  .detail-action-panel {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(160px, 1fr));
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #cbd5df;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    overflow-x: auto;
+  }
+  .detail-action-group {
+    min-width: 160px;
+    padding: 9px;
+    border: 1px solid #dce3e9;
+    border-radius: 6px;
+    background: #f8fafc;
+  }
+  .detail-action-accounting { border-color: #b8d8ec; background: #f2f8fc; }
+  .detail-action-danger {
+    border-color: #e6b8b8;
+    background: #fff6f6;
+    margin-left: 8px;
+  }
+  .detail-action-heading {
+    margin-bottom: 5px;
+    color: #34495e;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
   .detail-badge {
     display: inline-block;
     padding: 2px 9px;
@@ -1013,6 +1044,11 @@
   }
   .official-toggle-btn:hover { background: #d5dbdb; }
   .official-toggle-btn:disabled { opacity: 0.5; cursor: default; }
+  .official-toggle-btn.op-btn-done {
+    border-color: #27ae60;
+    background: #d4edda;
+    color: #155724;
+  }
 
   /* 操作ボタン */
   .op-btn {
@@ -1024,7 +1060,7 @@
     border-radius: 4px;
     font-size: 0.82rem;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     transition: background 0.2s;
     margin-top: 6px;
   }
@@ -1034,6 +1070,12 @@
   .op-btn.op-btn-done:hover { background: #1e8449; }
   .op-btn.op-btn-danger { background: #c0392b; }
   .op-btn.op-btn-danger:hover { background: #a93226; }
+  .detail-action-panel .complete-btn { background: #b8860b; color: #fff; }
+  .detail-action-panel .complete-btn:hover { background: #8f6b08; }
+  .detail-action-panel .complete-btn:disabled {
+    background: #95a5a6;
+    color: #fff;
+  }
   .op-status {
     font-size: 0.78rem;
     color: #666;
@@ -1042,6 +1084,21 @@
   }
   .op-status.ok { color: #27ae60; }
   .op-status.error { color: #e74c3c; }
+  .op-status.running { color: #536878; }
+
+  @media (max-width: 760px) {
+    .detail-desktop-note {
+      display: block;
+      padding: 8px 10px;
+      border: 1px solid #e0b45c;
+      border-radius: 5px;
+      background: #fff8e7;
+      color: #76520b;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .detail-action-panel { min-width: 900px; }
+  }
 
   /* スプレッドシート模倣テーブル */
   .sheet-table {
