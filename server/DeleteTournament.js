@@ -20,8 +20,8 @@ function deleteTournament(name) {
     const sheet = ss.getSheetByName(name);
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
-    const layout = tournamentSheetLayout_(sheet);
-    const formId = String(sheet.getRange(1, layout.form_id_column).getValue()).trim();
+    const structure = tournamentSheetStructure_(sheet, false);
+    const formId = tournamentSheetFormId_(structure);
     if (!formId) throw new Error('フォームIDが取得できません');
 
     // シート名末尾の「ABC級」を除いた大会名がAPI上の大会名。

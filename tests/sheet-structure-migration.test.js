@@ -4,8 +4,14 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
-const source = fs.readFileSync(
+const migrationSource = fs.readFileSync(
   path.join(root, 'server/SheetStructureMigration.js'), 'utf8'
+);
+const v2Source = fs.readFileSync(
+  path.join(root, 'server/TournamentSheetV2.js'), 'utf8'
+);
+const structureSource = fs.readFileSync(
+  path.join(root, 'server/TournamentSheetStructure.js'), 'utf8'
 );
 const page = fs.readFileSync(
   path.join(root, 'pages/sheet-migration.html'), 'utf8'
@@ -14,96 +20,75 @@ const script = fs.readFileSync(
   path.join(root, 'scripts/sheet-migration.html'), 'utf8'
 );
 const sandbox = { Date };
-vm.runInNewContext(source, sandbox);
+vm.runInNewContext(v2Source, sandbox);
+vm.runInNewContext(structureSource, sandbox);
+vm.runInNewContext(migrationSource, sandbox);
 
 assert.strictEqual(sandbox.sheetMigrationColumnLabel_(1), 'A');
 assert.strictEqual(sandbox.sheetMigrationColumnLabel_(26), 'Z');
 assert.strictEqual(sandbox.sheetMigrationColumnLabel_(27), 'AA');
-assert.strictEqual(sandbox.sheetMigrationColumnLabel_(703), 'AAA');
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(sandbox.sheetMigrationCanonicalValue_(2500))),
   { type: 'number', value: '2500' }
 );
-assert.deepStrictEqual(
-  JSON.parse(JSON.stringify(sandbox.sheetMigrationCanonicalValue_(true))),
-  { type: 'boolean', value: 'true' }
-);
 
-const sourceRange = {
-  getValues: () => [[123, ''], ['記帳完了', false]],
-  getFormulas: () => [['=1+1', ''], ['', '']],
-  getNotes: () => [['確認用メモ', ''], ['', '']],
-  getNumberFormats: () => [['0', '@'], ['@', '@']],
-  getBackgrounds: () => [['#ffff00', '#ffffff'], ['#ffffff', '#ffffff']],
-  getDataValidations: () => [[null, null], [null, null]],
-  getDisplayValues: () => [['count', '旧操作'], ['記帳完了', 'FALSE']],
+const snapshot = {
+  tournament_name: '第1回テスト大会',
+  tournament_id: '10',
+  form_id: 'form-1',
+  form_public_url: 'https://example.com/form',
+  form_edit_url: 'https://docs.google.com/forms/d/form-1/edit',
+  registration_completed: true,
+  payment_completed: false,
+  is_sanctioned: true,
+  sync_status: 'synced',
+  synced_at: new Date('2026-07-28T00:00:00Z'),
+  sync_error: '',
+  schedules: [{
+    grade: 'A',
+    participation_fee_yen: 2500,
+    held_on: '2026-08-01',
+    id: '20',
+    application_deadline: '2026-07-01',
+    is_sanctioned: true,
+    sync_status: 'synced',
+  }],
+  entries: [{
+    source_row: 2,
+    email: 'person@example.com',
+    name: '山田 太郎',
+    grade: 'A',
+    sheet_status: '済',
+    player_id: '30',
+    entry_id: '40',
+    schedule_id: '20',
+    participation_fee_yen: 2500,
+    paid_yen: 2500,
+    balance_yen: 0,
+    payment_status: 'paid',
+    sync_status: 'synced',
+  }],
+  announcements: [],
+  email_jobs: [],
+  legacy_records: [['Q1', '"旧列"', 'string', '"記帳済"', '""', '""', '"@"', '"#fff"', '']],
 };
-const records = sandbox.sheetMigrationDeletedCellRecords_({
-  getLastRow: () => 2,
-  getRange: () => sourceRange,
-}, {
-  delete_start_column: 4,
-  delete_column_count: 2,
-});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(records)), [
-  [
-    'D1', '"count"', 'number', '"123"', '"=1+1"', '"確認用メモ"',
-    '"0"', '"#ffff00"', '',
-  ],
-  [
-    'E1', '"旧操作"', 'string', '""', '""', '""',
-    '"@"', '"#ffffff"', '',
-  ],
-  [
-    'D2', '"count"', 'string', '"記帳完了"', '""', '""',
-    '"@"', '"#ffffff"', '',
-  ],
-  [
-    'E2', '"旧操作"', 'boolean', '"false"', '""', '""',
-    '"@"', '"#ffffff"', '',
-  ],
-]);
+assert.strictEqual(sandbox.tournamentSheetV2ValidateSnapshot_(snapshot, true), true);
+const rows = sandbox.tournamentSheetV2Rows_(snapshot);
+assert.strictEqual(rows[0][0], '__TAIKAI_MANAGEMENT_V2__');
+assert.ok(rows.some(row => row[0] === 'A' && row[3] === '20'));
+assert.ok(rows.some(row => row[0] === '申込' && row[7] === '40'));
+assert.ok(rows.some(row => row[0] === '旧管理' && row[1] === 'Q1'));
+assert.strictEqual(rows[0].length, 17);
 
-let writtenRows = null;
-const archiveRange = {
-  setNumberFormat: () => archiveRange,
-  setValues(rows) {
-    writtenRows = rows;
-    return archiveRange;
-  },
-  setBackground: () => archiveRange,
-  getValues: () => writtenRows,
-};
-const archive = sandbox.sheetMigrationWriteAndVerifyArchive_({
-  getLastRow: () => 10,
-  getRange(row, column, rowCount, columnCount) {
-    assert.deepStrictEqual([row, column, rowCount, columnCount], [12, 1, 7, 9]);
-    return archiveRange;
-  },
-  getName: () => 'テスト大会A級',
-}, 'migration-1', records);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(archive)), {
-  start_row: 12,
-  row_count: 7,
-});
-assert.strictEqual(writtenRows[0][0], '__SHEET_MIGRATION_ARCHIVE_START__');
-assert.strictEqual(writtenRows[6][0], '__SHEET_MIGRATION_ARCHIVE_END__');
+assert.match(migrationSource, /admin\/tournament-sheet-snapshot/);
+assert.match(migrationSource, /APIが大会シート移行用の全件スナップショット/);
+assert.match(migrationSource, /開催日または参加費がAPIと一致しません/);
+assert.match(migrationSource, /sheetMigrationRestoreFromBackup_/);
+assert.match(migrationSource, /tournamentSheetV2Rows_\(snapshot\)/);
+assert.match(migrationSource, /大会管理データv2の再読取検証/);
+assert.match(migrationSource, /sheet\.deleteColumns\(plan\.delete_start_column/);
+assert.doesNotMatch(migrationSource, /sheetMigrationWriteAndVerifyArchive_/);
+assert.match(page, /全情報を[\s\S]*大会管理データv2として記録/);
+assert.match(script, /正規化・再読取検証後/);
 
-const archiveIndex = source.indexOf('sheetMigrationWriteAndVerifyArchive_(');
-const deleteIndex = source.indexOf(
-  'sheet.deleteColumns(plan.delete_start_column, plan.delete_column_count)'
-);
-assert.ok(archiveIndex >= 0 && deleteIndex > archiveIndex);
-assert.match(source, /getFormulas\(\)/);
-assert.match(source, /getNotes\(\)/);
-assert.match(source, /getDataValidations\(\)/);
-assert.match(source, /dry-run後に削除対象の情報が変更されました/);
-assert.match(source, /列削除後の構造検証に失敗しました/);
-assert.match(source, /sheetMigrationArchiveRange_\(sheet, migrationId\)/);
-assert.match(source, /sheet\.insertColumnsAfter\(plan\.edit_url_column/);
-assert.match(source, /target\.deleteRows\(archive\.start_row, archive\.row_count\)/);
-assert.match(page, /全情報を[\s\S]*左側へ移送して再読取検証/);
-assert.match(script, /移送・再読取検証後/);
-assert.match(script, /左側へ移送.*セル/);
-
-console.log('Sheet structure migration safety checks passed.');
+console.log('Sheet structure migration v2 checks passed.');

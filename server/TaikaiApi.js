@@ -532,8 +532,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
 
   const structure = tournamentSheetStructure_(tournamentSheet, true);
   const tournamentData = structure.data;
-  const isSanctioned = !structure.register_database_row
-    || String((tournamentData[structure.register_database_row] || [])[1] || '').trim() === '';
+  const isSanctioned = tournamentSheetIsSanctioned_(structure);
   const applicationDeadline = taikaiFormatDate_(calendarRow[5]);
   if (!applicationDeadline) throw new Error('申込期限が未設定のため、APIへ日程を登録できません。');
   const lotteryDate = taikaiFormatDate_(calendarRow[7]) || null;
@@ -542,9 +541,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   );
   const feeResult = taikaiGradeFeesFromSheetData_(tournamentData, sheetName, targetGrades);
   if (feeResult.errors.length) throw new Error(feeResult.errors.join('\n'));
-  const paymentInstructions = tournamentSheetPaymentInstructions_(
-    tournamentData, structure.response_end_index
-  );
+  const paymentInstructions = tournamentSheetPaymentInstructionsFromStructure_(structure);
   let internalPaymentDeadlineIndex = null;
   try {
     internalPaymentDeadlineIndex = fiscalSyncCalendarColumn_(
@@ -588,13 +585,46 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
     if (internalPaymentDeadline) {
       body.internal_payment_deadline = internalPaymentDeadline.value;
     }
+    let savedSchedule;
     if (schedules.length === 0) {
-      taikaiApiRequest_('POST', '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules', body);
+      savedSchedule = taikaiApiRequest_(
+        'POST',
+        '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules',
+        body
+      );
     } else if (schedules.length === 1) {
-      taikaiApiRequest_('PATCH', '/schedules/' + encodeURIComponent(String(schedules[0].id)), body);
+      savedSchedule = taikaiApiRequest_(
+        'PATCH', '/schedules/' + encodeURIComponent(String(schedules[0].id)), body
+      );
     } else {
       throw new Error('同じ大会・級・開催日のAPI日程が複数あります: ' + sheetName + ' ' + grade);
     }
+    if (structure.version === 2) {
+      const scheduleRow = structure.management.schedules[grade].row_number;
+      tournamentSheet.getRange(scheduleRow, 2, 1, 14).setValues([[
+        savedSchedule.participation_fee_yen,
+        savedSchedule.held_on,
+        savedSchedule.id,
+        savedSchedule.application_deadline,
+        savedSchedule.internal_payment_deadline || '',
+        savedSchedule.payment_deadline || '',
+        savedSchedule.payment_timing || '',
+        savedSchedule.lottery_result_date || '',
+        savedSchedule.venue || '',
+        savedSchedule.reception_ends_at || '',
+        Boolean(savedSchedule.is_sanctioned),
+        savedSchedule.payment_instructions || '',
+        'synced',
+        new Date(),
+      ]]);
+    }
   });
+  if (structure.version === 2) {
+    const metadataRows = structure.management.metadata_rows;
+    tournamentSheet.getRange(metadataRows['tournament ID'], 3).setValue(tournament.id);
+    tournamentSheet.getRange(metadataRows['同期状態'], 3).setValue('synced');
+    tournamentSheet.getRange(metadataRows['最終同期日時'], 3).setValue(new Date());
+    tournamentSheet.getRange(metadataRows['同期エラー'], 3).setValue('');
+  }
   return tournament;
 }

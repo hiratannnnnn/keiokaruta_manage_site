@@ -69,12 +69,11 @@ function getLotteryResults(sheetName) {
     };
 
     const structure = tournamentSheetStructure_(sheet, false);
-    const allData = structure.data;
-    const formEndIdx = structure.response_end_index;
-    const paymentStatusIndex = structure.layout.payment_status_column - 1;
+    const responseData = tournamentSheetResponseRowsWithStatus_(structure);
+    const paymentStatusIndex = responseData.payment_status_index;
 
     const stats = {}; // { grade: { winnerNames: [], loserNames: [] } }
-    const latestRows = latestFormRowsByPlayer_(allData.slice(1, formEndIdx));
+    const latestRows = latestFormRowsByPlayer_(responseData.rows);
     latestRows.forEach(row => {
       const name = String(row[2] || '').trim();
       if (!name) return;

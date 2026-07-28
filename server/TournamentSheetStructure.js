@@ -137,9 +137,45 @@ function tournamentSheetStructure_(sheet, requireAllGrades) {
   const data = sheet.getDataRange().getValues();
   if (!data.length) throw new Error('大会シートが空です: ' + sheet.getName());
   const responseEndIndex = tournamentSheetResponseEndIndex_(data);
+  const management = tournamentSheetV2Parse_(data, responseEndIndex);
+  if (management) {
+    const rawHeaderCount = (data[0] || []).reduce(
+      (last, value, index) => String(value || '').trim() ? index + 1 : last,
+      0
+    );
+    if (rawHeaderCount < 2) {
+      throw new Error('大会シートのフォーム回答ヘッダーが不足しています。');
+    }
+    const gradeRows = {};
+    Object.keys(management.schedules).forEach(grade => {
+      gradeRows[grade] = management.schedules[grade].row_number;
+    });
+    if (requireAllGrades === true) {
+      const nameMatch = String(sheet.getName()).match(/([A-E]+)級$/);
+      const requiredGrades = nameMatch ? nameMatch[1].split('') : Object.keys(gradeRows);
+      const missing = requiredGrades.filter(grade => !gradeRows[grade]);
+      if (missing.length) {
+        throw new Error('大会シートの級別固定行が不足しています: ' + missing.join(','));
+      }
+    }
+    return {
+      version: 2,
+      data: data,
+      layout: {
+        raw_response_column_count: rawHeaderCount,
+        has_legacy_columns: false,
+      },
+      management: management,
+      response_end_index: responseEndIndex,
+      grade_rows: gradeRows,
+      register_database_row: null,
+    };
+  }
   return {
+    version: 1,
     data: data,
     layout: tournamentSheetLayout_(sheet),
+    management: null,
     response_end_index: responseEndIndex,
     grade_rows: tournamentSheetGradeRows_(
       data, responseEndIndex, requireAllGrades === true
@@ -148,4 +184,118 @@ function tournamentSheetStructure_(sheet, requireAllGrades) {
       data, responseEndIndex, 'registerDatabase', false
     ),
   };
+}
+
+function tournamentSheetFormId_(structure) {
+  if (structure.version === 2) {
+    return String(structure.management.metadata['フォームID'] || '').trim();
+  }
+  return String(
+    (structure.data[0] || [])[structure.layout.form_id_column - 1] || ''
+  ).trim();
+}
+
+function tournamentSheetFormEditUrl_(structure) {
+  if (structure.version === 2) {
+    return String(structure.management.metadata['フォーム編集URL'] || '').trim();
+  }
+  return String(
+    (structure.data[0] || [])[structure.layout.edit_url_column - 1] || ''
+  ).trim();
+}
+
+function tournamentSheetFormPublicUrl_(structure) {
+  if (structure.version === 2) {
+    return String(structure.management.metadata['フォーム公開URL'] || '').trim();
+  }
+  const formId = tournamentSheetFormId_(structure);
+  return formId ? FormApp.openById(formId).getPublishedUrl() : '';
+}
+
+function tournamentSheetPaymentStatus_(structure, sourceRow) {
+  if (structure.version === 2) {
+    const item = structure.management.entries_by_source_row[sourceRow];
+    return item ? item.row[5] : '';
+  }
+  return (structure.data[sourceRow - 1] || [])[
+    structure.layout.payment_status_column - 1
+  ];
+}
+
+function tournamentSheetPaymentStatusRange_(sheet, structure, sourceRow) {
+  if (structure.version === 2) {
+    const item = structure.management.entries_by_source_row[sourceRow];
+    if (!item) {
+      throw new Error('回答行' + sourceRow + 'のv2申込管理行がありません。完全同期してください。');
+    }
+    return sheet.getRange(item.row_number, 6);
+  }
+  return sheet.getRange(sourceRow, structure.layout.payment_status_column);
+}
+
+function tournamentSheetRawResponseColumnCount_(structure) {
+  return structure.version === 2
+    ? structure.layout.raw_response_column_count
+    : structure.layout.payment_status_column - 1;
+}
+
+function tournamentSheetResponseRowsWithStatus_(structure) {
+  const width = tournamentSheetRawResponseColumnCount_(structure);
+  const rows = [];
+  for (let index = 1; index < structure.response_end_index; index++) {
+    rows.push((structure.data[index] || []).slice(0, width).concat([
+      tournamentSheetPaymentStatus_(structure, index + 1),
+    ]));
+  }
+  return { rows: rows, payment_status_index: width };
+}
+
+function tournamentSheetGradeFee_(structure, grade) {
+  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  return rowNumber ? (structure.data[rowNumber - 1] || [])[1] : null;
+}
+
+function tournamentSheetGradeDate_(structure, grade) {
+  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  if (!rowNumber) return null;
+  const row = structure.data[rowNumber - 1] || [];
+  return structure.version === 2
+    ? row[2]
+    : row[structure.layout.payment_status_column - 1];
+}
+
+function tournamentSheetGradeDateRange_(sheet, structure, grade) {
+  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  if (!rowNumber) throw new Error('グレード「' + grade + '」の行が見つかりません。');
+  return sheet.getRange(
+    rowNumber,
+    structure.version === 2 ? 3 : structure.layout.payment_status_column
+  );
+}
+
+function tournamentSheetIsSanctioned_(structure) {
+  if (structure.version === 2) {
+    const value = structure.management.metadata['公認'];
+    return value === true || String(value).toLowerCase() === 'true'
+      || String(value).trim() === '公認' || Number(value) === 1;
+  }
+  if (!structure.register_database_row) return true;
+  const statusRow = structure.data[structure.register_database_row] || [];
+  return String(statusRow[1] || '').trim() === '';
+}
+
+function tournamentSheetPaymentInstructionsFromStructure_(structure) {
+  if (structure.version === 2) {
+    const values = Object.keys(structure.management.schedules).map(grade =>
+      String(structure.management.schedules[grade].row[12] || '').trim()
+    ).filter(Boolean);
+    const unique = values.filter((value, index) => values.indexOf(value) === index);
+    if (unique.length > 1) {
+      throw new Error('級別の振込先が一致していません。');
+    }
+    return unique[0] || null;
+  }
+  return tournamentSheetPaymentInstructions_(
+    structure.data, structure.response_end_index
+  );
 }

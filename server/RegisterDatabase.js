@@ -16,6 +16,11 @@ function runRegisterDatabase(name, kounin) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, true);
+    if (structure.version === 2) {
+      return JSON.stringify({
+        error: '大会管理データv2ではregisterDatabase操作を廃止しました。年度完全同期を実行してください。',
+      });
+    }
     const data2 = structure.data;
     const paymentStatusIndex = structure.layout.payment_status_column - 1;
     // 選手行：回答終端より上だけを対象にする。

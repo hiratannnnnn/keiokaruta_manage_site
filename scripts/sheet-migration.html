@@ -50,9 +50,9 @@ function sheetMigrationRenderPlans(plans) {
     const ready = plan.status === 'ready';
     const details = ready
       ? ('情報' + Number(plan.non_empty_cell_count || 0) + 'セルを'
-        + (plan.move_target || '左側') + 'へ移送・再読取検証後、'
+        + (plan.move_target || '大会管理データv2') + 'へ正規化・再読取検証後、'
         + plan.delete_start_column + '列目から' + plan.delete_column_count
-        + '列を削除：' + (plan.delete_column_headers || []).join('、'))
+        + '列の旧管理領域を撤去：' + (plan.delete_column_headers || []).join('、'))
       : (plan.reason || plan.status);
     const warnings = (plan.warnings || []).join(' / ');
     return '<tr>'
@@ -132,7 +132,7 @@ function sheetMigrationRun() {
       );
       alert(
         '移行結果：成功' + succeeded + '件、スキップ' + skipped
-        + '件、失敗' + failed + '件、左側へ移送' + moved + 'セル'
+        + '件、失敗' + failed + '件、v2へ記録・監査保存' + moved + 'セル'
       );
       sheetMigrationPreview();
     })
@@ -141,7 +141,7 @@ function sheetMigrationRun() {
 }
 
 function sheetMigrationRestore(migrationId) {
-  if (!window.confirm('バックアップから削除列を復元します。実行しますか？')) return;
+  if (!window.confirm('バックアップから移行前のシート全体を復元します。実行しますか？')) return;
   google.script.run
     .withSuccessHandler(json => {
       const data = JSON.parse(json);

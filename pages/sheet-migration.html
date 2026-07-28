@@ -2,15 +2,17 @@
   <div class="list-page">
     <div class="page-title">大会シート構造移行</div>
     <div class="panel">
-      <div class="panel-header">旧管理列のdry-run・選択実行</div>
+      <div class="panel-header">大会管理データv2のdry-run・選択実行</div>
       <div class="panel-body">
         <p style="line-height:1.6;margin-top:0;">
-          Googleフォーム編集URLより右側にある旧管理列を検査し、全情報を
-          下部固定領域の左側へ移送して再読取検証した後に旧列を削除します。
-          値・数式・メモ・表示形式・背景色・入力規則を移送対象にします。
+          フォーム回答原本を上段に維持し、大会・日程・申込/支払・案内・メール・同期の
+          全情報を回答終端下の左端A列から大会管理データv2として記録します。
+          API全件照合とv2再読取検証の成功後だけ、旧個人状態列、フォームID/編集URL列、
+          旧制御列、旧下部固定領域を撤去します。旧セルの値・数式・メモ・表示形式・
+          背景色・入力規則はv2の旧管理監査にも保存します。
           初期状態では何も選択せず、検査だけではシートを変更しません。
-          実行時は対象シートの非表示バックアップを先に作成し、移送または検証に
-          失敗した場合は列を削除しません。
+          実行時は対象シートの非表示バックアップを先に作成し、照合・変換・検証の
+          いずれかに失敗した場合は同じシートをバックアップから戻します。
         </p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" onclick="sheetMigrationPreview()">移行内容を検査</button>

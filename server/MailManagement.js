@@ -720,10 +720,9 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   } catch (e) {
     return '（大会シート構造を特定できません）\n';
   }
-  const allRows = structure.data;
-  const formEndIdx = structure.response_end_index;
-  const paymentStatusIndex = structure.layout.payment_status_column - 1;
-  const data = latestFormRowsByPlayer_(allRows.slice(1, formEndIdx))
+  const responseData = tournamentSheetResponseRowsWithStatus_(structure);
+  const paymentStatusIndex = responseData.payment_status_index;
+  const data = latestFormRowsByPlayer_(responseData.rows)
     .filter(row => row[2] !== '');
 
   const gradesArray = grades.replace('級', '').split('');
@@ -889,10 +888,8 @@ function setReminderTrigger(json) {
 
         const tSheet = ss.getSheetByName(tournamentName + grades);
         if (tSheet) {
-          const layout = tournamentSheetLayout_(tSheet);
-          const formId = String(
-            tSheet.getRange(1, layout.form_id_column).getValue()
-          ).trim();
+          const structure = tournamentSheetStructure_(tSheet, false);
+          const formId = tournamentSheetFormId_(structure);
           FormApp.openById(formId).setDescription(
             'こちらは' + tournamentName + grades + 'の参加表明フォームです。\n' +
             '該当項目に回答の上、送信してください。\n' +

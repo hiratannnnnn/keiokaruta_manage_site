@@ -33,6 +33,11 @@ function runCountMatches(name) {
     if (!sheet) throw new Error(`「${name}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, true);
+    if (structure.version === 2) {
+      return JSON.stringify({
+        error: '大会管理データv2ではcountMatches列への書込みを廃止しました。',
+      });
+    }
     const data = structure.data;
     const paymentStatusIndex = structure.layout.payment_status_column - 1;
     const formIdIndex = structure.layout.form_id_column - 1;

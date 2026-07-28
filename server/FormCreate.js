@@ -99,8 +99,9 @@ function createFormFromWeb(paramsJson) {
     // 級別日程は開催日が確定するまで作成できないため、後のsaveTournamentDatesで登録する。
     let dbSyncPending = false;
     let dbSyncWarning = '';
+    let dbTournament = null;
     try {
-      taikaiEnsureTournament_(title, {
+      dbTournament = taikaiEnsureTournament_(title, {
         operation: 'フォーム作成',
         outcome: '一時障害の場合はフォーム作成を継続し、DB未同期として記録',
       });
@@ -162,7 +163,6 @@ function createFormFromWeb(paramsJson) {
     }
     responseSheet.setName(title + grades);
     const responseColumnCount = responseSheet.getLastColumn();
-    const paymentStatusColumn = responseColumnCount + 1;
 
     // メール管理シートへ書き込み
     const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
@@ -177,56 +177,64 @@ function createFormFromWeb(paramsJson) {
     if (responseColumnCount > 4) {
       responseSheet.hideColumns(4, responseColumnCount - 4);
     }
-    responseSheet.getRange(
-      1, paymentStatusColumn, 1, 3
-    ).setValues([['振込み済みか', formId, editUrl]]);
-    responseSheet.getRange(1, paymentStatusColumn).setBackground('#FFF2CC');
-    responseSheet.getRange(12, 1, 4, 3).setValues([
-      ['registerDatabase', '非公認の場合は下に文字', '↓振込先'],
-      ['', '', ''],
-      ['', '', ''],
-      ['', '', ''],
-    ]).setBackground('#d3d3d3');
-
-    if (isKoen) responseSheet.getRange(13, 2).setValue('非公認');
-
-    responseSheet.getRange(13, 1, 1, 3).setBackground('#FFF2CC');
-    responseSheet.getRange(15, 1).setBackground('#FFF2CC');
-    responseSheet.getRange(14, 2, 2, 1).setBackground('#FFFFFF');
-    responseSheet.getRange(14, 3, 4, 1).setBackground('#FFF2CC');
-
     const grades2 = ['A', 'B', 'C', 'D', 'E'];
-    for (let i = 0; i < grades2.length; i++) {
-      responseSheet.getRange(4 + i, 1).setValue(grades2[i]);
-      const formula =
-        '=COUNTIFS(E$1:E, "' + grades2[i]
-        + '", INDIRECT("R1C" & (' + paymentStatusColumn
-        + ') & ":R" & ROWS(E:E) & "C" & (' + paymentStatusColumn
-        + '), FALSE), "済")'
-        + ' + COUNTIFS(E$1:E, "' + grades2[i]
-        + '", INDIRECT("R1C" & (' + paymentStatusColumn
-        + ') & ":R" & ROWS(E:E) & "C" & (' + paymentStatusColumn
-        + '), FALSE), "*繰*越*")';
-      responseSheet.getRange(4 + i, 3).setFormula(formula);
-      responseSheet.getRange(
-        4 + i, responseColumnCount
-      ).setFormula('=MULTIPLY(B' + (4 + i) + ',C' + (4 + i) + ')');
-    }
-    responseSheet.getRange(4, 1, 5, 1).setHorizontalAlignment('right');
-
     const cd = title.includes('鳳玉') ? 3000 : 2000;
-    const e  = title.includes('鳳玉') ? 2500 : 1500;
-    responseSheet.getRange('B4:B5').setValue(2500);
-    responseSheet.getRange('B6:B7').setValue(cd);
-    responseSheet.getRange('B8').setValue(e);
-    responseSheet.getRange(9, 3).setFormula('=SUM($C4:$C8)');
+    const eFee = title.includes('鳳玉') ? 2500 : 1500;
+    const initialFees = { A: 2500, B: 2500, C: cd, D: cd, E: eFee };
+    const initialSnapshot = {
+      tournament_name: title,
+      tournament_id: dbTournament ? dbTournament.id : '',
+      form_id: formId,
+      form_public_url: formUrl,
+      form_edit_url: editUrl,
+      registration_completed: false,
+      payment_completed: false,
+      is_sanctioned: !isKoen,
+      sync_status: dbSyncPending ? 'pending_api' : 'pending_schedule',
+      synced_at: dbSyncPending ? '' : new Date(),
+      sync_error: dbSyncWarning,
+      schedules: grades2.map(grade => ({
+        grade: grade,
+        participation_fee_yen: initialFees[grade],
+        held_on: '',
+        id: '',
+        application_deadline: moshiDead,
+        internal_payment_deadline: '',
+        payment_deadline: huriDead || '',
+        payment_timing: huriDead ? 'before_tournament' : '',
+        lottery_result_date: raffle || '',
+        venue: '',
+        reception_ends_at: '',
+        is_sanctioned: !isKoen,
+        payment_instructions: '',
+        sync_status: 'pending_schedule',
+        synced_at: '',
+      })),
+      entries: [],
+      announcements: [],
+      email_jobs: [],
+      legacy_records: [],
+    };
+    tournamentSheetV2ValidateSnapshot_(initialSnapshot, false);
+    const managementRows = tournamentSheetV2Rows_(initialSnapshot);
+    if (responseSheet.getMaxColumns() < TOURNAMENT_SHEET_V2_WIDTH_) {
+      responseSheet.insertColumnsAfter(
+        responseSheet.getMaxColumns(),
+        TOURNAMENT_SHEET_V2_WIDTH_ - responseSheet.getMaxColumns()
+      );
+    }
+    const managementStartRow = 3;
+    const requiredRows = managementStartRow + managementRows.length - 1;
+    if (responseSheet.getMaxRows() < requiredRows) {
+      responseSheet.insertRowsAfter(
+        responseSheet.getMaxRows(), requiredRows - responseSheet.getMaxRows()
+      );
+    }
     responseSheet.getRange(
-      9, responseColumnCount
-    ).setFormula('=SUMPRODUCT(B4:B8, C4:C8)');
-    responseSheet.getRange(10, 1, 2, 3).setValues([
-      ['原則として、振込が確認出来たら「済」と入れる。', '', ''],
-      ['何らかの理由ですでに振込がある分から回す場合は「繰り越し」と入れる。', '', ''],
-    ]).setBackground('#d3d3d3');
+      managementStartRow, 1, managementRows.length, TOURNAMENT_SHEET_V2_WIDTH_
+    ).setValues(managementRows);
+    responseSheet.getRange(managementStartRow, 1, 1, TOURNAMENT_SHEET_V2_WIDTH_)
+      .setBackground('#d9ead3').setFontWeight('bold');
     // 作成した大会シートが共通構造判定で一意に読めることを検証する。
     tournamentSheetStructure_(responseSheet, true);
 

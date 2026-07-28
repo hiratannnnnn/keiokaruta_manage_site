@@ -426,7 +426,6 @@ function updateSuitou() {
     }
     const allData = structure.data;
     const formEndIdx = structure.response_end_index;
-    const paymentStatusIndex = structure.layout.payment_status_column - 1;
 
     // 下部セクションから参加費テーブルを探す
     // col A (index 0) = A〜E, col B (index 1) = 金額（正の数）
@@ -455,7 +454,9 @@ function updateSuitou() {
       const gradeStr = String(allData[i][4] || '').trim();
       if (!gradeStr) continue;
 
-      const payStatus = String(allData[i][paymentStatusIndex] || '').trim();
+      const payStatus = String(
+        tournamentSheetPaymentStatus_(structure, i + 1) || ''
+      ).trim();
       const isPaid = payStatus === '済' || payStatus === '繰越' || payStatus === 'くりこし';
       if (!isPaid) continue;
 

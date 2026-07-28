@@ -144,20 +144,14 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       return;
     }
     const data = structure.data;
-    const paymentStatusIndex = structure.layout.payment_status_column - 1;
-
     const gradeDates = {};
-    let isSanctioned = true;
+    const isSanctioned = tournamentSheetIsSanctioned_(structure);
     Object.keys(structure.grade_rows).forEach(grade => {
-      const row = data[structure.grade_rows[grade] - 1] || [];
-      if (row[paymentStatusIndex] instanceof Date) {
-        gradeDates[grade] = row[paymentStatusIndex];
+      const value = tournamentSheetGradeDate_(structure, grade);
+      if (value instanceof Date || fiscalSyncDate_(value)) {
+        gradeDates[grade] = value;
       }
     });
-    if (structure.register_database_row) {
-      const statusRow = data[structure.register_database_row] || [];
-      isSanctioned = String(statusRow[1] || '').trim() === '';
-    }
 
     const sheetGradesMatch = sheetName.match(/([A-E]+)級$/);
     const declaredGrades = sheetGradesMatch ? sheetGradesMatch[1].split('') : Object.keys(gradeDates);
@@ -169,7 +163,9 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
 
     const baseName = sheetName.replace(/[A-E]+級$/, '');
     const applicationDeadline = fiscalSyncDate_(calendarRow[5]);
-    if (!applicationDeadline) errors.push(sheetName + ': 申込期限が未設定です。');
+    if (structure.version === 1 && !applicationDeadline) {
+      errors.push(sheetName + ': 申込期限が未設定です。');
+    }
     const paymentDeadline = fiscalSyncDate_(calendarRow[10]);
     const isTournamentDayPayment = String(calendarRow[10] || '').trim() === '当日支払い';
     const paymentCompleted = String(calendarRow[11] || '').trim() === '済';
@@ -182,19 +178,19 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     errors.push.apply(errors, feeResult.errors);
     let paymentInstructions;
     let hasPaymentInstructions = true;
-    try {
-      paymentInstructions = tournamentSheetPaymentInstructions_(
-        data, structure.response_end_index
-      );
-    } catch (e) {
-      hasPaymentInstructions = false;
-      errors.push(
-        sheetName + ': ' + e.message
-        + ' 振込先を安全に同期できません。'
-      );
+    if (structure.version === 1) {
+      try {
+        paymentInstructions = tournamentSheetPaymentInstructionsFromStructure_(structure);
+      } catch (e) {
+        hasPaymentInstructions = false;
+        errors.push(
+          sheetName + ': ' + e.message
+          + ' 振込先を安全に同期できません。'
+        );
+      }
     }
     let internalPaymentDeadline = { value: null, valid: true };
-    if (internalPaymentDeadlineIndex !== null) {
+    if (structure.version === 1 && internalPaymentDeadlineIndex !== null) {
       internalPaymentDeadline = fiscalSyncOptionalDate_(
         calendarRow[internalPaymentDeadlineIndex]
       );
@@ -211,24 +207,45 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     currentFiscalGrades.forEach(grade => {
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       const payment = fiscalSyncPayment_(calendarRow[10], heldOn);
+      const v2Row = structure.version === 2
+        ? structure.management.schedules[grade].row
+        : null;
+      const v2ApplicationDeadline = v2Row
+        ? fiscalSyncDate_(v2Row[4])
+        : applicationDeadline;
+      if (!v2ApplicationDeadline) {
+        errors.push(sheetName + ': ' + grade + '級の申込期限が未設定です。');
+      }
       const schedule = {
         held_on: heldOn,
         grade: grade,
-        application_deadline: applicationDeadline,
-        payment_deadline: payment.payment_deadline,
-        payment_timing: payment.payment_timing,
+        application_deadline: v2ApplicationDeadline,
+        payment_deadline: v2Row
+          ? (fiscalSyncDate_(v2Row[6]) || null)
+          : payment.payment_deadline,
+        payment_timing: v2Row
+          ? (String(v2Row[7] || '').trim() || null)
+          : payment.payment_timing,
         participation_fee_yen: Object.prototype.hasOwnProperty.call(feeResult.fees, grade)
           ? feeResult.fees[grade]
           : null,
-        lottery_result_date: fiscalSyncDate_(calendarRow[7]) || null,
-        venue: null,
-        reception_ends_at: null,
-        is_sanctioned: isSanctioned,
+        lottery_result_date: v2Row
+          ? (fiscalSyncDate_(v2Row[8]) || null)
+          : (fiscalSyncDate_(calendarRow[7]) || null),
+        venue: v2Row ? (String(v2Row[9] || '').trim() || null) : null,
+        reception_ends_at: v2Row ? (String(v2Row[10] || '').trim() || null) : null,
+        is_sanctioned: v2Row
+          ? (v2Row[11] === true || String(v2Row[11]).toLowerCase() === 'true'
+            || Number(v2Row[11]) === 1)
+          : isSanctioned,
       };
-      if (internalPaymentDeadlineIndex !== null && internalPaymentDeadline.valid) {
+      if (v2Row) {
+        schedule.internal_payment_deadline = fiscalSyncDate_(v2Row[5]) || null;
+        schedule.payment_instructions = String(v2Row[12] || '').trim() || null;
+      } else if (internalPaymentDeadlineIndex !== null && internalPaymentDeadline.valid) {
         schedule.internal_payment_deadline = internalPaymentDeadline.value;
       }
-      if (hasPaymentInstructions) {
+      if (!v2Row && hasPaymentInstructions) {
         schedule.payment_instructions = paymentInstructions;
       }
       schedules.push(schedule);
@@ -243,7 +260,7 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       const playerName = String(row[2] || '').trim();
       if (!playerName || !/[ 　]/.test(playerName)) continue;
 
-      const payStatus = String(row[paymentStatusIndex] || '').trim();
+      const payStatus = String(tournamentSheetPaymentStatus_(structure, i + 1) || '').trim();
       const isCarriedOver = (payStatus.includes('繰') && payStatus.includes('越'))
         || payStatus === 'くりこし';
       const isTarget = payStatus === '' || payStatus === '済'
@@ -390,7 +407,12 @@ function previewFiscalYearDatabaseSync(operationId) {
 }
 
 function syncFiscalYearDatabase() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    return JSON.stringify({ error: '別の年度完全同期が実行中です。完了後に再実行してください。' });
+  }
   try {
+    try {
     const snapshot = buildFiscalYearDatabaseSnapshot_();
     const mailSnapshotPlan = buildMailManagementSnapshotSyncPlan_(snapshot);
     if (mailSnapshotPlan.errors.length) {
@@ -458,6 +480,18 @@ function syncFiscalYearDatabase() {
         + gmailPlan.errors.length + '件残っています。'
       );
     }
+    let sheetWriteback;
+    try {
+      sheetWriteback = refreshFiscalYearTournamentSheetsV2_(snapshot);
+    } catch (writebackError) {
+      return JSON.stringify({
+        error: 'DB/API同期は成功しましたが、大会シートへの書戻しに失敗しました。'
+          + '片側完了にはせず、同じ完全同期を再実行してください: '
+          + writebackError.message,
+        partial: true,
+        result: result,
+      });
+    }
     return JSON.stringify({
       ok: true,
       preview: snapshot.summary,
@@ -469,9 +503,13 @@ function syncFiscalYearDatabase() {
         unresolved_count: gmailPlan.errors.length,
         unresolved: gmailPlan.errors,
       },
+      sheet_writeback: sheetWriteback,
       warning: warnings.join(' '),
     });
-  } catch (e) {
-    return JSON.stringify({ error: e.message });
+    } catch (e) {
+      return JSON.stringify({ error: e.message });
+    }
+  } finally {
+    lock.releaseLock();
   }
 }
