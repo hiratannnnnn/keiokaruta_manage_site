@@ -29,7 +29,8 @@ assert.match(page, /デポジット額と充当したい参加費が異なる場
 assert.match(page, /選手ごとの支払い履歴やデポジット履歴は追加・削除しません/);
 assert.match(page, /キャンセル状態の変更だけでは支払い履歴は作成されません/);
 assert.match(suitou, /deposit: balance > 0/);
-assert.match(detail, /taikaiRecordFullPaymentByPlayer_/);
+assert.match(detail, /taikaiRecordFullPaymentByEntry_/);
+assert.doesNotMatch(detail, /taikaiRecordFullPaymentByPlayer_/);
 assert.doesNotMatch(detail, /appendSuitouTx_/);
 assert.match(suitou, /\/players\/.*\/deposits/);
 assert.doesNotMatch(

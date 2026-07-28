@@ -25,7 +25,9 @@ function getTournamentDetail(name) {
     const selectionStatusIndex = rawColumnCount;
     const paymentStatusIndex = rawColumnCount + 1;
     const personHeaders = headerRow.slice(0, rawColumnCount)
-      .concat(['選考状態', '支払状態']);
+      .concat(structure.version === 2
+        ? ['選考状態', '支払状態']
+        : ['選考状態（旧セル兼用）', '支払状態（旧セル推定）']);
     const responseRecords = tournamentSheetResponseRecords_(structure, false);
     const personRecords = responseRecords.map(record => ({
       source_row: record.source_row,
@@ -233,6 +235,12 @@ function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
 
     const structure = tournamentSheetStructure_(sheet, false);
     const record = tournamentSheetResponseRecord_(structure, sourceRow, entryId);
+    if (isPaid && structure.version !== 2) {
+      throw new Error(
+        '旧大会シートでは選考状態と支払状態を安全に分離できません。'
+        + '先に大会シートv2へ移行してから支払いを登録してください。'
+      );
+    }
     if (isPaid && structure.version === 2) {
       if (!record.entry_id) {
         throw new Error(
@@ -251,13 +259,6 @@ function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
         throw paymentError;
       }
       return JSON.stringify({ ok: true });
-    }
-    if (isPaid) {
-      taikaiRecordFullPaymentByPlayer_(
-        String(sheetName).replace(/[A-E]+級$/, ''),
-        record.name,
-        useDeposit === true
-      );
     }
     tournamentSheetSelectionStatusRange_(
       sheet, structure, record.source_row

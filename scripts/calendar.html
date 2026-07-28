@@ -457,6 +457,7 @@ function completeTournament(name, btn) {
 // 大会詳細
 // ------------------------------------------------------------
 let detailColsHidden = false;
+let detailSheetVersion = 1;
 let detailSelectionStatusIndex = 7;
 let detailPaymentStatusIndex = 8;
 let detailNameColumnIndex = 2;
@@ -575,6 +576,7 @@ function onDetailLoaded(json) {
   }
 
   statusEl.style.display = 'none';
+  detailSheetVersion = Number(res.sheetVersion) || 1;
   detailPaymentStatusIndex = Number.isInteger(res.paymentStatusIndex)
     ? res.paymentStatusIndex
     : 8;
@@ -889,7 +891,9 @@ function renderPayButtonsHtml(
   const isAfterCancel = selectionValue.includes('期限後キャンセル');
   const paymentAction = isZumi
     ? '<span class="pay-recorded-note">入金取消は出納管理から</span>'
-    : `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">入金済みにする</button>`;
+    : detailSheetVersion !== 2
+      ? '<span class="pay-recorded-note">支払い登録はv2移行後に利用できます</span>'
+      : `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">入金済みにする</button>`;
   if (isWaitlisted) {
     return paymentAction
          + `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">選考状態をクリア</button>`;

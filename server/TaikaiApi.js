@@ -489,11 +489,6 @@ function taikaiRecordFullPaymentByEntry_(entryId, useDeposit) {
   );
 }
 
-function taikaiRecordFullPaymentByPlayer_(tournamentName, playerName, useDeposit) {
-  const entry = taikaiFindTournamentEntry_(tournamentName, playerName);
-  return taikaiRecordFullPaymentByEntry_(entry.id, useDeposit);
-}
-
 function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned, grades) {
   const tournament = taikaiFindTournament_(tournamentName);
   const schedules = taikaiApiRequest_('GET', '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules') || [];
