@@ -4,6 +4,8 @@
 
 // フォームをゴミ箱へ移動し、回答先をゴミ箱用スプレッドシートへ変更した上でシートを削除する
 function deleteTournament(name) {
+  let apiUpdated = false;
+  let deletedDatabase = null;
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
 
@@ -25,34 +27,50 @@ function deleteTournament(name) {
     if (!formId) throw new Error('フォームIDが取得できません');
 
     const tournamentName = tournamentSheetBaseName_(name);
+    const grades = tournamentSheetDeclaredGrades_(name);
     const siblingSheets = ss.getSheets().filter(candidate =>
       candidate.getName() !== name
       && tournamentSheetBaseName_(candidate.getName()) === tournamentName
       && /[A-E]+級$/.test(candidate.getName())
     );
-    if (siblingSheets.length) {
-      throw new Error(
-        '同じ大会の別フォーム（'
-        + siblingSheets.map(candidate => candidate.getName()).join('、')
-        + '）が存在するため、このフォームだけを削除できません。'
-        + 'DBの日程・申込を誤削除しないため、大会単位の削除手順を使用してください。'
+
+    // API削除が失敗した場合は、Google側を一切削除せず再試行可能にする。
+    if (structure.version === 2) {
+      const tournamentId = String(
+        structure.management.metadata['tournament ID'] || ''
+      ).trim();
+      const scheduleIds = grades.map(grade => {
+        const schedule = structure.management.schedules[grade];
+        return schedule ? String(schedule.row[3] || '').trim() : '';
+      });
+      if (!tournamentId || scheduleIds.some(id => !id)) {
+        throw new Error(
+          '大会IDまたは担当級のschedule IDが不足しています。'
+          + '先に完全同期を実行してください。'
+        );
+      }
+      deletedDatabase = taikaiDeleteTournamentSchedules_(
+        tournamentId, scheduleIds
       );
+    } else {
+      if (siblingSheets.length) {
+        throw new Error(
+          '複数フォーム大会の旧シートは個別削除できません。'
+          + '先に大会シートv2へ移行してください。'
+        );
+      }
+      deletedDatabase = taikaiDeleteTournament_(tournamentName);
     }
+    apiUpdated = true;
 
-    // シート名末尾の「ABC級」を除いた大会名がAPI上の大会名。
-    // API削除が失敗した場合は、フォーム・シートを残して再試行できるようにする。
-    const deletedDatabase = taikaiDeleteTournament_(tournamentName);
-
-    // フォームをゴミ箱へ移動
-    const form = FormApp.openById(formId);
-    DriveApp.getFileById(formId).setTrashed(true);
-
-    // フォームの回答先をゴミ箱用スプレッドシートへ変更
-    const trashSs = SpreadsheetApp.openById(CONFIG.TRASH_SPREADSHEET_ID);
-    form.setDestination(FormApp.DestinationType.SPREADSHEET, trashSs.getId());
-
-    // シートを削除
-    ss.deleteSheet(sheet);
+    // フォームは回答先を変更してからゴミ箱へ移す。再実行時はゴミ箱済みなら省略する。
+    const formFile = DriveApp.getFileById(formId);
+    if (!formFile.isTrashed()) {
+      const form = FormApp.openById(formId);
+      const trashSs = SpreadsheetApp.openById(CONFIG.TRASH_SPREADSHEET_ID);
+      form.setDestination(FormApp.DestinationType.SPREADSHEET, trashSs.getId());
+      formFile.setTrashed(true);
+    }
 
     // カレンダーシートの該当行を削除する
     const calSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
@@ -66,8 +84,38 @@ function deleteTournament(name) {
       }
     }
 
-    return JSON.stringify({ ok: true, database: deletedDatabase });
+    // フォーム固有のメール管理行だけを削除する。
+    const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
+    if (mailSheet && mailSheet.getLastRow() >= 3) {
+      const mailRows = mailSheet.getRange(
+        3, 1, mailSheet.getLastRow() - 2, 2
+      ).getValues();
+      for (let index = mailRows.length - 1; index >= 0; index--) {
+        if (String(mailRows[index][0]) === tournamentName
+            && String(mailRows[index][1]) === grades.join('') + '級') {
+          mailSheet.deleteRow(index + 3);
+        }
+      }
+    }
+
+    // 回答シートを最後に削除し、途中失敗時の再試行情報を残す。
+    ss.deleteSheet(sheet);
+
+    return JSON.stringify({
+      ok: true,
+      database: deletedDatabase,
+      tournament_deleted: Boolean(
+        deletedDatabase && deletedDatabase.tournament_deleted
+      ),
+    });
   } catch (err) {
-    return JSON.stringify({ error: err.message });
+    return JSON.stringify({
+      error: (apiUpdated
+        ? 'DBの日程削除は成功しましたが、Google側の後処理に失敗しました。'
+          + '同じ削除操作を再実行してください: '
+        : '') + err.message,
+      partial: apiUpdated,
+      database: deletedDatabase,
+    });
   }
 }

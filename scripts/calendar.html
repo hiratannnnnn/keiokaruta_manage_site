@@ -839,7 +839,7 @@ function triggerDeleteTournament() {
   const statusEl = document.getElementById('delete-status');
 
   showConfirmModal(
-    `「${name}」のDB上の大会データを削除し、シートとGoogleフォームをゴミ箱に移動します。\nDB上の大会・日程・申込データは復元できません。\n\n※通常は大会一覧の「完了」ボタンをご利用ください。`,
+    `「${name}」が担当するDB日程と申込を削除し、シートとGoogleフォームをゴミ箱に移動します。\n同じ大会に別フォームの日程が残る場合、大会本体と兄弟フォームは維持されます。最後の日程なら大会本体も削除されます。\nこの操作は復元できません。\n\n※通常は大会一覧の「完了」ボタンをご利用ください。`,
     () => {
       setDetailOperationState(btn, statusEl, 'running',
         '大会データを削除しています…', '削除中…');
@@ -854,7 +854,12 @@ function triggerDeleteTournament() {
           allTournaments = allTournaments.filter(t => t.name !== name);
           showCalendarList();
           renderCalendar(allTournaments);
-          showAlertModal('大会データ・シート・フォームを削除しました。', '削除完了');
+          showAlertModal(
+            r.tournament_deleted
+              ? '担当日程と大会本体、シート、フォームを削除しました。'
+              : '担当日程、シート、フォームを削除しました。兄弟フォームの大会データは維持されています。',
+            '削除完了'
+          );
         })
         .withFailureHandler(e => {
           setDetailOperationState(btn, statusEl, 'error',

@@ -265,6 +265,19 @@ function taikaiDeleteTournament_(name) {
   );
 }
 
+function taikaiDeleteTournamentSchedules_(tournamentId, scheduleIds) {
+  const ids = (scheduleIds || []).map(id => String(id || '').trim())
+    .filter(Boolean);
+  if (!String(tournamentId || '').trim() || !ids.length) {
+    throw new Error('大会IDまたは削除対象schedule IDが不足しています。');
+  }
+  return taikaiApiRequest_(
+    'DELETE',
+    '/tournaments/' + encodeURIComponent(String(tournamentId)) + '/schedules',
+    { schedule_ids: ids }
+  );
+}
+
 function taikaiJstDateTime_(value) {
   const text = String(value || '').trim().replace('T', ' ');
   const match = text.match(/^(\d{4}-\d{2}-\d{2})[ ](\d{2}:\d{2})(?::(\d{2}))?$/);
