@@ -63,7 +63,7 @@ const BOARD_ROLE_CLASS = {
 
 function boardPostElement(p) {
   const roleClass = BOARD_ROLE_CLASS[p.role] || 'board-role-other';
-  const canDelete = currentRole === '会長副会長' || currentRole === p.role;
+  const canDelete = true;
   const displayName = p.name ? p.name + '（' + p.role + '）' : p.role;
   const card = document.createElement('div');
   card.className = 'board-card';

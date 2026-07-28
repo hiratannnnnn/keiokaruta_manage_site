@@ -149,10 +149,8 @@ function renderCalendar(list) {
       let dcCell;
       if (t.doubleChecked) {
         dcCell = `<td><span class="dc-done">✓</span></td>`;
-      } else if (hasPermission('announcementDoubleCheck')) {
-        dcCell = `<td onclick="event.stopPropagation()"><button class="dc-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button></td>`;
       } else {
-        dcCell = `<td></td>`;
+        dcCell = `<td onclick="event.stopPropagation()"><button class="dc-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button></td>`;
       }
 
       return `<tr class="clickable" data-name="${safeName}" onclick="openTournamentDetail(this.dataset.name)">
@@ -299,14 +297,7 @@ function executePayMethod(skipMinus) {
 }
 
 function setCalendarDone(name, col, btn) {
-  const permKey = col === 7 ? 'applyDoneInput' : 'payDoneInput';
   const label   = col === 7 ? '申込済' : '振込済';
-
-  if (!hasPermission(permKey)) {
-    const allowed = currentPermissions[permKey] || [];
-    showAlertModal(`「${label}」の入力は ${allowed.join('・')} のみ操作できます（現在：${currentRole}）`, '権限エラー');
-    return;
-  }
 
   // 振込済みは入力方法を選択させる
   if (col === 12) {
@@ -433,11 +424,6 @@ function executePayDone() {
 }
 
 function triggerCompleteTournamentFromDetail() {
-  if (!hasPermission('completeTournament')) {
-    const allowed = currentPermissions['completeTournament'] || [];
-    showAlertModal(`「完了」の操作は ${allowed.join('・')} のみ操作できます（現在：${currentRole}）`, '権限エラー');
-    return;
-  }
   const name = document.getElementById('detail-title').textContent;
   const btn = document.getElementById('btn-complete-detail');
   const status = document.getElementById('complete-detail-status');
@@ -468,11 +454,6 @@ function triggerCompleteTournamentFromDetail() {
 }
 
 function clearCalendarPayDone(name, btn) {
-  if (!hasPermission('payDoneInput')) {
-    const allowed = currentPermissions['payDoneInput'] || [];
-    showAlertModal(`「振込済」の操作は ${allowed.join('・')} のみ操作できます（現在：${currentRole}）`, '権限エラー');
-    return;
-  }
   showConfirmModal(`「${name}」の振込済みを取り消しますか？`, () => {
     btn.disabled = true;
     google.script.run
@@ -498,11 +479,6 @@ function clearCalendarPayDone(name, btn) {
 // 完了ボタン
 // ------------------------------------------------------------
 function completeTournament(name, btn) {
-  if (!hasPermission('completeTournament')) {
-    const allowed = currentPermissions['completeTournament'] || [];
-    showAlertModal(`「完了」の操作は ${allowed.join('・')} のみ操作できます（現在：${currentRole}）`, '権限エラー');
-    return;
-  }
 
   showConfirmModal(`「${name}」を完了にしますか？\n一覧から非表示になります。`, () => {
     btn.disabled = true;
@@ -658,7 +634,7 @@ function onDetailLoaded(json) {
 
   // 参加者一覧
   const payColIdx = detailPaymentStatusIndex;
-  const showPayBtns = hasPermission('payDetailButtons');
+  const showPayBtns = true;
   document.getElementById('detail-person-thead').innerHTML =
     '<tr>' + res.personHeaders.map((h, i) => {
       if (i === payColIdx) return `<th>${escHtml(h)}</th>${showPayBtns ? '<th></th>' : ''}`;
@@ -691,9 +667,7 @@ function onDetailLoaded(json) {
   currentTournamentIsOfficial = res.isOfficial;
   showOfficialBadge(!res.isOfficial);
 
-  // 操作パネル表示（権限チェック）
-  document.getElementById('detail-ops-section').style.display =
-    hasPermission('operationPanel') ? 'grid' : 'none';
+  document.getElementById('detail-ops-section').style.display = 'grid';
   [
     'register-status',
     'count-status',
@@ -706,12 +680,9 @@ function onDetailLoaded(json) {
     status.textContent = '';
     status.className = 'op-status';
   });
-  document.getElementById('detail-delete-section').style.display =
-    hasPermission('deleteTournament') ? 'block' : 'none';
-  const canPayDone = currentRole === '振込係' || currentRole === '会長副会長';
-  document.getElementById('btn-pay-done').style.display  = canPayDone ? 'block' : 'none';
-  document.getElementById('detail-complete-section').style.display =
-    hasPermission('completeTournament') ? 'block' : 'none';
+  document.getElementById('detail-delete-section').style.display = 'block';
+  document.getElementById('btn-pay-done').style.display = 'block';
+  document.getElementById('detail-complete-section').style.display = 'block';
   [
     ['btn-toggle-official', '公認状態を切替'],
     ['btn-register', '回答をDBへ同期'],
@@ -958,7 +929,7 @@ function renderPayButtonsTd(value, playerName) {
 
 function updateDetailPayCell(playerName, value) {
   const payColIdx = detailPaymentStatusIndex;
-  const showPayBtns = hasPermission('payDetailButtons');
+  const showPayBtns = true;
   for (const row of document.getElementById('detail-person-tbody').querySelectorAll('tr')) {
     const cells = row.querySelectorAll('td');
     if (cells.length > 2 && cells[2].textContent.trim() === playerName) {
@@ -1162,9 +1133,7 @@ function renderDetailTasks(name) {
   const items = [];
 
   if (!t.doubleChecked) {
-    const btnHtml = hasPermission('announcementDoubleCheck')
-      ? `<button class="task-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button>`
-      : '';
+    const btnHtml = `<button class="task-btn" data-name="${safeName}" onclick="openDoubleCheckModal(this.dataset.name)">チェック</button>`;
     items.push(`<div class="task-item"><span class="task-label">□ 案内のダブルチェック</span>${btnHtml}</div>`);
   }
 

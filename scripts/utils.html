@@ -101,53 +101,6 @@ function onCompletionOverlayClick(e) {
 }
 
 // ------------------------------------------------------------
-// 権限管理
-// ------------------------------------------------------------
-let currentPermissions = {
-  applyDoneInput:          ['申込係', '会長副会長'],
-  payDoneInput:            ['振込係', '会長副会長'],
-  completeTournament:      ['会長副会長'],
-  payDetailButtons:        ['振込係', '会長副会長'],
-  operationPanel:          ['申込係', '振込係', '案内係', '会長副会長'],
-  announcementDoubleCheck: ['案内係', '会長副会長'],
-};
-let permissionsLoaded = false;
-let permissionsLoading = false;
-let permissionLoadCallbacks = [];
-
-function hasPermission(key) {
-  const allowed = currentPermissions[key];
-  if (!allowed) return true; // 未定義キーはデフォルト許可
-  return allowed.includes(currentRole);
-}
-
-function loadAndApplyPermissions(callback) {
-  if (permissionsLoaded) {
-    if (callback) callback();
-    return;
-  }
-  if (callback) permissionLoadCallbacks.push(callback);
-  if (permissionsLoading) return;
-  permissionsLoading = true;
-
-  const finish = () => {
-    permissionsLoading = false;
-    permissionsLoaded = true;
-    const callbacks = permissionLoadCallbacks.splice(0);
-    callbacks.forEach(item => {
-      try { item(); } catch (e) {}
-    });
-  };
-  google.script.run
-    .withSuccessHandler(json => {
-      try { currentPermissions = JSON.parse(json); } catch(e) {}
-      finish();
-    })
-    .withFailureHandler(finish)
-    .getPermissions();
-}
-
-// ------------------------------------------------------------
 // タブ切替
 // ------------------------------------------------------------
 let calendarLoaded    = false;
@@ -196,9 +149,6 @@ function initApp() {
   const roleClass = roleClassMap[currentRole];
   if (roleClass) document.body.classList.add(roleClass);
 
-  loadAndApplyPermissions(() => {
-    if (calendarLoaded) renderCalendar(allTournaments);
-  });
   // 初期表示では外部APIを呼ばず、カレンダーシートの大会一覧を優先する。
   if (calendarLoaded) {
     renderCalendar(allTournaments);
@@ -206,17 +156,13 @@ function initApp() {
     loadCalendar();
   }
   document.getElementById('result-date').value = new Date().toISOString().slice(0, 10);
-  document.getElementById('nav-settings-btn').style.display =
-    currentRole === '会長副会長' ? 'inline-block' : 'none';
-  document.getElementById('nav-database-admin-btn').style.display =
-    currentRole === '会長副会長' ? 'inline-block' : 'none';
+  document.getElementById('nav-settings-btn').style.display = 'inline-block';
+  document.getElementById('nav-database-admin-btn').style.display = 'inline-block';
   applySheetMigrationNavigationVisibility();
-  const isAnnouncer = currentRole === '案内係' || currentRole === '会長副会長';
-  document.getElementById('nav-form-create-btn').style.display = isAnnouncer ? 'inline-block' : 'none';
-  document.getElementById('nav-make-email-btn').style.display       = isAnnouncer ? 'inline-block' : 'none';
-  document.getElementById('nav-mail-management-btn').style.display  = isAnnouncer ? 'inline-block' : 'none';
-  const canSeeSuitou = currentRole === '会長副会長' || currentRole === '振込係';
-  document.getElementById('nav-suitou-btn').style.display = canSeeSuitou ? 'inline-block' : 'none';
+  document.getElementById('nav-form-create-btn').style.display = 'inline-block';
+  document.getElementById('nav-make-email-btn').style.display = 'inline-block';
+  document.getElementById('nav-mail-management-btn').style.display = 'inline-block';
+  document.getElementById('nav-suitou-btn').style.display = 'inline-block';
 }
 
 window.addEventListener('load', () => {

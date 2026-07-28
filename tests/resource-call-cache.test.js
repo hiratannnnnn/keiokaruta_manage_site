@@ -33,10 +33,25 @@ assert.match(migration, /if \(!sheetMigrationLoaded\) sheetMigrationPreview\(\)/
 assert.match(settings, /if \(settingsPageLoaded\) return/);
 assert.match(settings, /function reloadSettingsPage/);
 assert.match(utils, /if \(page === 'settings'\) initSettingsPage\(\)/);
-assert.match(utils, /if \(permissionsLoaded\)/);
+assert.doesNotMatch(utils, /\.getPermissions\(\)/);
 assert.match(utils, /if \(calendarLoaded\) \{\s*renderCalendar\(allTournaments\)/);
 assert.match(calendarPage, /page-title-row[\s\S]*?onclick="loadCalendar\(\)">再読込/);
 assert.match(matrixPage, /page-title-row[\s\S]*?loadParticipationMatrix\(true\)/);
-assert.match(index, /<div class="login-description">表示されるタブが変わります<\/div>/);
+assert.match(index, /掲示板や案内作成で使用する役職を選択してください/);
+[
+  'nav-form-create-btn',
+  'nav-make-email-btn',
+  'nav-mail-management-btn',
+  'nav-suitou-btn',
+  'nav-database-admin-btn',
+  'nav-settings-btn',
+].forEach(id => {
+  assert.doesNotMatch(
+    index,
+    new RegExp(`id="${id}"[^>]*style="display:none;"`),
+    `${id}を役職選択前から非表示にしてはいけません`
+  );
+});
+assert.doesNotMatch(settings, /PERM_LABELS|renderPermTable|savePermSettings/);
 
 console.log('Resource call cache regression checks passed.');
