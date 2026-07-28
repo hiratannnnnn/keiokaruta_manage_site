@@ -1,6 +1,7 @@
 <script>
 let participationMatrixData = null;
 let participationMatrixSelectedNameKey = '';
+let participationMatrixSelectedPlayerId = '';
 
 function participationMatrixNormalizeName(name) {
   return String(name || '').replace(/[ 　]+/g, '').trim().toLowerCase();
@@ -140,12 +141,12 @@ function renderParticipationMatrix(players, tournaments) {
 
   document.querySelectorAll('.participation-player-row').forEach(row => {
     row.addEventListener('click', () => {
-      participationMatrixToggleSelection(row.dataset.nameKey);
+      participationMatrixToggleSelection(row.dataset.nameKey, row.dataset.playerId);
     });
     row.addEventListener('keydown', event => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
-      participationMatrixToggleSelection(row.dataset.nameKey);
+      participationMatrixToggleSelection(row.dataset.nameKey, row.dataset.playerId);
     });
   });
   participationMatrixApplySelection();
@@ -159,9 +160,10 @@ function renderParticipationMatrix(players, tournaments) {
   wrap.style.display = 'block';
 }
 
-function participationMatrixToggleSelection(nameKey) {
-  participationMatrixSelectedNameKey =
-    participationMatrixSelectedNameKey === nameKey ? '' : nameKey;
+function participationMatrixToggleSelection(nameKey, playerId) {
+  const deselect = participationMatrixSelectedPlayerId === String(playerId);
+  participationMatrixSelectedNameKey = deselect ? '' : nameKey;
+  participationMatrixSelectedPlayerId = deselect ? '' : String(playerId);
   participationMatrixApplySelection();
 }
 
@@ -176,14 +178,85 @@ function participationMatrixApplySelection() {
     if (selected) selectedCount++;
   });
   const notice = document.getElementById('participation-matrix-selection');
+  const memoPanel = document.getElementById('participation-matrix-memo-panel');
   if (!participationMatrixSelectedNameKey || !selectedCount) {
     notice.style.display = 'none';
     notice.textContent = '';
+    memoPanel.style.display = 'none';
     return;
   }
   notice.style.display = '';
   notice.textContent = selectedCount > 1
     ? '同姓同名の候補を' + selectedCount + '件ハイライトしています。同一人物とは限りません。'
     : '選択した選手をハイライトしています。';
+  participationMatrixShowMemo();
+}
+
+function participationMatrixShowMemo() {
+  const playerId = participationMatrixSelectedPlayerId;
+  const player = (participationMatrixData.players || []).find(
+    item => String(item.id) === playerId
+  );
+  const panel = document.getElementById('participation-matrix-memo-panel');
+  if (!player) {
+    panel.style.display = 'none';
+    return;
+  }
+  document.getElementById('participation-matrix-memo-player').textContent =
+    player.name + '（選手ID: ' + player.id + '）';
+  const textarea = document.getElementById('participation-matrix-memo');
+  textarea.value = String(
+    (participationMatrixData.playerNotes || {})[playerId] || ''
+  );
+  document.getElementById('participation-matrix-memo-status').textContent = '';
+  document.getElementById('participation-matrix-memo-save').disabled = false;
+  participationMatrixMemoChanged();
+  panel.style.display = '';
+}
+
+function participationMatrixMemoChanged() {
+  const textarea = document.getElementById('participation-matrix-memo');
+  document.getElementById('participation-matrix-memo-count').textContent =
+    textarea.value.length + ' / 1000';
+}
+
+function saveParticipationMatrixMemo() {
+  const playerId = participationMatrixSelectedPlayerId;
+  if (!playerId) return;
+  const textarea = document.getElementById('participation-matrix-memo');
+  const button = document.getElementById('participation-matrix-memo-save');
+  const status = document.getElementById('participation-matrix-memo-status');
+  const memo = textarea.value.trim();
+  button.disabled = true;
+  status.textContent = '保存中...';
+  status.className = 'op-status';
+  google.script.run
+    .withSuccessHandler(json => {
+      const result = JSON.parse(json);
+      button.disabled = false;
+      if (result.error) {
+        status.textContent = 'エラー: ' + result.error;
+        status.className = 'op-status error';
+        return;
+      }
+      if (!participationMatrixData.playerNotes) {
+        participationMatrixData.playerNotes = {};
+      }
+      if (result.memo) {
+        participationMatrixData.playerNotes[playerId] = result.memo;
+      } else {
+        delete participationMatrixData.playerNotes[playerId];
+      }
+      textarea.value = result.memo || '';
+      participationMatrixMemoChanged();
+      status.textContent = result.memo ? '保存しました。' : 'メモを削除しました。';
+      status.className = 'op-status ok';
+    })
+    .withFailureHandler(error => {
+      button.disabled = false;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'op-status error';
+    })
+    .saveParticipationPlayerNote(playerId, memo);
 }
 </script>

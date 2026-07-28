@@ -17,6 +17,73 @@ function participationMatrixShortName_(name) {
     .trim() || fullName;
 }
 
+function participationMatrixNotes_(ss) {
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.PLAYER_NOTES);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  const notes = {};
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues().forEach(row => {
+    const playerId = String(row[0] || '').trim();
+    const memo = String(row[1] || '');
+    if (playerId && memo) notes[playerId] = memo;
+  });
+  return notes;
+}
+
+function participationMatrixNotesSheet_(ss) {
+  let sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.PLAYER_NOTES);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.SHEET_NAMES.PLAYER_NOTES);
+    sheet.getRange(1, 1, 1, 3).setValues([[
+      'player_id', 'memo', 'updated_at',
+    ]]);
+    sheet.setFrozenRows(1);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+function saveParticipationPlayerNote(playerId, memo) {
+  const normalizedId = String(playerId || '').trim();
+  const normalizedMemo = String(memo || '').trim();
+  if (!/^\d+$/.test(normalizedId)) {
+    return JSON.stringify({ error: '選手IDが不正です。' });
+  }
+  if (normalizedMemo.length > 1000) {
+    return JSON.stringify({ error: 'メモは1000文字以内で入力してください。' });
+  }
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const sheet = participationMatrixNotesSheet_(ss);
+    const lastRow = sheet.getLastRow();
+    const ids = lastRow >= 2
+      ? sheet.getRange(2, 1, lastRow - 1, 1).getValues().map(row => String(row[0]))
+      : [];
+    const index = ids.indexOf(normalizedId);
+    if (!normalizedMemo) {
+      if (index >= 0) sheet.deleteRow(index + 2);
+    } else {
+      const targetRow = index >= 0 ? index + 2 : sheet.getLastRow() + 1;
+      sheet.getRange(targetRow, 1, 1, 3).setValues([[
+        normalizedId,
+        normalizedMemo,
+        Utilities.formatDate(new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"),
+      ]]);
+    }
+    return JSON.stringify({
+      ok: true,
+      player_id: normalizedId,
+      memo: normalizedMemo,
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
 function getParticipationMatrix() {
   try {
     const fiscalYear = participationMatrixFiscalYear_();
@@ -76,11 +143,21 @@ function getParticipationMatrix() {
       ) || left.name.localeCompare(right.name, 'ja')
     );
 
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const notes = participationMatrixNotes_(ss);
+    const visiblePlayerIds = {};
+    players.forEach(player => { visiblePlayerIds[player.id] = true; });
+    const visibleNotes = {};
+    Object.keys(notes).forEach(playerId => {
+      if (visiblePlayerIds[playerId]) visibleNotes[playerId] = notes[playerId];
+    });
+
     return JSON.stringify({
       fiscalYear: Number(source.fiscal_year || fiscalYear),
       players: players,
       tournaments: tournaments,
       participations: participations,
+      playerNotes: visibleNotes,
       total: source.total || {
         players: players.length,
         tournaments: tournaments.length,

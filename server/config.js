@@ -35,6 +35,7 @@ const CONFIG = {
     CALENDAR: 'カレンダー',
     MAIL:     'メール管理',
     SETTINGS: '設定用',
+    PLAYER_NOTES: '選手管理メモ',
   },
 
 };

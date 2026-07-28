@@ -29,6 +29,21 @@
         </p>
         <div id="participation-matrix-selection" class="participation-matrix-selection"
              style="display:none;"></div>
+        <div id="participation-matrix-memo-panel" class="participation-matrix-memo-panel"
+             style="display:none;">
+          <div class="participation-matrix-memo-header">
+            <strong id="participation-matrix-memo-player"></strong>
+            <span id="participation-matrix-memo-count">0 / 1000</span>
+          </div>
+          <textarea id="participation-matrix-memo" maxlength="1000"
+                    placeholder="この選手に関する管理用メモ"
+                    oninput="participationMatrixMemoChanged()"></textarea>
+          <div class="participation-matrix-memo-actions">
+            <span id="participation-matrix-memo-status" class="op-status"></span>
+            <button id="participation-matrix-memo-save" type="button"
+                    onclick="saveParticipationMatrixMemo()">メモを保存</button>
+          </div>
+        </div>
         <div id="participation-matrix-status" class="status">
           ページを開くと一覧を読み込みます。
         </div>

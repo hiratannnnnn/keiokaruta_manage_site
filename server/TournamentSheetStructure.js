@@ -95,6 +95,44 @@ function tournamentSheetUniqueLabelRow_(data, responseEndIndex, label, required)
   return matches[0] || null;
 }
 
+function tournamentSheetUniqueCellByLabel_(data, responseEndIndex, label) {
+  const matches = [];
+  for (let rowIndex = responseEndIndex; rowIndex < data.length; rowIndex++) {
+    const row = data[rowIndex] || [];
+    for (let columnIndex = 0; columnIndex < row.length; columnIndex++) {
+      if (String(row[columnIndex] || '').trim() === label) {
+        matches.push({ row_index: rowIndex, column_index: columnIndex });
+      }
+    }
+  }
+  if (matches.length !== 1) {
+    throw new Error(
+      '大会シートのラベル「' + label + '」を一意に特定できません'
+      + '（候補' + matches.length + '件）'
+    );
+  }
+  return matches[0];
+}
+
+// 「↓振込先」と同じ列の直下5セルを、表示用プレーンテキストとして連結する。
+// 空セルは除外するが、セル内の改行は維持する。
+function tournamentSheetPaymentInstructions_(data, responseEndIndex) {
+  const anchor = tournamentSheetUniqueCellByLabel_(
+    data, responseEndIndex, '↓振込先'
+  );
+  const lines = [];
+  for (let offset = 1; offset <= 5; offset++) {
+    const row = data[anchor.row_index + offset] || [];
+    const text = String(row[anchor.column_index] || '').trim();
+    if (text) lines.push(text);
+  }
+  const result = lines.join('\n').trim();
+  if (result.length > 10000) {
+    throw new Error('振込先が10000文字を超えています');
+  }
+  return result || null;
+}
+
 function tournamentSheetStructure_(sheet, requireAllGrades) {
   const data = sheet.getDataRange().getValues();
   if (!data.length) throw new Error('大会シートが空です: ' + sheet.getName());

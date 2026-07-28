@@ -30,6 +30,31 @@ function fiscalSyncPayment_(value, heldOn) {
   };
 }
 
+function fiscalSyncCalendarColumn_(headerRows, label) {
+  const columns = [];
+  (headerRows || []).forEach(row => {
+    (row || []).forEach((value, index) => {
+      if (String(value || '').replace(/\s+/g, '') === label.replace(/\s+/g, '')) {
+        if (!columns.includes(index)) columns.push(index);
+      }
+    });
+  });
+  if (columns.length !== 1) {
+    throw new Error(
+      'カレンダーの「' + label + '」列を一意に特定できません'
+      + '（候補' + columns.length + '件）。'
+    );
+  }
+  return columns[0];
+}
+
+function fiscalSyncOptionalDate_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return { value: null, valid: true };
+  const formatted = fiscalSyncDate_(value);
+  return { value: formatted || null, valid: Boolean(formatted) };
+}
+
 function fiscalSyncPlayer_(name) {
   const parts = String(name || '').trim().split(/[ 　]+/).filter(Boolean);
   if (parts.length < 2) throw new Error('氏名を名字と名前に分けられません: ' + name);
@@ -65,10 +90,19 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
   const calendar = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
   if (!calendar) throw new Error('カレンダーシートが見つかりません。');
 
-  const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues().slice(2);
+  const calendarData = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues();
+  const calendarRows = calendarData.slice(2);
   const grouped = {};
   const errors = [];
   const warnings = [];
+  let internalPaymentDeadlineIndex = null;
+  try {
+    internalPaymentDeadlineIndex = fiscalSyncCalendarColumn_(
+      calendarData.slice(0, 2), '振込開始'
+    );
+  } catch (e) {
+    errors.push(e.message + ' 会内振込期限を安全に同期できません。');
+  }
   const pendingTournaments = taikaiPendingTournaments_();
   Object.keys(pendingTournaments).forEach(name => {
     warnings.push(
@@ -146,12 +180,38 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     }
     const feeResult = taikaiGradeFeesFromSheetData_(data, sheetName, currentFiscalGrades);
     errors.push.apply(errors, feeResult.errors);
+    let paymentInstructions;
+    let hasPaymentInstructions = true;
+    try {
+      paymentInstructions = tournamentSheetPaymentInstructions_(
+        data, structure.response_end_index
+      );
+    } catch (e) {
+      hasPaymentInstructions = false;
+      errors.push(
+        sheetName + ': ' + e.message
+        + ' 振込先を安全に同期できません。'
+      );
+    }
+    let internalPaymentDeadline = { value: null, valid: true };
+    if (internalPaymentDeadlineIndex !== null) {
+      internalPaymentDeadline = fiscalSyncOptionalDate_(
+        calendarRow[internalPaymentDeadlineIndex]
+      );
+      if (!internalPaymentDeadline.valid) {
+        errors.push(
+          sheetName + ': 会内振込期限「'
+          + String(calendarRow[internalPaymentDeadlineIndex])
+          + '」を日付として認識できません。'
+        );
+      }
+    }
 
     const schedules = [];
     currentFiscalGrades.forEach(grade => {
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       const payment = fiscalSyncPayment_(calendarRow[10], heldOn);
-      schedules.push({
+      const schedule = {
         held_on: heldOn,
         grade: grade,
         application_deadline: applicationDeadline,
@@ -164,7 +224,14 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
         venue: null,
         reception_ends_at: null,
         is_sanctioned: isSanctioned,
-      });
+      };
+      if (internalPaymentDeadlineIndex !== null && internalPaymentDeadline.valid) {
+        schedule.internal_payment_deadline = internalPaymentDeadline.value;
+      }
+      if (hasPaymentInstructions) {
+        schedule.payment_instructions = paymentInstructions;
+      }
+      schedules.push(schedule);
     });
 
     const header = data[0] || [];

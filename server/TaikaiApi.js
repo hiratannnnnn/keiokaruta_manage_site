@@ -492,7 +492,7 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
 
   const baseName = String(sheetName).replace(/[A-E]+級$/, '');
   const tournament = taikaiEnsureTournament_(baseName);
-  const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 12).getValues();
+  const calendarRows = calendar.getRange(1, 1, calendar.getLastRow(), 16).getValues();
   const calendarRow = calendarRows.slice(2).find(row => String(row[0]) === sheetName);
   if (!calendarRow) throw new Error('カレンダーに大会情報がありません: ' + sheetName);
 
@@ -508,6 +508,27 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   );
   const feeResult = taikaiGradeFeesFromSheetData_(tournamentData, sheetName, targetGrades);
   if (feeResult.errors.length) throw new Error(feeResult.errors.join('\n'));
+  const paymentInstructions = tournamentSheetPaymentInstructions_(
+    tournamentData, structure.response_end_index
+  );
+  let internalPaymentDeadlineIndex = null;
+  try {
+    internalPaymentDeadlineIndex = fiscalSyncCalendarColumn_(
+      calendarRows.slice(0, 2), '振込開始'
+    );
+  } catch (e) {
+    // API側の段階的な配置中も既存の日程同期を止めない。
+    // 完全同期のプレビューでは検証エラーとして明示される。
+  }
+  const internalPaymentDeadline = internalPaymentDeadlineIndex === null
+    ? null
+    : fiscalSyncOptionalDate_(calendarRow[internalPaymentDeadlineIndex]);
+  if (internalPaymentDeadline && !internalPaymentDeadline.valid) {
+    throw new Error(
+      '会内振込期限を日付として認識できません: '
+      + String(calendarRow[internalPaymentDeadlineIndex])
+    );
+  }
 
   targetGrades.forEach(grade => {
     const heldOn = taikaiFormatDate_(gradeDates[grade]);
@@ -528,7 +549,11 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       venue: null,
       reception_ends_at: null,
       is_sanctioned: isSanctioned,
+      payment_instructions: paymentInstructions,
     };
+    if (internalPaymentDeadline) {
+      body.internal_payment_deadline = internalPaymentDeadline.value;
+    }
     if (schedules.length === 0) {
       taikaiApiRequest_('POST', '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules', body);
     } else if (schedules.length === 1) {
