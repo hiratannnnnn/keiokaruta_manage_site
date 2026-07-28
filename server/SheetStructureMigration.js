@@ -4,6 +4,156 @@
 
 const SHEET_MIGRATION_HISTORY_SHEET_ = 'シート構造移行履歴';
 const SHEET_MIGRATION_BACKUP_PREFIX_ = '__sheet_migration_backup_';
+const SHEET_MIGRATION_ARCHIVE_START_ = '__SHEET_MIGRATION_ARCHIVE_START__';
+const SHEET_MIGRATION_ARCHIVE_END_ = '__SHEET_MIGRATION_ARCHIVE_END__';
+
+function sheetMigrationColumnLabel_(column) {
+  let value = Number(column);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error('列番号が不正です。');
+  }
+  let label = '';
+  while (value > 0) {
+    value--;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
+function sheetMigrationCanonicalValue_(value) {
+  if (value instanceof Date) {
+    return { type: 'date', value: value.toISOString() };
+  }
+  if (typeof value === 'number') {
+    return { type: 'number', value: String(value) };
+  }
+  if (typeof value === 'boolean') {
+    return { type: 'boolean', value: value ? 'true' : 'false' };
+  }
+  return { type: 'string', value: String(value === null || value === undefined ? '' : value) };
+}
+
+function sheetMigrationValidationDescription_(validation) {
+  if (!validation) return '';
+  const values = validation.getCriteriaValues().map(value => {
+    if (value instanceof Date) return sheetMigrationCanonicalValue_(value);
+    if (value && typeof value.getA1Notation === 'function') {
+      const sheet = typeof value.getSheet === 'function' ? value.getSheet() : null;
+      return {
+        type: 'range',
+        value: (sheet ? sheet.getName() + '!' : '') + value.getA1Notation(),
+      };
+    }
+    return sheetMigrationCanonicalValue_(value);
+  });
+  return JSON.stringify({
+    criteria_type: String(validation.getCriteriaType()),
+    criteria_values: values,
+    allow_invalid: validation.getAllowInvalid(),
+    help_text: validation.getHelpText() || '',
+  });
+}
+
+// 削除予定領域は、廃止済み制御値を含めて一度すべて左側へ監査保存する。
+// 値だけでなく数式・メモ・表示形式・背景色・入力規則も保存する。
+function sheetMigrationDeletedCellRecords_(sheet, plan) {
+  if (!plan.delete_column_count) return [];
+  const rowCount = Math.max(1, sheet.getLastRow());
+  const range = sheet.getRange(
+    1, plan.delete_start_column, rowCount, plan.delete_column_count
+  );
+  const values = range.getValues();
+  const formulas = range.getFormulas();
+  const notes = range.getNotes();
+  const numberFormats = range.getNumberFormats();
+  const backgrounds = range.getBackgrounds();
+  const validations = range.getDataValidations();
+  const headers = range.getDisplayValues()[0] || [];
+  const records = [];
+  for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    for (let columnIndex = 0; columnIndex < plan.delete_column_count; columnIndex++) {
+      const canonical = sheetMigrationCanonicalValue_(values[rowIndex][columnIndex]);
+      const formula = String(formulas[rowIndex][columnIndex] || '');
+      const note = String(notes[rowIndex][columnIndex] || '');
+      const validation = sheetMigrationValidationDescription_(
+        validations[rowIndex][columnIndex]
+      );
+      const numberFormat = String(numberFormats[rowIndex][columnIndex] || '');
+      const background = String(backgrounds[rowIndex][columnIndex] || '').toLowerCase();
+      const hasNonDefaultFormat =
+        (numberFormat && numberFormat !== 'General')
+        || (background && background !== '#ffffff');
+      if (!canonical.value && !formula && !note && !validation && !hasNonDefaultFormat) {
+        continue;
+      }
+      const column = plan.delete_start_column + columnIndex;
+      records.push([
+        sheetMigrationColumnLabel_(column) + String(rowIndex + 1),
+        JSON.stringify(String(headers[columnIndex] || '')),
+        canonical.type,
+        JSON.stringify(canonical.value),
+        JSON.stringify(formula),
+        JSON.stringify(note),
+        JSON.stringify(numberFormat),
+        JSON.stringify(background),
+        validation,
+      ]);
+    }
+  }
+  return records;
+}
+
+function sheetMigrationArchiveRows_(migrationId, records) {
+  return [
+    [SHEET_MIGRATION_ARCHIVE_START_, migrationId, '', '', '', '', '', '', ''],
+    [
+      '元セル', '元列見出し', '値の型', '値', '数式', 'メモ',
+      '数値表示形式', '背景色', '入力規則',
+    ],
+  ].concat(records).concat([
+    [SHEET_MIGRATION_ARCHIVE_END_, migrationId, '', '', '', '', '', '', ''],
+  ]);
+}
+
+function sheetMigrationWriteAndVerifyArchive_(sheet, migrationId, records) {
+  const rows = sheetMigrationArchiveRows_(migrationId, records);
+  const startRow = sheet.getLastRow() + 2;
+  const range = sheet.getRange(startRow, 1, rows.length, 9);
+  range.setNumberFormat('@');
+  range.setValues(rows);
+  range.setBackground('#f3f3f3');
+  const actual = range.getValues();
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    for (let columnIndex = 0; columnIndex < 9; columnIndex++) {
+      if (String(actual[rowIndex][columnIndex] || '')
+          !== String(rows[rowIndex][columnIndex] || '')) {
+        throw new Error(
+          '左側への情報移送後の再読取検証に失敗しました: '
+          + sheet.getName() + ' '
+          + sheetMigrationColumnLabel_(columnIndex + 1) + (startRow + rowIndex)
+        );
+      }
+    }
+  }
+  return { start_row: startRow, row_count: rows.length };
+}
+
+function sheetMigrationArchiveRange_(sheet, migrationId) {
+  const rowCount = Math.max(1, sheet.getLastRow());
+  const values = sheet.getRange(1, 1, rowCount, 2).getValues();
+  let start = null;
+  let end = null;
+  values.forEach((row, index) => {
+    if (String(row[1] || '') !== String(migrationId)) return;
+    if (String(row[0] || '') === SHEET_MIGRATION_ARCHIVE_START_) start = index + 1;
+    if (String(row[0] || '') === SHEET_MIGRATION_ARCHIVE_END_) end = index + 1;
+  });
+  if (!start || !end || end < start) {
+    throw new Error('左側に移送した旧管理情報を一意に特定できません。');
+  }
+  return { start_row: start, row_count: end - start + 1 };
+}
 
 function sheetMigrationEnabled_() {
   return String(
@@ -55,15 +205,15 @@ function inspectTournamentSheetMigration_(sheet) {
     ).getDisplayValues()[0].map((value, index) =>
       String(value || '').trim() || '（見出しなし・' + (deleteStart + index) + '列目）'
     );
-    const values = sheet.getRange(
-      1, deleteStart, sheet.getLastRow(), deleteCount
-    ).getDisplayValues();
-    result.non_empty_cell_count = values.reduce((total, row) =>
-      total + row.filter(value => String(value || '').trim() !== '').length
-    , 0);
+    result.non_empty_cell_count = sheetMigrationDeletedCellRecords_(
+      sheet, result
+    ).length;
+    result.move_target =
+      '下部固定領域の左側A:I（値・数式・メモ・表示形式・背景色・入力規則）';
     if (result.non_empty_cell_count) {
       result.warnings.push(
-        '削除候補列に値が' + result.non_empty_cell_count + 'セルあります。'
+        '削除候補列の情報' + result.non_empty_cell_count
+        + 'セルを左側へ移送・検証してから削除します。'
       );
     }
     result.status = 'ready';
@@ -161,6 +311,8 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
   const migrationId = sheetMigrationId_();
   const backupName = backupNameForMigration_(migrationId);
   let backup = null;
+  let archive = null;
+  let columnsDeleted = false;
   const history = sheetMigrationHistorySheet_(true);
   const historyRow = history.getLastRow() + 1;
   try {
@@ -171,28 +323,58 @@ function executeOneTournamentSheetMigration_(ss, sheetName) {
       plan.delete_start_column, plan.delete_column_count,
       'backed_up', new Date(), '', '',
     ]]);
+    const records = sheetMigrationDeletedCellRecords_(sheet, plan);
+    if (records.length !== plan.non_empty_cell_count) {
+      throw new Error('dry-run後に削除対象の情報が変更されました。再検査してください。');
+    }
+    archive = sheetMigrationWriteAndVerifyArchive_(sheet, migrationId, records);
     sheet.deleteColumns(plan.delete_start_column, plan.delete_column_count);
+    columnsDeleted = true;
+    if (sheet.getLastColumn() !== plan.edit_url_column) {
+      throw new Error('列削除後の構造検証に失敗しました。バックアップから復元してください。');
+    }
+    sheetMigrationArchiveRange_(sheet, migrationId);
     history.getRange(historyRow, 7).setValue('success');
     return {
       sheet_name: sheetName,
       migration_id: migrationId,
       status: 'success',
       backup_sheet_name: backupName,
+      moved_cell_count: records.length,
+      archive_start_row: archive.start_row,
       deleted_column_count: plan.delete_column_count,
       restorable: true,
     };
   } catch (e) {
+    let rollbackError = '';
+    try {
+      if (columnsDeleted && backup) {
+        sheet.insertColumnsAfter(plan.edit_url_column, plan.delete_column_count);
+        backup.getRange(
+          1, plan.delete_start_column, backup.getMaxRows(), plan.delete_column_count
+        ).copyTo(sheet.getRange(
+          1, plan.delete_start_column, backup.getMaxRows(), plan.delete_column_count
+        ));
+      }
+      if (archive) {
+        const currentArchive = sheetMigrationArchiveRange_(sheet, migrationId);
+        sheet.deleteRows(currentArchive.start_row, currentArchive.row_count);
+      }
+    } catch (rollbackException) {
+      rollbackError = ' ロールバックにも失敗しました: ' + rollbackException.message;
+    }
+    const errorMessage = e.message + rollbackError;
     if (history.getLastRow() < historyRow) {
       history.getRange(historyRow, 1, 1, 10).setValues([[
         migrationId, sheetName, backup ? backup.getName() : '',
         plan.edit_url_column, plan.delete_start_column, plan.delete_column_count,
-        'failed', new Date(), '', e.message,
+        'failed', new Date(), '', errorMessage,
       ]]);
     } else {
       history.getRange(historyRow, 7).setValue('failed');
-      history.getRange(historyRow, 10).setValue(e.message);
+      history.getRange(historyRow, 10).setValue(errorMessage);
     }
-    return { sheet_name: sheetName, status: 'failed', error: e.message };
+    return { sheet_name: sheetName, status: 'failed', error: errorMessage };
   }
 }
 
@@ -237,6 +419,7 @@ function restoreTournamentSheetMigration(migrationId) {
     const target = ss.getSheetByName(item.sheet_name);
     const backup = ss.getSheetByName(item.backup_sheet_name);
     if (!target || !backup) throw new Error('対象またはバックアップシートが見つかりません。');
+    const archive = sheetMigrationArchiveRange_(target, item.migration_id);
     const plan = inspectTournamentSheetMigration_(target);
     if (plan.status !== 'migrated') {
       throw new Error('対象シートは復元前の列構造ではありません。');
@@ -247,6 +430,7 @@ function restoreTournamentSheetMigration(migrationId) {
     ).copyTo(target.getRange(
       1, item.delete_start_column, backup.getMaxRows(), item.delete_column_count
     ));
+    target.deleteRows(archive.start_row, archive.row_count);
     const originalRow = historySheet.getRange(
       2, 1, historySheet.getLastRow() - 1, 1
     ).getValues().findIndex(row => String(row[0]) === item.migration_id) + 2;

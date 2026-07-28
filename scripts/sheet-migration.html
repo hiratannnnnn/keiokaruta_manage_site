@@ -49,7 +49,9 @@ function sheetMigrationRenderPlans(plans) {
   const rows = plans.map(plan => {
     const ready = plan.status === 'ready';
     const details = ready
-      ? (plan.delete_start_column + '列目から' + plan.delete_column_count
+      ? ('情報' + Number(plan.non_empty_cell_count || 0) + 'セルを'
+        + (plan.move_target || '左側') + 'へ移送・再読取検証後、'
+        + plan.delete_start_column + '列目から' + plan.delete_column_count
         + '列を削除：' + (plan.delete_column_headers || []).join('、'))
       : (plan.reason || plan.status);
     const warnings = (plan.warnings || []).join(' / ');
@@ -125,9 +127,12 @@ function sheetMigrationRun() {
       const succeeded = results.filter(item => item.status === 'success').length;
       const skipped = results.filter(item => item.status === 'skipped').length;
       const failed = results.filter(item => item.status === 'failed').length;
+      const moved = results.reduce(
+        (total, item) => total + Number(item.moved_cell_count || 0), 0
+      );
       alert(
         '移行結果：成功' + succeeded + '件、スキップ' + skipped
-        + '件、失敗' + failed + '件'
+        + '件、失敗' + failed + '件、左側へ移送' + moved + 'セル'
       );
       sheetMigrationPreview();
     })

@@ -5,9 +5,12 @@
       <div class="panel-header">旧管理列のdry-run・選択実行</div>
       <div class="panel-body">
         <p style="line-height:1.6;margin-top:0;">
-          Googleフォーム編集URLより右側にある旧管理列を検査します。
+          Googleフォーム編集URLより右側にある旧管理列を検査し、全情報を
+          下部固定領域の左側へ移送して再読取検証した後に旧列を削除します。
+          値・数式・メモ・表示形式・背景色・入力規則を移送対象にします。
           初期状態では何も選択せず、検査だけではシートを変更しません。
-          実行時は対象シートの非表示バックアップを先に作成します。
+          実行時は対象シートの非表示バックアップを先に作成し、移送または検証に
+          失敗した場合は列を削除しません。
         </p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button type="button" onclick="sheetMigrationPreview()">移行内容を検査</button>
