@@ -1,0 +1,76 @@
+<script>
+// ------------------------------------------------------------
+// 認証ページ
+// ------------------------------------------------------------
+let authenticationPageLoaded = false;
+
+function initAuthenticationPage() {
+  if (authenticationPageLoaded) return;
+  loadAuthenticationDuplicates(false);
+}
+
+function loadAuthenticationDuplicates(forceReload) {
+  if (authenticationPageLoaded && !forceReload) return;
+  authenticationPageLoaded = true;
+  const status = document.getElementById('authentication-status');
+  const results = document.getElementById('authentication-results');
+  const body = document.getElementById('authentication-duplicates-body');
+  status.style.display = 'block';
+  status.className = 'status';
+  status.replaceChildren();
+  const spinner = document.createElement('span');
+  spinner.className = 'spinner';
+  status.appendChild(spinner);
+  status.appendChild(document.createTextNode(' スプレッドシートを確認中...'));
+  results.style.display = 'none';
+  body.replaceChildren();
+
+  google.script.run
+    .withSuccessHandler(json => {
+      let data;
+      try {
+        data = JSON.parse(json);
+      } catch (e) {
+        authenticationPageLoaded = false;
+        status.className = 'status error';
+        status.textContent = '認証情報の応答を解析できませんでした。';
+        return;
+      }
+      if (data.error) {
+        authenticationPageLoaded = false;
+        status.className = 'status error';
+        status.textContent = 'エラー: ' + data.error;
+        return;
+      }
+      const groups = Array.isArray(data.groups) ? data.groups : [];
+      groups.forEach(group => {
+        const tr = document.createElement('tr');
+        const nameCell = document.createElement('td');
+        const emailCell = document.createElement('td');
+        const rowsCell = document.createElement('td');
+        nameCell.textContent = group.name || '';
+        emailCell.replaceChildren(...(group.emails || []).map((email, index) => {
+          const fragment = document.createDocumentFragment();
+          if (index) fragment.appendChild(document.createElement('br'));
+          fragment.appendChild(document.createTextNode(email));
+          return fragment;
+        }));
+        rowsCell.textContent = (group.rows || []).join(', ');
+        tr.append(nameCell, emailCell, rowsCell);
+        body.appendChild(tr);
+      });
+      if (!groups.length) {
+        status.textContent = '該当する人はいません。';
+        return;
+      }
+      status.textContent = groups.length + '人見つかりました。';
+      results.style.display = 'block';
+    })
+    .withFailureHandler(error => {
+      authenticationPageLoaded = false;
+      status.className = 'status error';
+      status.textContent = 'エラー: ' + error.message;
+    })
+    .getDuplicateNameEmailGroups();
+}
+</script>

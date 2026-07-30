@@ -3,9 +3,14 @@
   <div class="list-page">
     <div class="page-title-row">
       <div class="page-title">選手別 出場大会一覧</div>
-      <button id="participation-matrix-reload" type="button"
-              class="page-guide-back-btn"
-              onclick="loadParticipationMatrix(true)">再読込</button>
+      <div class="page-title-actions">
+        <button id="participation-matrix-download" type="button"
+                class="page-guide-back-btn"
+                onclick="downloadParticipationMatrixCsv()" disabled>CSVダウンロード</button>
+        <button id="participation-matrix-reload" type="button"
+                class="page-guide-back-btn"
+                onclick="loadParticipationMatrix(true)">再読込</button>
+      </div>
     </div>
 
     <div class="panel participation-matrix-panel">

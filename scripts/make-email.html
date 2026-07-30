@@ -7,8 +7,17 @@ const ME_CANCEL_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSetaBuRgvqP4xRd5
 const ME_WEEKDAYS   = ['日', '月', '火', '水', '木', '金', '土'];
 
 let _meActiveTab = 0;
-const ME_TYPE_LABELS = ['案内メール', '振込案内', 'Free', '読手講習会など'];
+const ME_TYPE_LABELS = [
+  '案内メール', '振込案内', 'Free', '読手講習会など', '出場者への連絡',
+];
 let _meLotteryResults = null; // null=未取得, {fetching:true}=取得中, {grades:[...]}=取得済み
+let _meContactCandidates = [];
+let _meContactLoadedKey = '';
+let _meContactLoadTimer = null;
+let _meContactCandidatesByGrade = {};
+let _meContactLoadingGrades = {};
+let _meContactRequestGeneration = 0;
+let _meContactPendingCount = 0;
 
 function meFetchLotteryResults() {
   const title  = document.getElementById('me-title')?.value?.trim() || '';
@@ -87,6 +96,14 @@ function meBulkTimeChange(value) {
   meRenderPreview();
 }
 
+function meBulkVenueChange(value) {
+  meGetActiveGrades().forEach(g => {
+    const el = document.getElementById('me-venue-' + g);
+    if (el) el.value = value;
+  });
+  meRenderPreview();
+}
+
 function meOnCapMiteiChange(g) {
   const input = document.getElementById('me-cap-' + g);
   if (document.getElementById('me-cap-mitei-' + g).checked) {
@@ -108,7 +125,7 @@ function meUpdateGradeRowVisibility() {
   const active = meGetActiveGrades();
   ME_GRADES.forEach(g => {
     const vis = active.includes(g);
-    ['date', 'cap', 'elig', 'fee'].forEach(t => {
+    ['date', 'venue', 'cap', 'elig', 'fee'].forEach(t => {
       const row = document.getElementById(`me-${t}-row-${g}`);
       if (row) row.style.display = vis ? '' : 'none';
     });
@@ -120,6 +137,293 @@ function mePopulateTournamentSelect() {
   if (!sel) return;
   sel.innerHTML = '<option value="">-- 大会を選択 --</option>' +
     allTournaments.map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('');
+}
+
+function meTournamentBaseName(name) {
+  return String(name || '').replace(/[A-E]+級$/, '');
+}
+
+function mePopulateParticipantContactTournaments() {
+  const sel = document.getElementById('me-contact-tournament');
+  if (!sel) return;
+  const names = [];
+  const seen = {};
+  (allTournaments || []).forEach(tournament => {
+    const name = meTournamentBaseName(tournament.name).trim();
+    if (!name || seen[name]) return;
+    seen[name] = true;
+    names.push(name);
+  });
+  sel.innerHTML = '<option value="">-- 大会を選択 --</option>' +
+    names.map(name =>
+      `<option value="${escHtml(name)}">${escHtml(name)}</option>`
+    ).join('');
+}
+
+function meGetContactGrades() {
+  return ME_GRADES.filter(grade =>
+    document.querySelector(`.me-grade-btn[data-contact-grade="${grade}"]`)
+      ?.classList.contains('active')
+  );
+}
+
+function meContactTournamentChanged() {
+  const name = document.getElementById('me-contact-tournament')?.value || '';
+  const available = {};
+  (allTournaments || []).forEach(tournament => {
+    if (meTournamentBaseName(tournament.name) !== name) return;
+    const match = String(tournament.name || '').match(/([A-E]+)級$/);
+    if (match) match[1].split('').forEach(grade => { available[grade] = true; });
+  });
+  ME_GRADES.forEach(grade => {
+    const button = document.querySelector(
+      `.me-grade-btn[data-contact-grade="${grade}"]`
+    );
+    if (!button) return;
+    button.disabled = !available[grade];
+    button.classList.remove('active');
+  });
+  meResetParticipantContactCandidates();
+  meRenderPreview();
+}
+
+function meToggleContactGrade(button) {
+  if (button.disabled) return;
+  button.classList.toggle('active');
+  meSyncParticipantContactCandidates();
+  if (button.classList.contains('active')) {
+    meScheduleParticipantContactCandidates();
+  }
+  meRenderPreview();
+}
+
+function meScheduleParticipantContactCandidates() {
+  if (_meContactLoadTimer) window.clearTimeout(_meContactLoadTimer);
+  if (!document.getElementById('me-contact-tournament')?.value
+      || !meGetContactGrades().length) return;
+  _meContactLoadTimer = window.setTimeout(() => {
+    _meContactLoadTimer = null;
+    meLoadParticipantContactCandidates(false);
+  }, 120);
+}
+
+function meParticipantContactSelectionKey() {
+  const tournament =
+    document.getElementById('me-contact-tournament')?.value || '';
+  return tournament + '|' + meGetContactGrades().join('');
+}
+
+function meResetParticipantContactCandidates() {
+  if (_meContactLoadTimer) {
+    window.clearTimeout(_meContactLoadTimer);
+    _meContactLoadTimer = null;
+  }
+  _meContactRequestGeneration++;
+  _meContactCandidatesByGrade = {};
+  _meContactLoadingGrades = {};
+  _meContactPendingCount = 0;
+  _meContactCandidates = [];
+  _meContactLoadedKey = '';
+  const area = document.getElementById('me-contact-candidate-area');
+  const tbody = document.getElementById('me-contact-candidate-tbody');
+  const status = document.getElementById('me-contact-list-status');
+  const loadButton = document.getElementById('me-contact-load-btn');
+  if (area) area.style.display = 'none';
+  if (tbody) tbody.replaceChildren();
+  if (loadButton) loadButton.disabled = false;
+  if (status) {
+    status.textContent = '';
+    status.className = 'me-draft-status';
+  }
+}
+
+function meSyncParticipantContactCandidates() {
+  const grades = meGetContactGrades();
+  _meContactCandidates = [];
+  grades.forEach(grade => {
+    (_meContactCandidatesByGrade[grade] || []).forEach(candidate => {
+      _meContactCandidates.push(candidate);
+    });
+  });
+  const completelyLoaded = grades.length > 0 && grades.every(grade =>
+    Object.prototype.hasOwnProperty.call(
+      _meContactCandidatesByGrade, grade
+    ) && !_meContactLoadingGrades[grade]
+  );
+  _meContactLoadedKey = completelyLoaded
+    ? meParticipantContactSelectionKey() : '';
+  if (!grades.length) {
+    const area = document.getElementById('me-contact-candidate-area');
+    if (area) area.style.display = 'none';
+    return;
+  }
+  meRenderParticipantContactCandidates();
+}
+
+function meRenderParticipantContactLoading() {
+  const area = document.getElementById('me-contact-candidate-area');
+  const tbody = document.getElementById('me-contact-candidate-tbody');
+  const summary = document.getElementById('me-contact-selection-summary');
+  if (!area || !tbody || !summary) return;
+  tbody.replaceChildren();
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = 5;
+  cell.textContent = '対象者を読み込んでいます…';
+  row.appendChild(cell);
+  tbody.appendChild(row);
+  summary.textContent = '';
+  area.style.display = '';
+}
+
+function meApplyContactScope() {
+  const scope = document.getElementById('me-contact-scope')?.value || 'active';
+  Object.keys(_meContactCandidatesByGrade).forEach(grade => {
+    _meContactCandidatesByGrade[grade].forEach(candidate => {
+      candidate.selected = Boolean(
+        candidate.selectable && (scope === 'all' || !candidate.canceled)
+      );
+    });
+  });
+  meSyncParticipantContactCandidates();
+}
+
+function meToggleParticipantContactCandidate(index) {
+  const candidate = _meContactCandidates[index];
+  if (!candidate || !candidate.selectable) return;
+  candidate.selected = !candidate.selected;
+  meRenderParticipantContactCandidates();
+}
+
+function meRenderParticipantContactCandidates() {
+  const area = document.getElementById('me-contact-candidate-area');
+  const tbody = document.getElementById('me-contact-candidate-tbody');
+  const summary = document.getElementById('me-contact-selection-summary');
+  if (!area || !tbody || !summary) return;
+  tbody.replaceChildren();
+  _meContactCandidates.forEach((candidate, index) => {
+    const row = document.createElement('tr');
+    const values = [
+      candidate.name || '（氏名なし）',
+      (candidate.grade || '') + '級',
+      candidate.state || '',
+      candidate.selected ? '含める' : '含めない',
+    ];
+    values.forEach(value => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    const actionCell = document.createElement('td');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'me-contact-toggle-btn'
+      + (candidate.selected ? ' is-selected' : '');
+    button.textContent = candidate.selected
+      ? '対象から外す' : '対象に含める';
+    button.disabled = !candidate.selectable;
+    button.addEventListener('click', () =>
+      meToggleParticipantContactCandidate(index)
+    );
+    actionCell.appendChild(button);
+    row.appendChild(actionCell);
+    tbody.appendChild(row);
+  });
+  const selectedCount = _meContactCandidates.filter(
+    candidate => candidate.selected
+  ).length;
+  const unavailableCount = _meContactCandidates.filter(
+    candidate => !candidate.selectable
+  ).length;
+  summary.textContent =
+    `送信対象 ${selectedCount}人／表示 ${_meContactCandidates.length}人`
+    + (unavailableCount
+      ? `（メールアドレス不備のため選択不可 ${unavailableCount}人）` : '');
+  area.style.display = '';
+}
+
+function meLoadParticipantContactCandidates(forceReload) {
+  if (_meContactLoadTimer) {
+    window.clearTimeout(_meContactLoadTimer);
+    _meContactLoadTimer = null;
+  }
+  const tournament =
+    document.getElementById('me-contact-tournament')?.value?.trim() || '';
+  const selectedGrades = meGetContactGrades();
+  const status = document.getElementById('me-contact-list-status');
+  const loadButton = document.getElementById('me-contact-load-btn');
+  if (!tournament) {
+    status.textContent = '大会を選択してください。';
+    status.className = 'me-draft-status error';
+    return;
+  }
+  if (!selectedGrades.length) {
+    status.textContent = '級を1つ以上選択してください。';
+    status.className = 'me-draft-status error';
+    return;
+  }
+  const grades = selectedGrades.filter(grade =>
+    forceReload === true
+      || (!Object.prototype.hasOwnProperty.call(
+        _meContactCandidatesByGrade, grade
+      ) && !_meContactLoadingGrades[grade])
+  );
+  if (!grades.length) {
+    meSyncParticipantContactCandidates();
+    return;
+  }
+  const generation = _meContactRequestGeneration;
+  grades.forEach(grade => { _meContactLoadingGrades[grade] = true; });
+  _meContactPendingCount++;
+  _meContactLoadedKey = '';
+  status.textContent = grades.join('・') + '級を読み込み中...';
+  if (loadButton) loadButton.disabled = true;
+  if (!_meContactCandidates.length) meRenderParticipantContactLoading();
+  google.script.run
+    .withSuccessHandler(response => {
+      if (generation !== _meContactRequestGeneration) return;
+      grades.forEach(grade => { delete _meContactLoadingGrades[grade]; });
+      _meContactPendingCount = Math.max(0, _meContactPendingCount - 1);
+      if (loadButton) loadButton.disabled = _meContactPendingCount > 0;
+      const result = JSON.parse(response);
+      if (result.error) {
+        status.textContent = 'エラー: ' + result.error;
+        status.className = 'me-draft-status error';
+        meSyncParticipantContactCandidates();
+        return;
+      }
+      const scope =
+        document.getElementById('me-contact-scope')?.value || 'active';
+      grades.forEach(grade => {
+        _meContactCandidatesByGrade[grade] = (
+          result.candidates || []
+        ).filter(candidate => candidate.grade === grade).map(candidate =>
+          Object.assign({}, candidate, {
+            selected: Boolean(
+              candidate.selectable
+              && (scope === 'all' || !candidate.canceled)
+            ),
+          })
+        );
+      });
+      status.textContent = _meContactPendingCount
+        ? '対象者を読み込み中...' : '';
+      status.className = 'me-draft-status';
+      meSyncParticipantContactCandidates();
+    })
+    .withFailureHandler(error => {
+      if (generation !== _meContactRequestGeneration) return;
+      grades.forEach(grade => { delete _meContactLoadingGrades[grade]; });
+      _meContactPendingCount = Math.max(0, _meContactPendingCount - 1);
+      if (loadButton) loadButton.disabled = _meContactPendingCount > 0;
+      status.textContent = 'エラー: ' + error.message;
+      status.className = 'me-draft-status error';
+      meSyncParticipantContactCandidates();
+    })
+    .getParticipantContactCandidates(JSON.stringify({
+      tournamentName: tournament,
+      grades,
+    }));
 }
 
 function meSelectTournament() {
@@ -174,10 +478,29 @@ function initMakeEmail(data) {
     document.querySelector(`.me-grade-btn[data-grade="${g}"]`)?.classList.remove('active');
   });
   _meLotteryResults = null;
-  ['me-title', 'me-venue', 'me-lottery', 'me-form-url', 'me-openchat'].forEach(id => {
+  meResetParticipantContactCandidates();
+  ME_GRADES.forEach(g => {
+    const button = document.querySelector(
+      `.me-grade-btn[data-contact-grade="${g}"]`
+    );
+    if (button) {
+      button.classList.remove('active');
+      button.disabled = true;
+    }
+  });
+  [
+    'me-title', 'me-venue-bulk', 'me-lottery', 'me-form-url', 'me-openchat',
+  ].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  ['me-contact-tournament'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const contactScope = document.getElementById('me-contact-scope');
+  if (contactScope) contactScope.value = 'active';
+  mePopulateParticipantContactTournaments();
   // 案内係の苗字を差出人に自動入力
   google.script.run
     .withSuccessHandler(res => {
@@ -200,6 +523,8 @@ function initMakeEmail(data) {
   ME_GRADES.forEach(g => {
     const el = document.getElementById('me-time-' + g);
     if (el) el.value = '';
+    const venue = document.getElementById('me-venue-' + g);
+    if (venue) venue.value = '';
   });
   document.getElementById('me-include-kounin').checked = true;
   meApplyFeeDefaults('');
@@ -285,6 +610,12 @@ function meSwitchTab(idx) {
   _meActiveTab = idx;
   document.getElementById('me-tournament-section').style.display = idx <= 1 ? '' : 'none';
   document.getElementById('me-workshop-section').style.display   = idx === 3 ? '' : 'none';
+  document.getElementById('me-participant-contact-section').style.display =
+    idx === 4 ? '' : 'none';
+  document.getElementById('me-sender-row').style.display =
+    idx === 4 ? 'none' : '';
+  document.getElementById('me-output-col').style.display =
+    idx === 4 ? 'none' : '';
   document.querySelectorAll('.me-tab0-only').forEach(el => {
     el.style.display = idx === 0 ? '' : 'none';
   });
@@ -316,18 +647,34 @@ function meSaveTournamentDates() {
 }
 
 function meCreateDraft() {
-  const body     = document.getElementById('me-output').value;
+  const body = _meActiveTab === 4
+    ? '' : document.getElementById('me-output').value;
   const title    = document.getElementById('me-title')?.value?.trim() || '';
   const active   = meGetActiveGrades();
   const grades   = active.join('') + (active.length ? '級' : '');
   const subject4 = document.getElementById('me-subject')?.value?.trim() || '';
+  const contactTournament =
+    document.getElementById('me-contact-tournament')?.value?.trim() || '';
+  const contactGrades = meGetContactGrades();
+  const selectedCandidateIds = _meContactCandidates
+    .filter(candidate => candidate.selected && candidate.selectable)
+    .map(candidate => candidate.candidateId);
 
-  const fnNames = ['createDraft1', 'createDraft2', 'createDraft3', 'createDraft4'];
+  const fnNames = [
+    'createDraft1', 'createDraft2', 'createDraft3', 'createDraft4',
+    'createParticipantContactDraft',
+  ];
   const payloads = [
     JSON.stringify({ title, grades, body }),
     JSON.stringify({ title, grades, body }),
     JSON.stringify({ body }),
     JSON.stringify({ subject: subject4, body }),
+    JSON.stringify({
+      tournamentName: contactTournament,
+      grades: contactGrades,
+      selectedCandidateIds,
+      body,
+    }),
   ];
 
   const statusEl = document.getElementById('me-draft-status');
@@ -341,6 +688,27 @@ function meCreateDraft() {
     );
     if (missingCap.length) {
       statusEl.textContent = '定員を入力してください：' + missingCap.map(g => g + '級').join('、');
+      statusEl.className = 'me-draft-status error';
+      return;
+    }
+  } else if (_meActiveTab === 4) {
+    if (!contactTournament) {
+      statusEl.textContent = '大会を選択してください。';
+      statusEl.className = 'me-draft-status error';
+      return;
+    }
+    if (!contactGrades.length) {
+      statusEl.textContent = '連絡対象の級を1つ以上選択してください。';
+      statusEl.className = 'me-draft-status error';
+      return;
+    }
+    if (_meContactLoadedKey !== meParticipantContactSelectionKey()) {
+      statusEl.textContent = '対象者を表示して、送信対象を確認してください。';
+      statusEl.className = 'me-draft-status error';
+      return;
+    }
+    if (!selectedCandidateIds.length) {
+      statusEl.textContent = '送信対象を1人以上選択してください。';
       statusEl.className = 'me-draft-status error';
       return;
     }
@@ -385,6 +753,14 @@ function meCreateDraft() {
               { label: '振込確認をメール管理に登録する →', action: () => meGoToPaymentConfirm(title, grades, threadTitle), primary: true },
             ]
           );
+        } else if (_meActiveTab === 4) {
+          showCompletionModal(
+            '✅ 下書きを作成しました',
+            '<p>選択した級の出場者 '
+              + Number(r.recipientCount || 0)
+              + '名をBCCに設定しました。</p>',
+            [{ label: '閉じる', action: null }]
+          );
         } else {
           showCompletionModal(
             '✅ 下書きを作成しました',
@@ -402,21 +778,51 @@ function meCreateDraft() {
 }
 
 function meGoToReminder() {
+  const title = document.getElementById('me-title')?.value?.trim() || '';
+  const active = meGetActiveGrades();
+  const grades = active.join('') + (active.length ? '級' : '');
+  const internalDeadline =
+    document.getElementById('me-apply-kaInai')?.value || '';
+  if (!internalDeadline) {
+    window.alert(
+      '参加表明締切（会内）が未入力のため、送信予定日時を引き継げません。'
+      + '案内メールで会内期限を入力してください。'
+    );
+    return;
+  }
+  const sendDateTime = mmScheduledDateTimeFromInternalDeadline(
+    internalDeadline, 'リマインダー'
+  );
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector('[data-page="mail-management"]').classList.add('active');
   document.getElementById('page-mail-management').classList.add('active');
-  initMailManagement();
+  mmSelectReminderAfterNavigation(title, grades, sendDateTime);
 }
 
 function meGoToPaymentConfirm(title, grades, threadTitle) {
   const paymentDeadline = document.getElementById('me-pay-real')?.value || '';
+  const internalDeadline =
+    document.getElementById('me-pay-kaInai')?.value || '';
+  if (!internalDeadline) {
+    window.alert(
+      '振込会内期限が未入力のため、送信予定日時を引き継げません。'
+      + '振込案内で会内期限を入力してください。'
+    );
+    return;
+  }
+  const sendDateTime = mmScheduledDateTimeFromInternalDeadline(
+    internalDeadline, '振込確認'
+  );
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector('[data-page="mail-management"]').classList.add('active');
   document.getElementById('page-mail-management').classList.add('active');
   initMailManagement();
-  mmShowAddModalPrefilled(title, grades, '振込確認', threadTitle, paymentDeadline);
+  mmShowAddModalPrefilled(
+    title, grades, '振込確認', threadTitle, paymentDeadline,
+    '', true, sendDateTime
+  );
 }
 
 function meCopyText() {
@@ -435,11 +841,16 @@ function meRenderPreview() {
     meBuildConfirmedText,
     meBuildFreeText,
     meBuildWorkshopText,
+    meBuildParticipantContactText,
   ];
   const ta = document.getElementById('me-output');
   ta.value = builders[_meActiveTab]();
   ta.style.height = 'auto';
   ta.style.height = ta.scrollHeight + 'px';
+}
+
+function meBuildParticipantContactText() {
+  return '';
 }
 
 function meBuildFreeText() {
@@ -475,7 +886,6 @@ function meBuildAnnouncementText() {
   const title      = document.getElementById('me-title')?.value?.trim() || '';
   const active     = meGetActiveGrades();
   const gradesStr  = active.join('') + (active.length ? '級' : '');
-  const venue      = document.getElementById('me-venue')?.value?.trim() || '';
   const lottery    = document.getElementById('me-lottery')?.value?.trim() || '未定';
   const applyStart = document.getElementById('me-apply-start')?.value || '';
   const applyDead  = document.getElementById('me-apply-kaInai')?.value || '';
@@ -488,6 +898,12 @@ function meBuildAnnouncementText() {
     const t = document.getElementById('me-time-' + g)?.value || '';
     const timeStr = t ? meFormatTime(t) + ' 受付締切' : '';
     return `${g}級：${v ? meFormatDateJP(v) : '（未定）'}${timeStr ? '\u3000' + timeStr : ''}`;
+  }).join('\n');
+
+  const venueLines = active.map(g => {
+    const value =
+      document.getElementById('me-venue-' + g)?.value?.trim() || '';
+    return `${g}級：${value || '（未定）'}`;
   }).join('\n');
 
   const capLines = active
@@ -511,7 +927,7 @@ function meBuildAnnouncementText() {
     `以下は、${title}${gradesStr}の案内です。\n\n\n` +
     `・${title}${gradesStr}\n\n` +
     `日時：\n${datesLines}\n\n` +
-    `場所：\n${venue}\n\n` +
+    `場所：\n${venueLines}\n\n` +
     `定員：\n${capLines || ''}` +
     (capLines ? '\n申し込み状況に応じて抽選が行われます。' : '') +
     `\n\n抽選確定予定日：${lottery}\n\n` +

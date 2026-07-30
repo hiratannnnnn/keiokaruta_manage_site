@@ -65,17 +65,17 @@ const sandbox = {
   },
   tournamentSheetStructure_: () => ({
     version: 2,
-    management: {
-      metadata: { 'tournament ID': '10' },
-      schedules: {
-        A: { row: ['A', '', '', '101'] },
-        B: { row: ['B', '', '', '102'] },
-      },
-    },
   }),
   tournamentSheetFormId_: () => 'form-1',
   tournamentSheetBaseName_: () => '第1回大会',
   tournamentSheetDeclaredGrades_: () => ['A', 'B'],
+  taikaiFindTournament_: () => ({ id: '10', name: '第1回大会' }),
+  taikaiApiRequest_: () => ([
+    { id: '101', grade: 'A' },
+    { id: '102', grade: 'B' },
+    { id: '103', grade: 'C' },
+    { id: '104', grade: 'D' },
+  ]),
   taikaiDeleteTournamentSchedules_: (tournamentId, scheduleIds) => {
     apiCalls.push({ tournamentId, scheduleIds });
     return {

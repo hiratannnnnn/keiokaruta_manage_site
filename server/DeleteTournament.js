@@ -36,21 +36,26 @@ function deleteTournament(name) {
 
     // API削除が失敗した場合は、Google側を一切削除せず再試行可能にする。
     if (structure.version === 2) {
-      const tournamentId = String(
-        structure.management.metadata['tournament ID'] || ''
-      ).trim();
+      const tournament = taikaiFindTournament_(tournamentName);
+      const allSchedules = taikaiApiRequest_(
+        'GET',
+        '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules'
+      ) || [];
       const scheduleIds = grades.map(grade => {
-        const schedule = structure.management.schedules[grade];
-        return schedule ? String(schedule.row[3] || '').trim() : '';
-      });
-      if (!tournamentId || scheduleIds.some(id => !id)) {
-        throw new Error(
-          '大会IDまたは担当級のschedule IDが不足しています。'
-          + '先に完全同期を実行してください。'
+        const matches = allSchedules.filter(schedule =>
+          String(schedule.grade || '').toUpperCase() === grade
         );
-      }
+        if (matches.length !== 1 || !String(matches[0].id || '')) {
+          throw new Error(
+            grade + '級のschedule IDをDBから一意に取得できません'
+            + '（候補' + matches.length + '件）。'
+            + '先に完全同期を実行してください。'
+          );
+        }
+        return String(matches[0].id);
+      });
       deletedDatabase = taikaiDeleteTournamentSchedules_(
-        tournamentId, scheduleIds
+        tournament.id, scheduleIds
       );
     } else {
       if (siblingSheets.length) {

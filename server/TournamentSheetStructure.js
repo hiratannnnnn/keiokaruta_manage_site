@@ -202,14 +202,28 @@ function tournamentSheetPaymentInstructions_(data, responseEndIndex) {
 function tournamentSheetStructure_(sheet, requireAllGrades) {
   const data = sheet.getDataRange().getValues();
   if (!data.length) throw new Error('大会シートが空です: ' + sheet.getName());
-  const responseEndIndex = tournamentSheetResponseEndIndex_(data);
-  const management = tournamentSheetV2Parse_(data, responseEndIndex);
+  const legacyResponseEndIndex = tournamentSheetResponseEndIndex_(data);
+  const management = tournamentSheetV2Parse_(data);
   if (management) {
-    const rawHeaderCount = (data[0] || []).reduce(
-      (last, value, index) => String(value || '').trim() ? index + 1 : last,
-      0
-    );
-    if (rawHeaderCount < 2) {
+    // V2の開始マーカーが回答領域の確定境界。回答と管理ブロックの間の
+    // 空行がフォーム追記等で埋まっても、旧レイアウト判定へ戻さない。
+    const responseEndIndex = management.start_index;
+    const header = data[0] || [];
+    const paymentColumns = [];
+    header.forEach((value, index) => {
+      if (/^振込(?:み)?済みか$/.test(String(value || '').trim())) {
+        paymentColumns.push(index + 1);
+      }
+    });
+    if (paymentColumns.length !== 1) {
+      throw new Error(
+        '大会シートの「振込み済みか」列を一意に特定できません'
+        + '（候補' + paymentColumns.length + '件）。'
+      );
+    }
+    const paymentStatusColumn = paymentColumns[0];
+    const responseColumnCount = paymentStatusColumn - 1;
+    if (responseColumnCount < 2) {
       throw new Error('大会シートのフォーム回答ヘッダーが不足しています。');
     }
     const gradeRows = {};
@@ -228,7 +242,8 @@ function tournamentSheetStructure_(sheet, requireAllGrades) {
       version: 2,
       data: data,
       layout: {
-        raw_response_column_count: rawHeaderCount,
+        raw_response_column_count: responseColumnCount,
+        payment_status_column: paymentStatusColumn,
         has_legacy_columns: false,
       },
       management: management,
@@ -242,12 +257,12 @@ function tournamentSheetStructure_(sheet, requireAllGrades) {
     data: data,
     layout: tournamentSheetLayout_(sheet),
     management: null,
-    response_end_index: responseEndIndex,
+    response_end_index: legacyResponseEndIndex,
     grade_rows: tournamentSheetGradeRows_(
-      data, responseEndIndex, requireAllGrades === true
+      data, legacyResponseEndIndex, requireAllGrades === true
     ),
     register_database_row: tournamentSheetUniqueLabelRow_(
-      data, responseEndIndex, 'registerDatabase', false
+      data, legacyResponseEndIndex, 'registerDatabase', false
     ),
   };
 }
@@ -271,18 +286,11 @@ function tournamentSheetFormEditUrl_(structure) {
 }
 
 function tournamentSheetFormPublicUrl_(structure) {
-  if (structure.version === 2) {
-    return String(structure.management.metadata['フォーム公開URL'] || '').trim();
-  }
   const formId = tournamentSheetFormId_(structure);
   return formId ? FormApp.openById(formId).getPublishedUrl() : '';
 }
 
 function tournamentSheetRawSheetStatus_(structure, sourceRow) {
-  if (structure.version === 2) {
-    const item = structure.management.entries_by_source_row[sourceRow];
-    return item ? item.row[5] : '';
-  }
   return (structure.data[sourceRow - 1] || [])[
     structure.layout.payment_status_column - 1
   ];
@@ -299,10 +307,6 @@ function tournamentSheetSelectionStatus_(structure, sourceRow) {
 }
 
 function tournamentSheetEntryPaymentStatus_(structure, sourceRow) {
-  if (structure.version === 2) {
-    const item = structure.management.entries_by_source_row[sourceRow];
-    return item ? String(item.row[13] || '').trim() : '';
-  }
   const legacy = String(
     tournamentSheetRawSheetStatus_(structure, sourceRow) || ''
   ).trim();
@@ -341,13 +345,9 @@ function tournamentSheetResponseRecords_(structure, includeSuperseded) {
     const email = String(raw[columns.email] || '').trim();
     const name = String(raw[columns.name] || '').trim();
     if (!email && !name) continue;
-    const management = structure.version === 2
-      ? structure.management.entries_by_source_row[sourceRow] : null;
-    const managementRow = management ? management.row : [];
-    const syncStatus = structure.version === 2
-      ? String(managementRow[14] || '').trim() : 'legacy';
-    const superseded = syncStatus === 'superseded'
-      || Boolean(email && latestByEmail[email.toLowerCase()] !== sourceRow);
+    const superseded = Boolean(
+      email && latestByEmail[email.toLowerCase()] !== sourceRow
+    );
     if (superseded && includeSuperseded !== true) continue;
     const record = {
       source_row: sourceRow,
@@ -361,14 +361,12 @@ function tournamentSheetResponseRecords_(structure, includeSuperseded) {
       ).trim(),
       selection_status: tournamentSheetSelectionStatus_(structure, sourceRow),
       payment_status: tournamentSheetEntryPaymentStatus_(structure, sourceRow),
-      player_id: structure.version === 2 ? String(managementRow[6] || '') : '',
-      entry_id: structure.version === 2 ? String(managementRow[7] || '') : '',
-      schedule_id: structure.version === 2 ? String(managementRow[8] || '') : '',
-      participation_fee_yen: structure.version === 2 ? managementRow[10] : null,
-      paid_yen: structure.version === 2 ? managementRow[11] : null,
-      balance_yen: structure.version === 2 ? managementRow[12] : null,
-      sync_status: syncStatus,
-      sync_error: structure.version === 2 ? String(managementRow[16] || '') : '',
+      player_id: '',
+      entry_id: '',
+      schedule_id: '',
+      participation_fee_yen: null,
+      paid_yen: null,
+      balance_yen: null,
       superseded: superseded,
     };
     record.is_paid = tournamentSheetPaymentIsPaid_(record);
@@ -380,7 +378,6 @@ function tournamentSheetResponseRecords_(structure, includeSuperseded) {
 function tournamentSheetResponseRecord_(structure, sourceRow, entryId) {
   const matches = tournamentSheetResponseRecords_(structure, false).filter(record =>
     record.source_row === Number(sourceRow)
-    && (structure.version !== 2 || record.entry_id === String(entryId || ''))
   );
   if (matches.length !== 1) {
     throw new Error(
@@ -392,13 +389,6 @@ function tournamentSheetResponseRecord_(structure, sourceRow, entryId) {
 }
 
 function tournamentSheetSelectionStatusRange_(sheet, structure, sourceRow) {
-  if (structure.version === 2) {
-    const item = structure.management.entries_by_source_row[sourceRow];
-    if (!item) {
-      throw new Error('回答行' + sourceRow + 'のv2申込管理行がありません。完全同期してください。');
-    }
-    return sheet.getRange(item.row_number, 6);
-  }
   return sheet.getRange(sourceRow, structure.layout.payment_status_column);
 }
 
@@ -444,26 +434,40 @@ function tournamentSheetResponseColumns_(structure) {
 }
 
 function tournamentSheetGradeFee_(structure, grade) {
-  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  const normalized = String(grade || '').trim();
+  if (structure.version === 2) {
+    const item = structure.management.schedules[normalized];
+    return item ? item.row[1] : null;
+  }
+  const rowNumber = structure.grade_rows[normalized];
   return rowNumber ? (structure.data[rowNumber - 1] || [])[1] : null;
 }
 
 function tournamentSheetGradeDate_(structure, grade) {
-  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  const normalized = String(grade || '').trim();
+  if (structure.version === 2) {
+    const item = structure.management.schedules[normalized];
+    return item ? item.row[2] : null;
+  }
+  const rowNumber = structure.grade_rows[normalized];
   if (!rowNumber) return null;
   const row = structure.data[rowNumber - 1] || [];
-  return structure.version === 2
-    ? row[2]
-    : row[structure.layout.payment_status_column - 1];
+  return row[structure.layout.payment_status_column - 1];
 }
 
 function tournamentSheetGradeDateRange_(sheet, structure, grade) {
-  const rowNumber = structure.grade_rows[String(grade || '').trim()];
+  const normalized = String(grade || '').trim();
+  if (structure.version === 2) {
+    const item = structure.management.schedules[normalized];
+    const rowNumber = item && item.field_rows['開催日'];
+    if (!rowNumber) {
+      throw new Error('グレード「' + grade + '」の開催日行が見つかりません。');
+    }
+    return sheet.getRange(rowNumber, 3);
+  }
+  const rowNumber = structure.grade_rows[normalized];
   if (!rowNumber) throw new Error('グレード「' + grade + '」の行が見つかりません。');
-  return sheet.getRange(
-    rowNumber,
-    structure.version === 2 ? 3 : structure.layout.payment_status_column
-  );
+  return sheet.getRange(rowNumber, structure.layout.payment_status_column);
 }
 
 function tournamentSheetIsSanctioned_(structure) {
@@ -479,16 +483,57 @@ function tournamentSheetIsSanctioned_(structure) {
 
 function tournamentSheetPaymentInstructionsFromStructure_(structure) {
   if (structure.version === 2) {
-    const values = Object.keys(structure.management.schedules).map(grade =>
-      String(structure.management.schedules[grade].row[12] || '').trim()
-    ).filter(Boolean);
-    const unique = values.filter((value, index) => values.indexOf(value) === index);
-    if (unique.length > 1) {
-      throw new Error('級別の振込先が一致していません。');
-    }
-    return unique[0] || null;
+    return String(structure.management.metadata['振込先'] || '').trim() || null;
   }
   return tournamentSheetPaymentInstructions_(
     structure.data, structure.response_end_index
   );
+}
+
+function tournamentSheetPaymentTimingFromStructure_(structure) {
+  if (structure.version !== 2) return null;
+  const raw = String(
+    tournamentSheetManagementValue_(structure, '後納制') || ''
+  ).trim();
+  const allowed = [
+    'with_application',
+    'before_tournament',
+    'on_tournament_day',
+    'after_tournament',
+  ];
+  if (allowed.includes(raw)) return raw;
+  if (raw === '当日支払い') return 'on_tournament_day';
+  if (raw) return 'after_tournament';
+  return tournamentSheetManagementValue_(structure, '本振込期限')
+    ? 'before_tournament' : null;
+}
+
+function tournamentSheetManagementValue_(structure, key) {
+  if (structure.version !== 2) return null;
+  return Object.prototype.hasOwnProperty.call(structure.management.metadata, key)
+    ? structure.management.metadata[key] : null;
+}
+
+function tournamentSheetManagementRange_(sheet, structure, key) {
+  if (structure.version !== 2) {
+    throw new Error('大会設定の更新には新シート構造が必要です。');
+  }
+  const rowNumber = structure.management.metadata_rows[key];
+  if (!rowNumber) throw new Error('大会設定「' + key + '」がありません。');
+  return sheet.getRange(rowNumber, 3);
+}
+
+function tournamentSheetGradeFeeRange_(sheet, structure, grade) {
+  const normalized = String(grade || '').trim();
+  if (structure.version === 2) {
+    const item = structure.management.schedules[normalized];
+    const rowNumber = item && item.field_rows['参加費'];
+    if (!rowNumber) {
+      throw new Error('グレード「' + grade + '」の参加費行が見つかりません。');
+    }
+    return sheet.getRange(rowNumber, 3);
+  }
+  const rowNumber = structure.grade_rows[normalized];
+  if (!rowNumber) throw new Error('グレード「' + grade + '」の行が見つかりません。');
+  return sheet.getRange(rowNumber, 2);
 }

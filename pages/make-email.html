@@ -11,6 +11,7 @@
         <button class="me-type-btn" onclick="meSelectType(1)">振込案内</button>
         <button class="me-type-btn" onclick="meSelectType(2)">Free</button>
         <button class="me-type-btn" onclick="meSelectType(3)">読手講習会など</button>
+        <button class="me-type-btn" onclick="meSelectType(4)">出場者への連絡</button>
       </div>
     </div>
 
@@ -78,9 +79,23 @@
             </div>
 
             <!-- 場所（タブ0のみ） -->
-            <div class="fc-field-row me-tab0-only">
-              <label class="fc-label">場所</label>
-              <textarea id="me-venue" class="fc-text-input me-venue-textarea" rows="3" oninput="meRenderPreview()"></textarea>
+            <div class="me-tab0-only">
+              <div class="fc-section-label">場所</div>
+              <div class="fc-field-row" style="margin-bottom:8px;">
+                <label class="fc-label">一括入力</label>
+                <input type="text" id="me-venue-bulk" class="fc-text-input"
+                       placeholder="全級が同じ会場の場合"
+                       onchange="meBulkVenueChange(this.value)">
+              </div>
+              <table style="width:100%;border-collapse:collapse;">
+                <tbody>
+                  <tr id="me-venue-row-A" style="display:none;"><td class="me-grade-cell">A級</td><td><input type="text" id="me-venue-A" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                  <tr id="me-venue-row-B" style="display:none;"><td class="me-grade-cell">B級</td><td><input type="text" id="me-venue-B" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                  <tr id="me-venue-row-C" style="display:none;"><td class="me-grade-cell">C級</td><td><input type="text" id="me-venue-C" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                  <tr id="me-venue-row-D" style="display:none;"><td class="me-grade-cell">D級</td><td><input type="text" id="me-venue-D" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                  <tr id="me-venue-row-E" style="display:none;"><td class="me-grade-cell">E級</td><td><input type="text" id="me-venue-E" class="fc-text-input" oninput="meRenderPreview()"></td></tr>
+                </tbody>
+              </table>
             </div>
 
             <!-- 定員（タブ0のみ） -->
@@ -206,8 +221,69 @@
               </div>
             </div><!-- /me-workshop-section -->
 
+            <!-- ===== 出場者への連絡 ===== -->
+            <div id="me-participant-contact-section" style="display:none;">
+              <div class="fc-field-row">
+                <label class="fc-label">大会を選択 <span class="fc-required-mark">*</span></label>
+                <select id="me-contact-tournament" class="me-select"
+                        onchange="meContactTournamentChanged()">
+                  <option value="">-- 大会を選択 --</option>
+                </select>
+              </div>
+              <div class="fc-field-row">
+                <label class="fc-label">級 <span class="fc-required-mark">*</span></label>
+                <div class="fc-grade-group">
+                  <button type="button" class="me-grade-btn" data-contact-grade="A"
+                          onclick="meToggleContactGrade(this)">A</button>
+                  <button type="button" class="me-grade-btn" data-contact-grade="B"
+                          onclick="meToggleContactGrade(this)">B</button>
+                  <button type="button" class="me-grade-btn" data-contact-grade="C"
+                          onclick="meToggleContactGrade(this)">C</button>
+                  <button type="button" class="me-grade-btn" data-contact-grade="D"
+                          onclick="meToggleContactGrade(this)">D</button>
+                  <button type="button" class="me-grade-btn" data-contact-grade="E"
+                          onclick="meToggleContactGrade(this)">E</button>
+                </div>
+                <div class="me-contact-note">
+                  選択した級の申込者を読み込み、送信対象を一人ずつ調整できます。
+                </div>
+              </div>
+              <div class="fc-field-row">
+                <label class="fc-label">最初に選択する人</label>
+                <select id="me-contact-scope" class="me-select"
+                        onchange="meApplyContactScope()">
+                  <option value="active">キャンセルされていない人（出場の可能性がある人）</option>
+                  <option value="all">申し込んだ人全員</option>
+                </select>
+              </div>
+              <div class="fc-field-row">
+                <button type="button" id="me-contact-load-btn" class="me-draft-btn"
+                        onclick="meLoadParticipantContactCandidates(true)">
+                  対象者を再読み込み
+                </button>
+                <span id="me-contact-list-status" class="me-draft-status"></span>
+              </div>
+              <div id="me-contact-candidate-area" style="display:none;">
+                <div id="me-contact-selection-summary" class="me-contact-selection-summary"></div>
+                <div class="table-wrap">
+                  <table class="me-contact-table">
+                    <thead>
+                      <tr>
+                        <th>氏名</th>
+                        <th>級</th>
+                        <th>現在の状態</th>
+                        <th>送信対象</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="me-contact-candidate-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div><!-- /me-participant-contact-section -->
+
             <!-- 差出人名（全タイプ共通） -->
-            <div class="fc-field-row">
+            <div id="me-sender-row" class="fc-field-row">
               <label class="fc-label">差出人名（末尾）</label>
               <input type="text" id="me-sender" class="fc-text-input" oninput="meRenderPreview()">
             </div>
@@ -226,7 +302,7 @@
         </div>
 
         <!-- 右: 出力 -->
-        <div class="me-output-col">
+        <div id="me-output-col" class="me-output-col">
           <div class="me-output-header">
             <button class="me-copy-btn" onclick="meCopyText()">コピー</button>
           </div>

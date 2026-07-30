@@ -26,7 +26,60 @@ function taikaiApiError_(message, details) {
   error.http_status = info.http_status || null;
   error.api_method = String(info.api_method || '');
   error.api_path = String(info.api_path || '');
+  error.api_error_code = String(info.api_error_code || '');
+  error.taikai_request_id = String(info.request_id || '');
+  error.validation_fields = info.validation_fields || {};
   return error;
+}
+
+function taikaiApiSafeToken_(value, pattern, maxLength) {
+  const text = String(value || '');
+  return text.length <= maxLength && pattern.test(text) ? text : '';
+}
+
+function taikaiApiSafeValidationFields_(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const result = {};
+  Object.keys(value).slice(0, 20).forEach(key => {
+    const safeKey = taikaiApiSafeToken_(
+      key, /^[a-zA-Z0-9_.-]+$/, 64
+    );
+    const message = String(value[key] || '').replace(/\s+/g, ' ').trim();
+    if (safeKey && message && message.length <= 300) {
+      result[safeKey] = message;
+    }
+  });
+  return result;
+}
+
+function taikaiApiFailureMessage_(status, method, path, apiError) {
+  const error = apiError && typeof apiError === 'object' ? apiError : {};
+  const code = taikaiApiSafeToken_(
+    error.code, /^[a-z0-9_]+$/, 64
+  );
+  const requestId = taikaiApiSafeToken_(
+    error.request_id, /^req_[a-f0-9]+$/i, 80
+  );
+  const fields = taikaiApiSafeValidationFields_(error.fields);
+  let message = String(error.message || '').trim()
+    || 'taikai_manage APIへの接続に失敗しました。';
+  if (Number(status) === 401) {
+    message = 'API認証に失敗しました。'
+      + 'GASのTAIKAI_API_TOKENとPHPのAPI_TOKENが一致しているか確認してください。';
+  }
+  const diagnostics = [
+    'HTTP ' + status,
+    code ? 'code: ' + code : '',
+    String(method || '').toUpperCase() + ' ' + String(path || ''),
+    requestId ? 'request ID: ' + requestId : '',
+  ].filter(Boolean);
+  const fieldMessages = Object.keys(fields).map(key =>
+    key + ': ' + fields[key]
+  );
+  return message + ' [' + diagnostics.join(' / ') + ']'
+    + (fieldMessages.length
+      ? ' 入力エラー: ' + fieldMessages.join('、')
+      : '');
 }
 
 function taikaiIsTransientApiError_(error) {
@@ -142,7 +195,18 @@ function taikaiApiRequest_(method, path, body, query, context) {
   }
   if (status < 200 || status >= 300) {
     const error = parsed && parsed.error;
-    const message = error && error.message ? error.message : 'taikai_manage APIへの接続に失敗しました。';
+    const message = taikaiApiFailureMessage_(
+      status, method, path, error
+    );
+    const errorCode = taikaiApiSafeToken_(
+      error && error.code, /^[a-z0-9_]+$/, 64
+    );
+    const requestId = taikaiApiSafeToken_(
+      error && error.request_id, /^req_[a-f0-9]+$/i, 80
+    );
+    const validationFields = taikaiApiSafeValidationFields_(
+      error && error.fields
+    );
     const transient = status === 408 || status === 429 || status >= 500;
     if (transient) {
       taikaiNotifyApiFailure_(Object.assign({}, context || {}, {
@@ -152,11 +216,14 @@ function taikaiApiRequest_(method, path, body, query, context) {
         message: 'APIがHTTPエラーを返しました。',
       }));
     }
-    throw taikaiApiError_(message + ' (HTTP ' + status + ')', {
+    throw taikaiApiError_(message, {
       transient: transient,
       http_status: status,
       api_method: method,
       api_path: path,
+      api_error_code: errorCode,
+      request_id: requestId,
+      validation_fields: validationFields,
     });
   }
   return parsed && Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
@@ -173,11 +240,22 @@ function taikaiFindPlayer_(name, email) {
 function taikaiFindTournament_(name) {
   const tournaments = taikaiApiRequest_('GET', '/tournaments', null, { name: name }) || [];
   const exact = tournaments.filter(item => String(item.name) === String(name));
-  if (exact.length !== 1) throw new Error('大会を一意に特定できません: ' + name);
+  if (exact.length === 0) {
+    throw new Error(
+      'DBに大会が登録されていません: ' + name
+      + '。今年度開催の大会は、先に「今年度のシート→DB完全同期」を実行してください。'
+    );
+  }
+  if (exact.length > 1) {
+    throw new Error(
+      'DBに同名の大会が' + exact.length + '件登録されています: ' + name
+      + '。tournaments.nameの重複データを解消してください。'
+    );
+  }
   return exact[0];
 }
 
-function taikaiEnsureTournament_(name, context) {
+function taikaiEnsureTournamentWithState_(name, context) {
   const requestContext = Object.assign({ tournament_name: name }, context || {});
   const tournaments = taikaiApiRequest_(
     'GET', '/tournaments', null, { name: name }, requestContext
@@ -199,12 +277,27 @@ function taikaiEnsureTournament_(name, context) {
   }
   const exact = tournaments.filter(item => String(item.name) === String(name));
   if (exact.length > 1) throw new Error('同じ大会名が複数登録されています: ' + name);
-  if (exact.length === 1) return exact[0];
-  return taikaiApiRequest_('POST', '/tournaments', {
-    name: name,
-    registration_completed: false,
-    payment_completed: false,
-  }, null, requestContext);
+  if (exact.length === 1) {
+    return { tournament: exact[0], created: false };
+  }
+  let tournament;
+  try {
+    tournament = taikaiApiRequest_('POST', '/tournaments', {
+      name: name,
+      registration_completed: false,
+      payment_completed: false,
+    }, null, requestContext);
+  } catch (error) {
+    if (taikaiIsTransientApiError_(error)) {
+      error.tournament_creation_uncertain = true;
+    }
+    throw error;
+  }
+  return { tournament: tournament, created: true };
+}
+
+function taikaiEnsureTournament_(name, context) {
+  return taikaiEnsureTournamentWithState_(name, context).tournament;
 }
 
 function taikaiPendingTournaments_() {
@@ -310,7 +403,6 @@ function taikaiRegisterPaymentEmailJob_(tournamentName, grades, sendDateTime, pa
     scheduled_at: taikaiJstDateTime_(sendDateTime),
     mail_type: 'payment_confirmation',
     announcement_id: null,
-    recipient_group_id: null,
     schedule_ids: targets.map(schedule => String(schedule.id)),
   });
 }
@@ -489,6 +581,25 @@ function taikaiRecordFullPaymentByEntry_(entryId, useDeposit) {
   );
 }
 
+function taikaiSetEntryCancellationStatus_(
+  entryId, canceledAt, movePaymentsToDeposit
+) {
+  return taikaiApiRequest_(
+    'POST',
+    '/entries/' + encodeURIComponent(String(entryId))
+      + '/cancellation-status',
+    {
+      idempotency_key: 'detail-cancel-' + Utilities.getUuid(),
+      canceled_at: canceledAt,
+      move_payments_to_deposit: movePaymentsToDeposit === true,
+      occurred_at: Utilities.formatDate(
+        new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+      ),
+      note: 'キャンセルにより参加費からデポジットへ振替',
+    }
+  );
+}
+
 function taikaiSetTournamentSanctioned_(tournamentName, isSanctioned, grades) {
   const tournament = taikaiFindTournament_(tournamentName);
   const schedules = taikaiApiRequest_('GET', '/tournaments/' + encodeURIComponent(String(tournament.id)) + '/schedules') || [];
@@ -544,6 +655,29 @@ function taikaiGradeFeesFromSheetData_(data, sheetName, grades) {
   return { fees: fees, errors: errors };
 }
 
+function taikaiGradeFeesFromStructure_(structure, sheetName, grades) {
+  if (structure.version !== 2) {
+    return taikaiGradeFeesFromSheetData_(
+      structure.data, sheetName, grades
+    );
+  }
+  const fees = {};
+  const errors = [];
+  (grades || []).forEach(grade => {
+    const fee = tournamentSheetGradeFee_(structure, grade);
+    if (typeof fee !== 'number' || !Number.isFinite(fee)
+        || !Number.isInteger(fee) || fee < 0) {
+      errors.push(
+        sheetName + ': ' + grade
+        + '級の参加費が不正です。0以上の整数を入力してください。'
+      );
+      return;
+    }
+    fees[grade] = fee;
+  });
+  return { fees: fees, errors: errors };
+}
+
 function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const calendar = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
@@ -559,9 +693,17 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
   const structure = tournamentSheetStructure_(tournamentSheet, true);
   const tournamentData = structure.data;
   const isSanctioned = tournamentSheetIsSanctioned_(structure);
-  const applicationDeadline = taikaiFormatDate_(calendarRow[5]);
+  const applicationDeadline = structure.version === 2
+    ? taikaiFormatDate_(
+      tournamentSheetManagementValue_(structure, '本申込期限')
+    )
+    : taikaiFormatDate_(calendarRow[5]);
   if (!applicationDeadline) throw new Error('申込期限が未設定のため、APIへ日程を登録できません。');
-  const lotteryDate = taikaiFormatDate_(calendarRow[7]) || null;
+  const lotteryDate = structure.version === 2
+    ? (taikaiFormatDate_(
+      tournamentSheetManagementValue_(structure, '抽選日')
+    ) || null)
+    : (taikaiFormatDate_(calendarRow[7]) || null);
   const targetGrades = Object.keys(gradeDates || {}).filter(grade =>
     Boolean(taikaiFormatDate_(gradeDates[grade]))
   );
@@ -574,7 +716,9 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       'このフォームの担当外の級は同期できません: ' + outOfScopeGrades.join(',')
     );
   }
-  const feeResult = taikaiGradeFeesFromSheetData_(tournamentData, sheetName, targetGrades);
+  const feeResult = taikaiGradeFeesFromStructure_(
+    structure, sheetName, targetGrades
+  );
   if (feeResult.errors.length) throw new Error(feeResult.errors.join('\n'));
   const paymentInstructions = tournamentSheetPaymentInstructionsFromStructure_(structure);
   let internalPaymentDeadlineIndex = null;
@@ -598,7 +742,14 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
 
   targetGrades.forEach(grade => {
     const heldOn = taikaiFormatDate_(gradeDates[grade]);
-    const payment = taikaiPaymentSchedule_(calendarRow[10], heldOn);
+    const paymentSetting = structure.version === 2
+      ? tournamentSheetManagementValue_(structure, '本振込期限')
+      : calendarRow[10];
+    const payment = taikaiPaymentSchedule_(paymentSetting, heldOn);
+    if (structure.version === 2) {
+      payment.payment_timing =
+        tournamentSheetPaymentTimingFromStructure_(structure);
+    }
     const schedules = taikaiApiRequest_('GET', '/schedules', null, {
       tournament_id: tournament.id,
       grade: grade,
@@ -612,12 +763,14 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       lottery_result_date: lotteryDate,
       payment_timing: payment.payment_timing,
       participation_fee_yen: feeResult.fees[grade],
-      venue: null,
-      reception_ends_at: null,
       is_sanctioned: isSanctioned,
       payment_instructions: paymentInstructions,
     };
-    if (internalPaymentDeadline) {
+    if (structure.version !== 2) {
+      body.venue = null;
+      body.reception_ends_at = null;
+    }
+    if (structure.version !== 2 && internalPaymentDeadline) {
       body.internal_payment_deadline = internalPaymentDeadline.value;
     }
     let savedSchedule;
@@ -635,31 +788,11 @@ function taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates) {
       throw new Error('同じ大会・級・開催日のAPI日程が複数あります: ' + sheetName + ' ' + grade);
     }
     if (structure.version === 2) {
-      const scheduleRow = structure.management.schedules[grade].row_number;
-      tournamentSheet.getRange(scheduleRow, 2, 1, 14).setValues([[
-        savedSchedule.participation_fee_yen,
-        savedSchedule.held_on,
-        savedSchedule.id,
-        savedSchedule.application_deadline,
-        savedSchedule.internal_payment_deadline || '',
-        savedSchedule.payment_deadline || '',
-        savedSchedule.payment_timing || '',
-        savedSchedule.lottery_result_date || '',
-        savedSchedule.venue || '',
-        savedSchedule.reception_ends_at || '',
-        Boolean(savedSchedule.is_sanctioned),
-        savedSchedule.payment_instructions || '',
-        'synced',
-        new Date(),
-      ]]);
+      tournamentSheetGradeFeeRange_(tournamentSheet, structure, grade)
+        .setValue(savedSchedule.participation_fee_yen);
+      tournamentSheetGradeDateRange_(tournamentSheet, structure, grade)
+        .setValue(savedSchedule.held_on);
     }
   });
-  if (structure.version === 2) {
-    const metadataRows = structure.management.metadata_rows;
-    tournamentSheet.getRange(metadataRows['tournament ID'], 3).setValue(tournament.id);
-    tournamentSheet.getRange(metadataRows['同期状態'], 3).setValue('synced');
-    tournamentSheet.getRange(metadataRows['最終同期日時'], 3).setValue(new Date());
-    tournamentSheet.getRange(metadataRows['同期エラー'], 3).setValue('');
-  }
   return tournament;
 }

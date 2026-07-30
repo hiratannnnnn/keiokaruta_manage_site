@@ -8,7 +8,7 @@
 
 ## 実装済み（初版）
 
-- `server/TaikaiApi.js` に共通APIクライアントを追加（暫定的に認証ヘッダーなし）
+- `server/TaikaiApi.js` にBearer認証付き共通APIクライアントを追加
 - `server/Results.js` を出場大会履歴APIへ切り替え
 - `server/CountMatches.js` を同APIへ切り替え
 - `server/RegisterDatabase.js` と旧メニュー入口を新API登録へ集約
@@ -19,10 +19,10 @@
 利用前にScript Propertiesへ次を設定します。
 
 - `TAIKAI_API_BASE_URL`（例: `https://example.com/api/v1`）
-- `TAIKAI_API_TOKEN`は現時点では使用しません。
+- `TAIKAI_API_TOKEN`（PHP側の`API_TOKEN`と完全に同じ値）
 
-暫定的にAPIへ認証ヘッダーを付けずに接続します。公開環境での利用は避け、
-API側のBearer認証を復旧した後に、クライアントとサーバーを同時に再有効化します。
+すべてのAPI呼び出しへ`Authorization: Bearer <TAIKAI_API_TOKEN>`を付ける。
+未設定またはPHP側と不一致の場合は処理を中止し、401を成功扱いしない。
 
 本番画面にはAPIレスポンスのデバッグパネルを表示せず、API応答本文も
 CacheServiceへ保存しません。障害調査には利用者向けエラーとサーバーログを使用します。
@@ -30,10 +30,8 @@ CacheServiceへ保存しません。障害調査には利用者向けエラー�
 `TAIKAI_API_BASE_URL`が未設定のままフォーム作成・登録・履歴検索を実行すると、
 処理はエラーになります。
 
-既存・新規フォームとも、Apps Scriptのトリガー画面から
-`registerFormResponseToDatabase`を「スプレッドシートから／フォーム送信時」として
-対象スプレッドシートへ1件だけ手動設定します。コードからトリガーを作成・削除しません。
-設定・診断・`taikai_manage`側の`memoForm`停止手順は`FORM_SUBMIT_TRIGGER.md`を参照します。
+フォーム送信後処理は、大会管理スプレッドシートに紐づく`taikai_manage`の
+`memoForm`を唯一の入口とします。管理サイト側にはフォーム送信トリガーを設定しません。
 
 ## 1. 現状
 
@@ -64,13 +62,14 @@ CacheServiceへ保存しません。障害調査には利用者向けエラー�
 
 ### 認証・設定
 
-GASのScript PropertiesからAPI URLを読み込みます。
+GASのScript PropertiesからAPI URLと認証トークンを読み込みます。
 
 - `TAIKAI_API_BASE_URL`
+- `TAIKAI_API_TOKEN`
 
-暫定運用ではBearerトークンを使用しません。認証を再有効化する際は、トークンを
-ソースコード、スプレッドシート、Gitへ保存せず、Script Propertiesへ戻します。
-APIエラーは利用者向けの安全なメッセージへ変換します。
+トークンはソースコード、スプレッドシート、Gitへ保存せず、Script Propertiesで
+管理する。PHP側の`API_TOKEN`と完全に一致させる。APIエラーは利用者向けの安全な
+診断情報へ変換する。
 
 ### 主なAPI対応
 
@@ -136,7 +135,7 @@ APIエラーは利用者向けの安全なメッセージへ変換します。
 
 ### Phase 5: フォーム回答の即時登録
 
-`registerFormResponseToDatabase`を唯一のフォーム送信ハンドラーとし、回答時に
+`taikai_manage`の`memoForm`を唯一のフォーム送信ハンドラーとし、回答時に
 `/registrations`へ登録します。DB登録、大会シートv2書戻し、名簿更新、追加申込通知は
 非表示の永続ジャーナルで個別管理し、途中失敗後は未完了処理だけを再実行します。
 抽選日前の申込者もDBへ保存し、抽選後に`canceled_at`や選考状態で判定します。

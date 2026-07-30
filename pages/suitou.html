@@ -14,6 +14,8 @@
     <div class="su-toolbar">
       <span id="su-fiscal-year" class="count-badge"></span>
       <span class="su-update-status">DBの支払い・デポジット履歴を表示しています。</span>
+      <button id="su-tx-download" class="su-update-btn"
+              onclick="suDownloadTransactionsCsv()" disabled>履歴をCSVダウンロード</button>
       <button class="su-add-btn" onclick="suShowAddModal()">＋ 追加</button>
     </div>
 

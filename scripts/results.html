@@ -2,7 +2,17 @@
 // ------------------------------------------------------------
 // 出場大会履歴
 // ------------------------------------------------------------
+let tournamentResultsForDownload = [];
+let tournamentResultsDownloadName = '';
+
+function resetTournamentResultsDownload() {
+  tournamentResultsForDownload = [];
+  tournamentResultsDownloadName = '';
+  document.getElementById('results-download').disabled = true;
+}
+
 function searchResults() {
+  resetTournamentResultsDownload();
   const name = document.getElementById('result-name').value.trim();
   if (!name) { setStatus('results', 'empty', '選手名を入力してください'); return; }
   const date = document.getElementById('result-date').value;
@@ -29,6 +39,7 @@ function onResultsLoaded(raw) {
   tbody.replaceChildren();
   table.style.display = 'none';
   badge.style.display = 'none';
+  resetTournamentResultsDownload();
 
   if (res.error) {
     setStatus('results', 'error', res.error);
@@ -40,6 +51,9 @@ function onResultsLoaded(raw) {
     return;
   }
 
+  tournamentResultsForDownload = results.slice();
+  tournamentResultsDownloadName =
+    document.getElementById('result-name').value.trim() || '選手';
   results.forEach(result => {
     const tr = document.createElement('tr');
     [result.date, result.location, result.raffleDate].forEach(value => {
@@ -53,12 +67,28 @@ function onResultsLoaded(raw) {
   table.style.display = 'table';
   badge.textContent = results.length + ' 件';
   badge.style.display = 'inline-block';
+  document.getElementById('results-download').disabled = false;
+}
+
+function downloadTournamentResultsCsv() {
+  if (!tournamentResultsForDownload.length) return;
+  downloadCsvFile(
+    csvDownloadDateStamp() + '_' + tournamentResultsDownloadName
+      + '_出場大会.csv',
+    ['大会日', '場所', '抽選公開日'],
+    tournamentResultsForDownload.map(result => [
+      result.date || '',
+      result.location || '',
+      result.raffleDate || '',
+    ])
+  );
 }
 
 document.getElementById('result-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') searchResults();
 });
 document.getElementById('result-name').addEventListener('input', () => {
+  resetTournamentResultsDownload();
   selectedMemberId = '';
   const input = document.getElementById('result-name').value.trim();
   const exactLabel = allMembers.filter(member =>

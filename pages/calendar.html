@@ -95,9 +95,9 @@
               <button id="toggle-cols-btn" class="toggle-btn" onclick="toggleDetailColumns()">詳細列を非表示</button>
             </div>
             <div class="cancellation-legend">
-              <span class="cancel-status cancel-status-before">期限前キャンセル</span>
+              <span class="cancel-status cancel-status-before">公開前キャンセル</span>
               <span>参加費の支払い義務なし</span>
-              <span class="cancel-status cancel-status-after">期限後キャンセル</span>
+              <span class="cancel-status cancel-status-after">公開後キャンセル</span>
               <span>参加費の支払い義務あり</span>
             </div>
             <div class="table-wrap">
@@ -175,6 +175,45 @@
       <div class="confirm-buttons">
         <button class="confirm-yes-btn" onclick="executeDepositChoice(true)">使う</button>
         <button class="confirm-no-btn"  onclick="executeDepositChoice(false)">使わない</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 申込支払詳細モーダル ========== -->
+<div id="entry-payment-detail-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="entry-payment-detail-title">支払詳細</span>
+      <button class="modal-close-btn" onclick="closeEntryPaymentDetail()">✕</button>
+    </div>
+    <div id="entry-payment-detail-content" class="modal-body"></div>
+    <div class="modal-footer">
+      <button class="modal-footer-btn" onclick="closeEntryPaymentDetail()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 申込キャンセル状態モーダル ========== -->
+<div id="entry-cancellation-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-box confirm-box">
+    <div class="modal-header">
+      <span id="entry-cancellation-title">キャンセル状態の変更</span>
+      <button class="modal-close-btn" onclick="closeEntryCancellationModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="entry-cancellation-message" class="confirm-message"></p>
+      <label id="entry-cancellation-deposit-row" class="entry-cancellation-option">
+        <input type="checkbox" id="entry-cancellation-deposit" checked>
+        現在の入金をデポジットへ戻す
+      </label>
+      <p class="entry-cancellation-note">
+        公開日は公開後として扱います。公開前への変更では、抽選公開日の前日を
+        キャンセル日時として記録します。
+      </p>
+      <div class="confirm-buttons">
+        <button class="confirm-yes-btn" onclick="executeEntryCancellation()">変更する</button>
+        <button class="confirm-no-btn" onclick="closeEntryCancellationModal()">戻る</button>
       </div>
     </div>
   </div>

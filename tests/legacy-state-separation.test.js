@@ -33,7 +33,7 @@ assert.strictEqual(selectionWrites, 0);
 const serverSource = read('server/TournamentDetail.js');
 const uiSource = read('scripts/calendar.html');
 assert.match(serverSource, /支払状態（旧セル推定）/);
-assert.match(uiSource, /支払い登録はv2移行後に利用できます/);
+assert.match(uiSource, /v2移行後に利用できます/);
 assert.match(uiSource, /detailSheetVersion !== 2/);
 
 console.log('Legacy selection/payment separation checks passed.');

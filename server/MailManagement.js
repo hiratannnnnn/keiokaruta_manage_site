@@ -707,9 +707,161 @@ function addMailManagementRow(json) {
 }
 
 // ------------------------------------------------
+function mailManagementNameParts_(value) {
+  const normalized = String(value || '').trim().replace(/[ 　]+/g, ' ');
+  const parts = normalized ? normalized.split(' ') : [];
+  return {
+    original: normalized,
+    family: parts.shift() || '',
+    given: parts.join(''),
+  };
+}
+
+function mailManagementEmailParts_(value) {
+  const match = String(value || '').trim().toLowerCase()
+    .match(/^([^@\s]+)@([^@\s]+)$/);
+  return match ? { local: match[1], domain: match[2] } : null;
+}
+
+// ローカル部は、必ず末尾を1文字以上伏せた状態で一意になる場合だけ使う。
+// 全文を出さなければ区別できない場合はnullを返し、番号表示へ退避する。
+function mailManagementSafeLocalPrefixes_(people) {
+  const items = people.map(person => ({
+    person: person,
+    local: person.emailParts.local,
+    length: 1,
+  }));
+  if (items.some(item => item.local.length < 2)) return null;
+  while (true) {
+    const labels = {};
+    items.forEach(item => {
+      const prefix = item.local.slice(0, item.length);
+      if (!labels[prefix]) labels[prefix] = [];
+      labels[prefix].push(item);
+    });
+    const duplicates = Object.keys(labels).filter(
+      prefix => labels[prefix].length > 1
+    );
+    if (!duplicates.length) {
+      const result = {};
+      items.forEach(item => {
+        result[item.person.index] = item.local.slice(0, item.length) + '***';
+      });
+      return result;
+    }
+    let extended = false;
+    duplicates.forEach(prefix => {
+      labels[prefix].forEach(item => {
+        // 少なくとも末尾1文字を伏せる。ここを越える場合は番号へ退避する。
+        if (item.length < item.local.length - 1) {
+          item.length++;
+          extended = true;
+        }
+      });
+    });
+    if (!extended) return null;
+  }
+}
+
+function mailManagementExactNameLabels_(baseLabel, people) {
+  const fallback = {};
+  people.forEach((person, index) => {
+    fallback[person.index] = baseLabel + '（同名' + (index + 1) + '）';
+  });
+  const valid = people.filter(person => person.emailParts);
+  if (valid.length !== people.length) return fallback;
+
+  const byDomain = {};
+  valid.forEach(person => {
+    const domain = person.emailParts.domain;
+    if (!byDomain[domain]) byDomain[domain] = [];
+    byDomain[domain].push(person);
+  });
+  const result = {};
+  Object.keys(byDomain).forEach(domain => {
+    const group = byDomain[domain];
+    if (group.length === 1) {
+      result[group[0].index] = baseLabel + '（***@' + domain + '）';
+      return;
+    }
+    const prefixes = mailManagementSafeLocalPrefixes_(group);
+    group.forEach((person, index) => {
+      result[person.index] = prefixes
+        ? baseLabel + '（' + prefixes[person.index] + '@' + domain + '）'
+        : baseLabel + '（***@' + domain + '・同名' + (index + 1) + '）';
+    });
+  });
+  return result;
+}
+
+// リマインダーでは名字を基本にし、同姓の人だけ名前を必要な文字数まで
+// 付ける。同姓同名だけは安全な範囲でメール情報を使って区別する。
+function mailManagementReminderDisplayNames_(records) {
+  const people = (records || []).map((record, index) => {
+    const parts = mailManagementNameParts_(record.name);
+    return {
+      index: index,
+      family: parts.family,
+      given: parts.given,
+      length: parts.given ? 1 : 0,
+      label: parts.family,
+      emailParts: mailManagementEmailParts_(record.email),
+    };
+  });
+  const families = {};
+  people.forEach(person => {
+    if (!families[person.family]) families[person.family] = [];
+    families[person.family].push(person);
+  });
+
+  Object.keys(families).forEach(family => {
+    const group = families[family];
+    if (group.length === 1) {
+      group[0].label = family;
+      return;
+    }
+    while (true) {
+      const labels = {};
+      group.forEach(person => {
+        person.label = family + person.given.slice(0, person.length);
+        if (!labels[person.label]) labels[person.label] = [];
+        labels[person.label].push(person);
+      });
+      const duplicates = Object.keys(labels).filter(
+        label => labels[label].length > 1
+      );
+      if (!duplicates.length) break;
+      let extended = false;
+      duplicates.forEach(label => {
+        labels[label].forEach(person => {
+          if (person.length < person.given.length) {
+            person.length++;
+            extended = true;
+          }
+        });
+      });
+      if (extended) continue;
+      duplicates.forEach(label => {
+        const exactLabels = mailManagementExactNameLabels_(
+          label, labels[label]
+        );
+        labels[label].forEach(person => {
+          person.label = exactLabels[person.index];
+        });
+      });
+      break;
+    }
+  });
+
+  return people.sort((left, right) => left.index - right.index)
+    .map(person => person.label);
+}
+
 // 内部: 参加者リスト構築（makeParticipantList 相当）
 // ------------------------------------------------
-function makeParticipantList_(tournamentName, grades, includeNotPaid) {
+function makeParticipantList_(
+  tournamentName, grades, includeNotPaid, useReminderDisplayNames
+) {
   const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const sheet = ss.getSheetByName(tournamentName + grades);
   if (!sheet) return '（シートが見つかりません）\n';
@@ -722,14 +874,20 @@ function makeParticipantList_(tournamentName, grades, includeNotPaid) {
   }
   const records = tournamentSheetResponseRecords_(structure, false)
     .filter(record => record.name !== '');
+  if (structure.version === 2) {
+    tournamentDetailEnrichRecords_(tournamentName + grades, records);
+  }
 
   const gradesArray = grades.replace('級', '').split('');
   const byGrade = {};
   gradesArray.forEach(g => { byGrade[g + '級'] = []; });
   const paidList = [];
+  const displayNames = useReminderDisplayNames
+    ? mailManagementReminderDisplayNames_(records)
+    : records.map(record => record.name.replace('　', ' '));
 
-  records.forEach(record => {
-    const name      = record.name.replace('　', ' ');
+  records.forEach((record, recordIndex) => {
+    const name      = displayNames[recordIndex];
     const gradeStr  = record.grade;
     const isPaid    = record.is_paid;
 
@@ -813,41 +971,93 @@ function createEmailBody_(tournamentName, grades, participantList, tomorrowDateS
   return body;
 }
 
-// リマインダーメール本文プレビュー取得
+function reminderPreviewData_(input) {
+  const rowNum = Number(input && input.rowNum);
+  const includeNotPaid = Boolean(input && input.includeNotPaid);
+  const sendDateTime = String(input && input.sendDateTime || '');
+  if (!Number.isInteger(rowNum) || rowNum < 6) {
+    throw new Error('メール管理の行番号が不正です。');
+  }
+  const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
+  if (!sheet) throw new Error('メール管理シートが見つかりません。');
+  const row   = sheet.getRange(rowNum, 1, 1, 8).getValues()[0];
+
+  const tournamentName = String(row[0]);
+  const grades         = String(row[1]);
+  const sheetDateStr   = row[2] instanceof Date
+    ? Utilities.formatDate(row[2], 'JST', 'yyyy-MM-dd HH:mm:ss')
+    : String(row[2] || '');
+  const sendDateStr = sendDateTime || sheetDateStr;
+  const mailType    = String(row[3]);
+  const threadTitle = String(row[4]);
+  const formLink    = String(row[5]);
+
+  if (!sendDateStr) throw new Error('送信予定日時が未設定です');
+  const targetDate = new Date(sendDateStr);
+  if (isNaN(targetDate.getTime())) {
+    throw new Error('送信予定日時を日付として認識できません。');
+  }
+  if (targetDate - new Date() < 60 * 60 * 1000) {
+    throw new Error(
+      '送信予定日時は現在時刻から1時間以上後に設定してください'
+    );
+  }
+
+  const participantList = makeParticipantList_(
+    tournamentName,
+    grades,
+    includeNotPaid,
+    mailType === 'リマインダー'
+  );
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const tomorrow = new Date(targetDate.getTime());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDateStr =
+    (tomorrow.getMonth() + 1) + '月' + tomorrow.getDate() + '日（'
+    + weekdays[tomorrow.getDay()] + '）';
+  const quotedContent = quoteEmail_(threadTitle);
+  const body = createEmailBody_(
+    tournamentName, grades, participantList, tomorrowDateStr,
+    formLink, mailType, quotedContent
+  );
+  return {
+    ok: true,
+    body: body,
+    sendDateFormatted: Utilities.formatDate(
+      targetDate, 'JST', 'yyyy年MM月dd日 HH時mm分'
+    ),
+    tournamentName: tournamentName,
+    grades: grades,
+    mailType: mailType,
+  };
+}
+
+// リマインダーメール本文プレビュー取得（Gmail・シートへの書込みなし）
 function getReminderPreview(json) {
   try {
-    const { rowNum, includeNotPaid, sendDateTime } = JSON.parse(json);
-    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
-    const row   = sheet.getRange(rowNum, 1, 1, 8).getValues()[0];
+    return JSON.stringify(reminderPreviewData_(JSON.parse(json)));
+  } catch(e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
 
-    const tournamentName = String(row[0]);
-    const grades         = String(row[1]);
-    const sheetDateStr   = row[2] instanceof Date
-      ? Utilities.formatDate(row[2], 'JST', 'yyyy-MM-dd HH:mm:ss')
-      : String(row[2] || '');
-    const sendDateStr = sendDateTime || sheetDateStr;
-    const mailType    = String(row[3]);
-    const threadTitle = String(row[4]);
-    const formLink    = String(row[5]);
-
-    if (!sendDateStr) return JSON.stringify({ error: '送信予定日時が未設定です' });
-
-    const targetDate = new Date(sendDateStr);
-    if (targetDate - new Date() < 60 * 60 * 1000) return JSON.stringify({ error: '送信予定日時は現在時刻から1時間以上後に設定してください' });
-
-    const participantList = makeParticipantList_(tournamentName, grades, includeNotPaid);
-
-    const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-    const tomorrow = new Date(targetDate.getTime());
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowDateStr = (tomorrow.getMonth() + 1) + '月' + tomorrow.getDate() + '日（' + WEEKDAYS[tomorrow.getDay()] + '）';
-
-    const quotedContent = quoteEmail_(threadTitle);
-    const body          = createEmailBody_(tournamentName, grades, participantList, tomorrowDateStr, formLink, mailType, quotedContent);
-    const sendDateFormatted = Utilities.formatDate(targetDate, 'JST', 'yyyy年MM月dd日 HH時mm分');
-
-    return JSON.stringify({ ok: true, body, sendDateFormatted, tournamentName, grades, mailType });
+function createReminderDraftFromPreview(json) {
+  try {
+    const preview = reminderPreviewData_(JSON.parse(json));
+    if (preview.mailType !== 'リマインダー') {
+      throw new Error('リマインダー行だけ下書きを作成できます。');
+    }
+    const recipients = getDefaultRecipients_();
+    const subject =
+      preview.tournamentName + preview.grades + '\u3000リマインダー';
+    GmailApp.createDraft(
+      recipients.to,
+      subject,
+      preview.body,
+      { bcc: recipients.bcc, name: '慶應かるた会' }
+    );
+    return JSON.stringify({ ok: true, subject: subject });
   } catch(e) {
     return JSON.stringify({ error: e.message });
   }

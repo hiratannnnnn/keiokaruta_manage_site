@@ -10,15 +10,27 @@
           API全件照合とv2再読取検証の成功後だけ、旧個人状態列、フォームID/編集URL列、
           旧制御列、旧下部固定領域を撤去します。旧セルの値・数式・メモ・表示形式・
           背景色・入力規則はv2の旧管理監査にも保存します。
+          対象は、級別の開催日が現在年度（4月1日から翌年3月31日）に含まれる
+          大会シートだけです。
           初期状態では何も選択せず、検査だけではシートを変更しません。
-          実行時は対象シートの非表示バックアップを先に作成し、照合・変換・検証の
-          いずれかに失敗した場合は同じシートをバックアップから戻します。
+          実行前にGoogleスプレッドシート側の自動履歴が利用できることを確認してください。
+          コード内では追加のバックアップシートを作成しません。
         </p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button type="button" onclick="sheetMigrationPreview()">移行内容を検査</button>
+          <button id="sheet-migration-preview" type="button"
+                  onclick="sheetMigrationPreview()">移行内容を検査</button>
           <button id="sheet-migration-run" type="button"
                   onclick="sheetMigrationRun()" disabled>選択したシートを移行</button>
           <span id="sheet-migration-status" class="op-status"></span>
+        </div>
+        <div id="sheet-migration-progress" class="db-admin-sync-progress"
+             style="display:none;">
+          <div class="db-admin-sync-progress-track">
+            <div id="sheet-migration-progress-bar"
+                 class="db-admin-sync-progress-bar"></div>
+          </div>
+          <span id="sheet-migration-progress-text"
+                class="db-admin-sync-progress-text"></span>
         </div>
       </div>
     </div>

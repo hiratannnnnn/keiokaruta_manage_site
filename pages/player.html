@@ -28,8 +28,12 @@
     <!-- 右：出場大会 -->
     <div class="panel">
       <div class="panel-header">
-        出場大会
-        <span id="result-count" class="count-badge" style="display:none;"></span>
+        <span>
+          出場大会
+          <span id="result-count" class="count-badge" style="display:none;"></span>
+        </span>
+        <button id="results-download" type="button" class="panel-header-action"
+                onclick="downloadTournamentResultsCsv()" disabled>CSV</button>
       </div>
       <div class="panel-body">
         <div class="search-bar">

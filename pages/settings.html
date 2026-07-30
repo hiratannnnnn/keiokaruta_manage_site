@@ -15,7 +15,18 @@
             <strong>シート移行を表示する</strong>
             <small>
               「シート移行」を一時的に表示します。タブを開くと再び非表示になります。
-              実行機能の安全ゲートは別途維持されます。
+              この表示設定は移行処理の実行可否には影響しません。
+            </small>
+          </span>
+        </label>
+        <label class="settings-feature-toggle">
+          <input id="settings-show-authentication" type="checkbox"
+                 onchange="toggleAuthenticationNavigation(this.checked)">
+          <span>
+            <strong>認証を表示する</strong>
+            <small>
+              「認証」を一時的に表示します。タブを開くと再び非表示になります。
+              このページでは、スプレッドシート上の同姓同名・異メールアドレスを確認できます。
             </small>
           </span>
         </label>

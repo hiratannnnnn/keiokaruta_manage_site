@@ -2,6 +2,8 @@
 let participationMatrixData = null;
 let participationMatrixSelectedNameKey = '';
 let participationMatrixSelectedPlayerId = '';
+let participationMatrixVisiblePlayers = [];
+let participationMatrixVisibleTournaments = [];
 
 function participationMatrixNormalizeName(name) {
   return String(name || '').replace(/[ 　]+/g, '').trim().toLowerCase();
@@ -25,6 +27,7 @@ function loadParticipationMatrix(force) {
   const status = document.getElementById('participation-matrix-status');
   const reload = document.getElementById('participation-matrix-reload');
   reload.disabled = true;
+  document.getElementById('participation-matrix-download').disabled = true;
   status.style.display = 'block';
   status.className = 'status';
   status.innerHTML = '<span class="spinner"></span> DBから出場一覧を読み込み中...';
@@ -74,6 +77,8 @@ function renderParticipationMatrix(players, tournaments) {
   const wrap = document.getElementById('participation-matrix-wrap');
   const badge = document.getElementById('participation-matrix-count');
   const participationMap = {};
+  participationMatrixVisiblePlayers = players.slice();
+  participationMatrixVisibleTournaments = tournaments.slice();
   (participationMatrixData.participations || []).forEach(item => {
     participationMap[String(item.player_id) + ':' + String(item.tournament_id)] = item;
   });
@@ -82,6 +87,7 @@ function renderParticipationMatrix(players, tournaments) {
   badge.style.display = 'inline-block';
 
   if (!players.length || !tournaments.length) {
+    document.getElementById('participation-matrix-download').disabled = true;
     wrap.style.display = 'none';
     status.style.display = 'block';
     status.className = 'status';
@@ -89,6 +95,7 @@ function renderParticipationMatrix(players, tournaments) {
     document.getElementById('participation-matrix-selection').style.display = 'none';
     return;
   }
+  document.getElementById('participation-matrix-download').disabled = false;
 
   document.getElementById('participation-matrix-thead').innerHTML =
     '<tr><th class="participation-player-column">選手</th>'
@@ -158,6 +165,43 @@ function renderParticipationMatrix(players, tournaments) {
       'APIが結果を切り詰めたため、一部のデータや合計回数が正確でない可能性があります。';
   }
   wrap.style.display = 'block';
+}
+
+function downloadParticipationMatrixCsv() {
+  if (!participationMatrixData
+      || !participationMatrixVisiblePlayers.length
+      || !participationMatrixVisibleTournaments.length) return;
+  const participationMap = {};
+  (participationMatrixData.participations || []).forEach(item => {
+    participationMap[String(item.player_id) + ':' + String(item.tournament_id)] = item;
+  });
+  const headers = ['選手', '合計'].concat(
+    participationMatrixVisibleTournaments.map(tournament => {
+      const grades = (tournament.grades || []).length
+        ? ' ' + tournament.grades.join('') + '級' : '';
+      const dates = (tournament.heldOn || []).length
+        ? ' ' + tournament.heldOn.join('/') : '';
+      return tournament.name + grades + dates;
+    })
+  );
+  const rows = participationMatrixVisiblePlayers.map(player => [
+    player.name || '',
+    Number(player.totalCount || 0),
+  ].concat(participationMatrixVisibleTournaments.map(tournament => {
+    const item = participationMap[
+      String(player.id) + ':' + String(tournament.id)
+    ];
+    if (!item) return '';
+    return item.mark === 'sanctioned' ? '○'
+      : item.mark === 'unsanctioned' ? '△'
+        : item.mark === 'mixed' ? '○△' : '';
+  })));
+  downloadCsvFile(
+    csvDownloadDateStamp() + '_'
+      + Number(participationMatrixData.fiscalYear) + '年度_出場大会一覧.csv',
+    headers,
+    rows
+  );
 }
 
 function participationMatrixToggleSelection(nameKey, playerId) {

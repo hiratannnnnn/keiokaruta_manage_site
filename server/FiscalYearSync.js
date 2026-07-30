@@ -17,6 +17,21 @@ function fiscalSyncInYear_(value, fiscalYear) {
   return text >= fiscalYear + '-04-01' && text <= (fiscalYear + 1) + '-03-31';
 }
 
+function fiscalSyncCurrentGradesForSheet_(sheetName, structure, fiscalYear) {
+  const gradeDates = {};
+  Object.keys(structure.grade_rows).forEach(grade => {
+    const value = tournamentSheetGradeDate_(structure, grade);
+    if (value instanceof Date || fiscalSyncDate_(value)) {
+      gradeDates[grade] = value;
+    }
+  });
+  const match = String(sheetName || '').match(/([A-E]+)級$/);
+  const declaredGrades = match ? match[1].split('') : Object.keys(gradeDates);
+  return declaredGrades.filter(grade =>
+    fiscalSyncInYear_(gradeDates[grade], fiscalYear)
+  );
+}
+
 function fiscalSyncPayment_(value, heldOn) {
   if (String(value || '').trim() === '当日支払い') {
     return {
@@ -151,37 +166,40 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
       return;
     }
     const data = structure.data;
-    const gradeDates = {};
     const isSanctioned = tournamentSheetIsSanctioned_(structure);
-    Object.keys(structure.grade_rows).forEach(grade => {
-      const value = tournamentSheetGradeDate_(structure, grade);
-      if (value instanceof Date || fiscalSyncDate_(value)) {
-        gradeDates[grade] = value;
-      }
-    });
-
-    const sheetGradesMatch = sheetName.match(/([A-E]+)級$/);
-    const declaredGrades = sheetGradesMatch ? sheetGradesMatch[1].split('') : Object.keys(gradeDates);
-    const currentFiscalGrades = declaredGrades.filter(grade =>
-      fiscalSyncInYear_(gradeDates[grade], fiscalYear)
+    const currentFiscalGrades = fiscalSyncCurrentGradesForSheet_(
+      sheetName, structure, fiscalYear
     );
     // 年度判定に使うのは開催日だけ。申込・抽選・振込期限は年度をまたいでよい。
     if (!currentFiscalGrades.length) return;
+    const gradeDates = {};
+    currentFiscalGrades.forEach(grade => {
+      gradeDates[grade] = tournamentSheetGradeDate_(structure, grade);
+    });
 
     const baseName = sheetName.replace(/[A-E]+級$/, '');
     const applicationDeadline = fiscalSyncDate_(calendarRow[5]);
     if (structure.version === 1 && !applicationDeadline) {
       errors.push(sheetName + ': 申込期限が未設定です。');
     }
-    const paymentDeadline = fiscalSyncDate_(calendarRow[10]);
-    const isTournamentDayPayment = String(calendarRow[10] || '').trim() === '当日支払い';
+    const paymentSetting = structure.version === 2
+      ? tournamentSheetManagementValue_(structure, '本振込期限')
+      : calendarRow[10];
+    const paymentDeadline = fiscalSyncDate_(paymentSetting);
+    const paymentTiming = structure.version === 2
+      ? tournamentSheetPaymentTimingFromStructure_(structure)
+      : fiscalSyncPayment_(calendarRow[10], '').payment_timing;
     const paymentCompleted = String(calendarRow[11] || '').trim() === '済';
-    if (paymentCompleted && !paymentDeadline && !isTournamentDayPayment) {
+    if (paymentCompleted && !paymentDeadline
+        && paymentTiming !== 'on_tournament_day'
+        && paymentTiming !== 'after_tournament') {
       warnings.push(
         sheetName + ': 振込完了が「済」ですが、本振込期限が未設定または日付として認識できません。'
       );
     }
-    const feeResult = taikaiGradeFeesFromSheetData_(data, sheetName, currentFiscalGrades);
+    const feeResult = taikaiGradeFeesFromStructure_(
+      structure, sheetName, currentFiscalGrades
+    );
     errors.push.apply(errors, feeResult.errors);
     let paymentInstructions;
     let hasPaymentInstructions = true;
@@ -214,11 +232,10 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
     currentFiscalGrades.forEach(grade => {
       const heldOn = fiscalSyncDate_(gradeDates[grade]);
       const payment = fiscalSyncPayment_(calendarRow[10], heldOn);
-      const v2Row = structure.version === 2
-        ? structure.management.schedules[grade].row
-        : null;
-      const v2ApplicationDeadline = v2Row
-        ? fiscalSyncDate_(v2Row[4])
+      const v2ApplicationDeadline = structure.version === 2
+        ? fiscalSyncDate_(
+          tournamentSheetManagementValue_(structure, '本申込期限')
+        )
         : applicationDeadline;
       if (!v2ApplicationDeadline) {
         errors.push(sheetName + ': ' + grade + '級の申込期限が未設定です。');
@@ -227,33 +244,36 @@ function buildFiscalYearDatabaseSnapshot_(operationId) {
         held_on: heldOn,
         grade: grade,
         application_deadline: v2ApplicationDeadline,
-        payment_deadline: v2Row
-          ? (fiscalSyncDate_(v2Row[6]) || null)
+        payment_deadline: structure.version === 2
+          ? (fiscalSyncDate_(
+            tournamentSheetManagementValue_(structure, '本振込期限')
+          ) || null)
           : payment.payment_deadline,
-        payment_timing: v2Row
-          ? (String(v2Row[7] || '').trim() || null)
+        payment_timing: structure.version === 2
+          ? tournamentSheetPaymentTimingFromStructure_(structure)
           : payment.payment_timing,
         participation_fee_yen: Object.prototype.hasOwnProperty.call(feeResult.fees, grade)
           ? feeResult.fees[grade]
           : null,
-        lottery_result_date: v2Row
-          ? (fiscalSyncDate_(v2Row[8]) || null)
+        lottery_result_date: structure.version === 2
+          ? (fiscalSyncDate_(
+            tournamentSheetManagementValue_(structure, '抽選日')
+          ) || null)
           : (fiscalSyncDate_(calendarRow[7]) || null),
-        venue: v2Row ? (String(v2Row[9] || '').trim() || null) : null,
-        reception_ends_at: v2Row ? (String(v2Row[10] || '').trim() || null) : null,
-        is_sanctioned: v2Row
-          ? (v2Row[11] === true || String(v2Row[11]).toLowerCase() === 'true'
-            || Number(v2Row[11]) === 1)
-          : isSanctioned,
+        is_sanctioned: isSanctioned,
       };
-      if (v2Row) {
-        schedule.internal_payment_deadline = fiscalSyncDate_(v2Row[5]) || null;
-        schedule.payment_instructions = String(v2Row[12] || '').trim() || null;
-      } else if (internalPaymentDeadlineIndex !== null && internalPaymentDeadline.valid) {
-        schedule.internal_payment_deadline = internalPaymentDeadline.value;
-      }
-      if (!v2Row && hasPaymentInstructions) {
-        schedule.payment_instructions = paymentInstructions;
+      if (structure.version === 2) {
+        schedule.payment_instructions =
+          tournamentSheetPaymentInstructionsFromStructure_(structure);
+      } else {
+        schedule.venue = null;
+        schedule.reception_ends_at = null;
+        if (internalPaymentDeadlineIndex !== null && internalPaymentDeadline.valid) {
+          schedule.internal_payment_deadline = internalPaymentDeadline.value;
+        }
+        if (hasPaymentInstructions) {
+          schedule.payment_instructions = paymentInstructions;
+        }
       }
       schedules.push(schedule);
     });
@@ -467,9 +487,6 @@ function syncFiscalYearDatabase() {
         });
       });
     } catch (mailError) {
-      markFiscalTournamentSheetsV2SyncState_(
-        snapshot, 'partial_mail', mailError.message || mailError
-      );
       return JSON.stringify({
         error: '大会・申込の差分同期は成功しましたが、メール同期に失敗しました。'
           + '同じ完全同期を再実行してください: ' + mailError.message,
@@ -484,41 +501,14 @@ function syncFiscalYearDatabase() {
         + gmailPlan.errors.length + '件残っています。'
       );
     }
-    let sheetWriteback;
-    try {
-      sheetWriteback = refreshFiscalYearTournamentSheetsV2_(snapshot);
-    } catch (writebackError) {
-      markFiscalTournamentSheetsV2SyncState_(
-        snapshot, 'pending_sheet', writebackError.message || writebackError
-      );
-      return JSON.stringify({
-        error: 'DB/API同期は成功しましたが、大会シートへの書戻しに失敗しました。'
-          + '片側完了にはせず、同じ完全同期を再実行してください: '
-          + writebackError.message,
-        partial: true,
-        result: result,
-      });
-    }
-    if (gmailPlan.errors.length) {
-      markFiscalTournamentSheetsV2SyncState_(
-        snapshot,
-        'partial_gmail',
-        'Gmail IDを一意に確認できない案内が' + gmailPlan.errors.length + '件あります。'
-      );
-    }
     const pendingCleared = gmailPlan.errors.length
       ? false
       : taikaiClearPendingTournaments_(
         snapshot.tournaments.map(item => item.name)
       );
     if (!gmailPlan.errors.length && !pendingCleared) {
-      markFiscalTournamentSheetsV2SyncState_(
-        snapshot,
-        'partial_pending',
-        'DB未同期状態の解除に失敗しました。'
-      );
       return JSON.stringify({
-        error: 'DB/API・大会シート・Gmailの同期は完了しましたが、'
+        error: 'DB/API・Gmailの同期は完了しましたが、'
           + 'DB未同期状態の解除に失敗しました。同じ完全同期を再実行してください。',
         partial: true,
         result: result,
@@ -529,7 +519,6 @@ function syncFiscalYearDatabase() {
           unresolved_count: 0,
           unresolved: [],
         },
-        sheet_writeback: sheetWriteback,
       });
     }
     if (gmailPlan.errors.length) {
@@ -546,7 +535,6 @@ function syncFiscalYearDatabase() {
           unresolved_count: gmailPlan.errors.length,
           unresolved: gmailPlan.errors,
         },
-        sheet_writeback: sheetWriteback,
       });
     }
     return JSON.stringify({
@@ -560,7 +548,6 @@ function syncFiscalYearDatabase() {
         unresolved_count: gmailPlan.errors.length,
         unresolved: gmailPlan.errors,
       },
-      sheet_writeback: sheetWriteback,
       warning: warnings.join(' '),
     });
     } catch (e) {

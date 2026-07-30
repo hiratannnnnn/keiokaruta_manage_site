@@ -85,40 +85,6 @@ function setCalendarColumn(name, colOneBased, value) {
           apiUpdated = true;
         }
         sheet.getRange(i + 1, colOneBased).setValue(value);
-        if (colOneBased === 7 || colOneBased === 12) {
-          const writebackErrors = [];
-          siblingRows.forEach(row => {
-            const siblingName = String(row[0]);
-            const tournamentSheet = ss.getSheetByName(siblingName);
-            try {
-              if (!tournamentSheet) {
-                throw new Error('大会シートが見つかりません。');
-              }
-              const structure = tournamentSheetStructure_(tournamentSheet, false);
-              if (structure.version !== 2) return;
-              refreshTournamentSheetV2FromApi_(tournamentSheet);
-            } catch (writebackError) {
-              if (tournamentSheet) {
-                try {
-                  markTournamentSheetV2SyncState_(
-                    tournamentSheet,
-                    'pending_sheet',
-                    writebackError.message || writebackError
-                  );
-                } catch (markError) {}
-              }
-              writebackErrors.push(siblingName + ': ' + writebackError.message);
-            }
-          });
-          if (writebackErrors.length) {
-            return JSON.stringify({
-              error: 'DBとカレンダーの更新は成功しましたが、大会シートへの書戻しに'
-                + '失敗しました。同じ操作を再実行してください: '
-                + writebackErrors.join(' / '),
-              partial: true,
-            });
-          }
-        }
         return JSON.stringify({ ok: true });
       }
     }

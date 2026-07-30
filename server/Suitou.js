@@ -69,6 +69,22 @@ function suitouDepositSignedAmount_(transaction) {
   return -amount;
 }
 
+function suitouDepositReason_(transaction) {
+  const type = String(transaction.transaction_type || '');
+  const note = String(transaction.note || '');
+  if (type === 'overpayment_to_deposit' && note.includes('キャンセル')) {
+    return 'キャンセルによるデポジット振替';
+  }
+  const labels = {
+    deposit_received: 'デポジット受入',
+    deposit_refunded: 'デポジット返金',
+    overpayment_to_deposit: '過払い分のデポジット振替',
+    deposit_applied: '参加費へのデポジット充当',
+    adjustment: 'デポジット調整',
+  };
+  return labels[type] || 'デポジット（' + type + '）';
+}
+
 // DBの支払い履歴・デポジット取引を正本として取得する。
 function getSuitouSheets() {
   try {
@@ -108,7 +124,7 @@ function getSuitouSheets() {
         entry_id: deposit.entry_id ? String(deposit.entry_id) : null,
         name: playerNames[String(deposit.player_id)] || '選手ID ' + deposit.player_id,
         amount: suitouDepositSignedAmount_(deposit),
-        reason: 'デポジット（' + String(deposit.transaction_type || '') + '）',
+        reason: suitouDepositReason_(deposit),
         date: String(deposit.occurred_at || ''),
         note: String(deposit.note || ''),
         reversed_at: deposit.reversed_at || null,
@@ -207,18 +223,6 @@ function addSuitouApiTransaction(json) {
     } else {
       throw new Error('操作が不正です。');
     }
-    if (result && result.entry_id) {
-      try {
-        refreshTournamentSheetV2ByEntryId_(String(result.entry_id));
-      } catch (writebackError) {
-        return JSON.stringify({
-          error: '出納APIへの登録は成功しましたが、大会シートの書戻しに失敗しました。'
-            + '同じ再送防止キーで再実行してください: ' + writebackError.message,
-          partial: true,
-          result: result,
-        });
-      }
-    }
     return JSON.stringify({ ok: true, result: result });
   } catch (e) {
     return JSON.stringify({ error: e.message });
@@ -241,18 +245,6 @@ function reverseSuitouApiTransaction(type, id, reversedAt) {
     const result = taikaiApiRequest_(
       'POST', path, { reversed_at: timestamp }
     );
-    if (result && result.entry_id) {
-      try {
-        refreshTournamentSheetV2ByEntryId_(String(result.entry_id));
-      } catch (writebackError) {
-        return JSON.stringify({
-          error: '取消APIへの登録は成功しましたが、大会シートの書戻しに失敗しました。'
-            + '同じ取消日時で再実行してください: ' + writebackError.message,
-          partial: true,
-          result: result,
-        });
-      }
-    }
     return JSON.stringify({ ok: true, result: result });
   } catch (e) {
     return JSON.stringify({ error: e.message });
@@ -281,17 +273,6 @@ function getPlayerDeposit(playerId, playerName) {
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
-}
-
-// 大会シートの下部セクションから参加費テーブルを取得
-function getSuitouFeeMap_(allData, formEndIdx) {
-  const feeMap = {};
-  const rows = tournamentSheetGradeRows_(allData, formEndIdx, false);
-  Object.keys(rows).forEach(grade => {
-    const fee = (allData[rows[grade] - 1] || [])[1];
-    if (typeof fee === 'number' && fee > 0) feeMap[grade] = fee;
-  });
-  return feeMap;
 }
 
 // 級文字列から参加費合計を計算

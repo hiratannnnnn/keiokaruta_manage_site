@@ -11,7 +11,7 @@ const utils = fs.readFileSync(path.join(root, 'scripts/utils.html'), 'utf8');
 assert.match(index, /id="nav-sheet-migration-btn" style="display:none;"/);
 assert.match(page, /id="settings-show-sheet-migration"/);
 assert.match(page, /タブを開くと再び非表示になります/);
-assert.match(page, /実行機能の安全ゲートは別途維持されます/);
+assert.match(page, /この表示設定は移行処理の実行可否には影響しません/);
 assert.match(settings, /const SHEET_MIGRATION_NAV_KEY = 'karuta_show_sheet_migration'/);
 assert.match(settings, /const visible = isSheetMigrationNavigationEnabled\(\)/);
 assert.doesNotMatch(settings, /currentRole/);

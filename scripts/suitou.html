@@ -52,9 +52,11 @@ function suSetLoading(on) {
   });
   document.getElementById('su-tx-table-wrap').style.display = 'none';
   document.getElementById('su-entry-table-wrap').style.display = 'none';
+  document.getElementById('su-tx-download').disabled = true;
 }
 
 function suSetError(message) {
+  document.getElementById('su-tx-download').disabled = true;
   ['su-tx-status', 'su-entry-status'].forEach(id => {
     const element = document.getElementById(id);
     element.style.display = 'block';
@@ -81,12 +83,14 @@ function suRenderTx(transactions) {
   const tbody = document.getElementById('su-tx-tbody');
   tbody.replaceChildren();
   if (!transactions.length) {
+    document.getElementById('su-tx-download').disabled = true;
     status.style.display = 'block';
     status.className = 'status';
     status.textContent = '支払い・デポジット履歴がありません。';
     wrap.style.display = 'none';
     return;
   }
+  document.getElementById('su-tx-download').disabled = false;
   status.style.display = 'none';
   transactions.forEach(transaction => {
     const row = document.createElement('tr');
@@ -116,6 +120,25 @@ function suRenderTx(transactions) {
     tbody.appendChild(row);
   });
   wrap.style.display = '';
+}
+
+function suDownloadTransactionsCsv() {
+  const transactions = _suAllData && Array.isArray(_suAllData.transactions)
+    ? _suAllData.transactions : [];
+  if (!transactions.length) return;
+  downloadCsvFile(
+    csvDownloadDateStamp() + '_'
+      + Number(_suAllData.fiscalYear) + '年度_支払い・デポジット履歴.csv',
+    ['氏名', '金額（円）', '事由', 'メモ', '最終更新', '状態'],
+    transactions.map(transaction => [
+      transaction.name || '',
+      Number(transaction.amount || 0),
+      transaction.reason || '',
+      transaction.note || '',
+      suFormatTimestamp(transaction.date),
+      transaction.reversed_at ? '取消済み' : '有効',
+    ])
+  );
 }
 
 function suRenderEntries(entries) {

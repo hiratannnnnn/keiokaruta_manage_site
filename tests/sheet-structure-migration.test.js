@@ -4,378 +4,98 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
-const migrationSource = fs.readFileSync(
-  path.join(root, 'server/SheetStructureMigration.js'), 'utf8'
-);
 const v2Source = fs.readFileSync(
   path.join(root, 'server/TournamentSheetV2.js'), 'utf8'
 );
 const structureSource = fs.readFileSync(
   path.join(root, 'server/TournamentSheetStructure.js'), 'utf8'
 );
-const formSubmitSource = fs.readFileSync(
-  path.join(root, 'server/FormSubmit.js'), 'utf8'
-);
-const page = fs.readFileSync(
-  path.join(root, 'pages/sheet-migration.html'), 'utf8'
-);
-const script = fs.readFileSync(
-  path.join(root, 'scripts/sheet-migration.html'), 'utf8'
+const migrationSource = fs.readFileSync(
+  path.join(root, 'server/SheetStructureMigration.js'), 'utf8'
 );
 const sandbox = { Date };
 vm.runInNewContext(v2Source, sandbox);
 vm.runInNewContext(structureSource, sandbox);
-vm.runInNewContext(migrationSource, sandbox);
-vm.runInNewContext(formSubmitSource, sandbox);
-
-assert.strictEqual(sandbox.sheetMigrationColumnLabel_(1), 'A');
-assert.strictEqual(sandbox.sheetMigrationColumnLabel_(26), 'Z');
-assert.strictEqual(sandbox.sheetMigrationColumnLabel_(27), 'AA');
-assert.deepStrictEqual(
-  JSON.parse(JSON.stringify(sandbox.sheetMigrationCanonicalValue_(2500))),
-  { type: 'number', value: '2500' }
-);
 
 const snapshot = {
-  tournament_name: '第1回テスト大会',
-  tournament_id: '10',
   form_id: 'form-1',
-  form_public_url: 'https://example.com/form',
   form_edit_url: 'https://docs.google.com/forms/d/form-1/edit',
-  registration_completed: true,
-  payment_completed: false,
   is_sanctioned: true,
-  sync_status: 'synced',
-  synced_at: new Date('2026-07-28T00:00:00Z'),
-  sync_error: '',
+  settings: {
+    '申込開始日': new Date('2026-02-26T00:00:00Z'),
+    'リマインダー': new Date('2026-03-11T00:00:00Z'),
+    '本申込期限': '2026-03-18',
+    '抽選日': '2026-03-25',
+    '本振込期限': '2026-04-22',
+    '後納制': '',
+    '振込先': '銀行名\n支店名',
+  },
   schedules: [{
-    grade: 'A',
-    participation_fee_yen: 2500,
-    held_on: '2026-08-01',
-    id: '20',
-    application_deadline: '2026-07-01',
-    is_sanctioned: true,
-    sync_status: 'synced',
+    grade: 'D',
+    participation_fee_yen: 3000,
+    held_on: '2026-04-29',
   }],
-  entries: [{
-    source_row: 2,
-    email: 'person@example.com',
-    name: '山田 太郎',
-    grade: 'A',
-    sheet_status: '済',
-    player_id: '30',
-    entry_id: '40',
-    schedule_id: '20',
-    participation_fee_yen: 2500,
-    paid_yen: 2500,
-    balance_yen: 0,
-    payment_status: 'paid',
-    sync_status: 'synced',
-  }],
-  announcements: [],
-  email_jobs: [],
-  legacy_records: [['Q1', '"旧列"', 'string', '"記帳済"', '""', '""', '"@"', '"#fff"', '']],
 };
-assert.strictEqual(sandbox.tournamentSheetV2ValidateSnapshot_(snapshot, true), true);
-const reminderSnapshot = Object.assign({}, snapshot, {
-  email_jobs: [{
-    id: 'job-reminder',
-    mail_type: 'reminder',
-    schedule_ids: ['20'],
-    deliveries: [{ id: 'delivery-reminder', entry_id: null }],
-  }],
-});
-assert.strictEqual(
-  sandbox.tournamentSheetV2ValidateSnapshot_(reminderSnapshot, true),
-  true
-);
-const invalidPaymentDeliverySnapshot = Object.assign({}, snapshot, {
-  email_jobs: [{
-    id: 'job-payment',
-    mail_type: 'payment_confirmation',
-    schedule_ids: ['20'],
-    deliveries: [{ id: 'delivery-payment', entry_id: null }],
-  }],
-});
-assert.throws(
-  () => sandbox.tournamentSheetV2ValidateSnapshot_(
-    invalidPaymentDeliverySnapshot, true
-  ),
-  /配信識別情報が不足/
-);
+
+assert.strictEqual(sandbox.tournamentSheetV2ValidateSnapshot_(snapshot), true);
 const rows = sandbox.tournamentSheetV2Rows_(snapshot);
-assert.strictEqual(rows[0][0], '__TAIKAI_MANAGEMENT_V2__');
-assert.ok(rows.some(row => row[0] === 'A' && row[3] === '20'));
-assert.ok(rows.some(row => row[0] === '申込' && row[7] === '40'));
-assert.ok(rows.some(row => row[0] === '旧管理' && row[1] === 'Q1'));
-assert.strictEqual(rows[0].length, 17);
-const scheduleHeader = rows.find(row => row[0] === '[日程]');
-assert.strictEqual(scheduleHeader[13], '同期状態');
-assert.strictEqual(scheduleHeader[14], '最終同期日時');
-
-const rawStructure = {
-  data: [
-    ['送信日時', '参加級', '連絡用メールアドレス', '氏名'],
-    [new Date('2026-07-01T00:00:00Z'), 'A級', 'FIRST@example.com', '山田 太郎'],
-    [new Date('2026-07-02T00:00:00Z'), 'B級', 'first@example.com', '山田 太郎'],
-  ],
-  response_end_index: 3,
-  layout: { raw_response_column_count: 4 },
-  version: 2,
-};
-const responseColumns = sandbox.tournamentSheetResponseColumns_(rawStructure);
-assert.deepStrictEqual(
-  JSON.parse(JSON.stringify(responseColumns)),
-  { timestamp: 0, email: 2, name: 3, grade: 1 }
-);
-const latestResponses = sandbox.tournamentLatestByEmail_([
-  {
-    email: 'FIRST@example.com',
-    registered_at_ms: new Date('2026-07-01T00:00:00Z').getTime(),
-    source_order: 0,
-    source_row: 2,
-  },
-  {
-    email: 'first@example.com',
-    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
-    source_order: 1,
-    source_row: 3,
-  },
-]);
-assert.strictEqual(latestResponses['first@example.com'].source_row, 3);
-const tieBrokenResponses = sandbox.tournamentLatestByEmail_([
-  {
-    email: 'tie@example.com',
-    registered_at_ms: null,
-    source_order: 9,
-    source_row: 9,
-  },
-  {
-    email: 'tie@example.com',
-    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
-    source_order: 1,
-    source_row: 2,
-  },
-  {
-    email: 'tie@example.com',
-    registered_at_ms: new Date('2026-07-02T00:00:00Z').getTime(),
-    source_order: 2,
-    source_row: 3,
-  },
-]);
-assert.strictEqual(tieBrokenResponses['tie@example.com'].source_row, 3);
-
-const recordStructure = {
-  version: 2,
-  data: [
-    ['送信日時', '参加級', '連絡用メールアドレス', '氏名'],
-    [new Date('2026-07-01T00:00:00Z'), 'A級', 'same@example.com', '旧回答'],
-    [new Date('2026-07-02T00:00:00Z'), 'A級', 'same@example.com', '最新回答'],
-    [new Date('2026-07-03T00:00:00Z'), 'B級', 'other@example.com', '別回答'],
-  ],
-  response_end_index: 4,
-  layout: { raw_response_column_count: 4 },
-  management: {
-    entries_by_source_row: {
-      2: { row: ['申込', 2, '', '', '', '', '', '', '', '', 2500, 0, 2500, 'unpaid', 'superseded'] },
-      3: { row: ['申込', 3, '', '', '', '済', 'p3', 'e3', 's3', '', 2500, 0, 2500, 'unpaid', 'synced'] },
-      4: { row: ['申込', 4, '', '', '', 'キャンセル待ち1番', 'p4', 'e4', 's4', '', 2500, 2500, 0, 'paid', 'synced'] },
-    },
-  },
-};
-const activeRecords = sandbox.tournamentSheetResponseRecords_(recordStructure, false);
-assert.strictEqual(activeRecords.length, 2);
-assert.strictEqual(activeRecords[0].source_row, 3);
-assert.strictEqual(activeRecords[0].selection_status, '');
-assert.strictEqual(activeRecords[0].is_paid, false);
-assert.strictEqual(
-  sandbox.tournamentSheetPaymentDisplayStatus_(activeRecords[0]), '未払い'
-);
-assert.strictEqual(activeRecords[1].selection_status, 'キャンセル待ち1番');
-assert.strictEqual(activeRecords[1].is_paid, true);
-assert.strictEqual(
-  sandbox.tournamentSheetPaymentDisplayStatus_(activeRecords[1]),
-  '済'
-);
-assert.strictEqual(
-  sandbox.tournamentSheetResponseRecord_(recordStructure, 4, 'e4').entry_id,
-  'e4'
-);
-assert.throws(
-  () => sandbox.tournamentSheetResponseRecord_(recordStructure, 4, 'wrong'),
-  /一意に特定/
-);
-
-const parsed = sandbox.tournamentSheetV2Parse_(
-  [['送信日時', 'メールアドレス']].concat(rows), 1
-);
-assert.strictEqual(parsed.metadata['tournament ID'], '10');
-const duplicateMarkers = [['送信日時', 'メールアドレス']]
-  .concat(rows)
-  .concat([['__TAIKAI_MANAGEMENT_V2__', 2]]);
-assert.throws(
-  () => sandbox.tournamentSheetV2Parse_(duplicateMarkers, 1),
-  /開始マーカーが重複/
-);
-
-const writes = [];
-const responseSheet = {
-  insertRowBefore(rowNumber) {
-    writes.push({ method: 'insert', rowNumber });
-  },
-  deleteRow(rowNumber) {
-    writes.push({ method: 'delete', rowNumber });
-  },
-  getRange(rowNumber, column, rowCount, columnCount) {
-    return {
-      getValue() {
-        return '';
-      },
-      getValues() {
-        return [new Array(columnCount || 1).fill('')];
-      },
-      clearContent() {
-        writes.push({ method: 'clear', rowNumber, column, rowCount, columnCount });
-        return this;
-      },
-      setValue(value) {
-        writes.push({ method: 'value', rowNumber, column, value });
-        return this;
-      },
-      setValues(values) {
-        writes.push({ method: 'values', rowNumber, column, values });
-        return this;
-      },
-    };
-  },
-};
-const formStructure = {
-  version: 2,
-  data: [
-    ['送信日時', '参加級', '連絡用メールアドレス', '氏名'],
-    [new Date('2026-07-01T00:00:00Z'), 'A級', 'same@example.com', '山田 太郎'],
-    [new Date('2026-07-02T00:00:00Z'), 'A級', 'same@example.com', '山田 太郎'],
-    [],
-    ['__TAIKAI_MANAGEMENT_V2__', 2],
-    ['A', 2500],
-    ['申込', 2],
-    ['[案内]'],
-    ['__TAIKAI_MANAGEMENT_V2_END__', 2],
-  ],
-  response_end_index: 3,
-  grade_rows: { A: 6 },
-  layout: { raw_response_column_count: 4 },
-  management: {
-    start_index: 4,
-    end_index: 8,
-    entries_by_source_row: { 2: { row_number: 7, row: ['申込', 2] } },
-    metadata_rows: { '同期状態': 10, '同期エラー': 11, '最終同期日時': 12 },
-  },
-};
-sandbox.tournamentSheetStructure_ = () => ({
-  version: 2,
-  management: {
-    metadata_rows: { '同期状態': 11, '同期エラー': 12, '最終同期日時': 13 },
-    entries_by_source_row: {},
-  },
-});
-sandbox.recordFormResponseInTournamentSheetV2_(
-  responseSheet,
-  formStructure,
-  3,
-  { email: 'same@example.com', name: '山田 太郎', grade: 'A' },
-  {
-    player: { id: '30' },
-    entry: { id: '40', schedule_id: '20' },
-    payment_summary: {
-      participation_fee_yen: 2500,
-      paid_yen: 1000,
-      balance_yen: 1500,
-      status: 'partial',
-    },
-  },
-  null
-);
-assert.ok(writes.some(item =>
-  item.method === 'values' && item.rowNumber === 7
-  && item.column === 7 && item.values[0][7] === 'superseded'
-  && item.values[0][8] === 'superseded'
+assert.ok(rows.every(row => row.length === 3));
+assert.ok(rows.some(row =>
+  row[0] === '日程:D' && row[1] === '参加費' && row[2] === 3000
 ));
-const insertedEntry = writes.find(item =>
-  item.method === 'values' && item.rowNumber === 8 && item.column === 1
-);
-assert.strictEqual(insertedEntry.values[0][11], 1000);
-assert.strictEqual(insertedEntry.values[0][12], 1500);
-assert.strictEqual(insertedEntry.values[0][13], 'partial');
-const pendingStructure = Object.assign({}, formStructure, {
-  management: Object.assign({}, formStructure.management, {
-    entries_by_source_row: Object.assign(
-      {}, formStructure.management.entries_by_source_row, {
-        3: {
-          row_number: 8,
-          row: [
-            '申込', 3, 'same@example.com', '山田 太郎', 'A', '',
-            '', '', '20', '', 2500, 0, 2500, 'unpaid',
-            'pending_api', '', 'temporary failure',
-          ],
-        },
-      }
-    ),
-  }),
-});
-const insertsBeforeRetry = writes.filter(item => item.method === 'insert').length;
-sandbox.recordFormResponseInTournamentSheetV2_(
-  responseSheet,
-  pendingStructure,
-  3,
-  { email: 'same@example.com', name: '山田 太郎', grade: 'A' },
-  {
-    player: { id: '30' },
-    entry: { id: '40', schedule_id: '20' },
-    payment_summary: {
-      participation_fee_yen: 2500,
-      paid_yen: 1000,
-      balance_yen: 1500,
-      status: 'partial',
-    },
-  },
-  null
-);
+assert.ok(!rows.some(row =>
+  ['申込', '案内', 'メール', '配信'].includes(String(row[0]))
+));
+assert.ok(!rows.some(row =>
+  ['entry ID', 'player ID', 'schedule ID', '同期状態'].includes(String(row[1]))
+));
+
+const data = [
+  ['タイムスタンプ', 'メールアドレス', '氏名', '級', '振込み済みか', '', '', ''],
+  [new Date('2026-03-01'), 'a@example.com', '山田 太郎', 'D級', '済'],
+  [],
+].concat(rows);
+const parsed = sandbox.tournamentSheetV2Parse_(data);
+assert.strictEqual(parsed.metadata['フォームID'], 'form-1');
+assert.strictEqual(parsed.schedules.D.row[1], 3000);
+assert.strictEqual(parsed.schedules.D.row[2], '2026-04-29');
+assert.strictEqual(parsed.entries_by_source_row, undefined);
+
+const sheet = {
+  getName: () => '鳳玉大会D級',
+  getDataRange: () => ({ getValues: () => data }),
+};
+const structure = sandbox.tournamentSheetStructure_(sheet, true);
+assert.strictEqual(structure.layout.raw_response_column_count, 4);
+assert.strictEqual(structure.layout.payment_status_column, 5);
 assert.strictEqual(
-  writes.filter(item => item.method === 'insert').length,
-  insertsBeforeRetry
+  sandbox.tournamentSheetRawSheetStatus_(structure, 2), '済'
 );
-const retriedEntry = writes.filter(item =>
-  item.method === 'values' && item.rowNumber === 8 && item.column === 7
-).pop();
-assert.strictEqual(retriedEntry.values[0][0], '30');
-assert.strictEqual(retriedEntry.values[0][1], '40');
-assert.strictEqual(retriedEntry.values[0][8], 'synced');
-assert.match(
-  formSubmitSource,
-  /refreshSiblingTournamentSheetsV2AfterResponse_\(sheet\)/
+assert.strictEqual(sandbox.tournamentSheetGradeFee_(structure, 'D'), 3000);
+
+// 空行がなくても開始マーカーを境界としてV2を判定する。
+const contiguousData = [
+  ['タイムスタンプ', 'メールアドレス', '氏名', '級', '振込み済みか'],
+  [new Date('2026-03-01'), 'a@example.com', '山田 太郎', 'D級', '済'],
+].concat(rows);
+const contiguousSheet = {
+  getName: () => '鳳玉大会D級',
+  getDataRange: () => ({ getValues: () => contiguousData }),
+};
+const contiguousStructure = sandbox.tournamentSheetStructure_(
+  contiguousSheet, true
 );
-assert.match(
-  formSubmitSource,
-  /pending_api行は同じ行を成功値で更新する/
+assert.strictEqual(contiguousStructure.version, 2);
+assert.strictEqual(contiguousStructure.response_end_index, 2);
+assert.strictEqual(
+  sandbox.tournamentSheetFormEditUrl_(contiguousStructure),
+  'https://docs.google.com/forms/d/form-1/edit'
 );
 
-assert.match(migrationSource, /admin\/tournament-sheet-snapshot/);
-assert.match(migrationSource, /APIが大会シート移行用の全件スナップショット/);
-assert.match(migrationSource, /sheetMigrationSnapshot_\(sheet, structure, legacyRecords\)/);
-assert.match(migrationSource, /snapshot_signature/);
-assert.match(migrationSource, /全セル再読取検証/);
-assert.match(migrationSource, /開催日または参加費がAPIと一致しません/);
-assert.match(migrationSource, /sheetMigrationRestoreFromBackup_/);
-assert.match(migrationSource, /sheetMigrationRestoreProtections_/);
-assert.match(migrationSource, /sheetMigrationCloneProtections_/);
-assert.match(migrationSource, /sheetMigrationVerifyBackupRestore_/);
-assert.match(migrationSource, /tournamentSheetV2Rows_\(snapshot\)/);
-assert.match(migrationSource, /大会管理データv2の再読取検証/);
-assert.match(migrationSource, /書込み中にシートまたはAPIが変更されました/);
-assert.match(migrationSource, /sheet\.deleteColumns\(plan\.delete_start_column/);
-assert.doesNotMatch(migrationSource, /sheetMigrationWriteAndVerifyArchive_/);
-assert.match(page, /全情報を[\s\S]*大会管理データv2として記録/);
-assert.match(script, /正規化・再読取検証後/);
+assert.match(
+  migrationSource,
+  /taikai_manage の migrate_tournament_sheet\(sheet_name\)/
+);
+assert.doesNotMatch(migrationSource, /refreshTournamentSheetV2FromApi_/);
 
-console.log('Sheet structure migration v2 checks passed.');
+console.log('Tournament sheet v2 regression checks passed.');

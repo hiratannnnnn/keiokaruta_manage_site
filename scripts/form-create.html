@@ -159,6 +159,39 @@ function fcBuildConfirmText(title, grades, questionsData, moshiDeadStr, huriDead
 
 let _fcLastResult = null;
 
+function fcFormatCreateFailure(result) {
+  const lines = ['エラー: ' + String(result.error || 'フォーム作成に失敗しました。')];
+  if (result.phase) lines.push('失敗した処理: ' + result.phase);
+
+  const resources = Array.isArray(result.created_resources)
+    ? result.created_resources : [];
+  if (!resources.length) {
+    lines.push('作成状況: Googleフォーム・回答シート等は作成されていません。');
+  } else {
+    lines.push('エラー発生前に作成・更新した対象: ' + resources.join('、'));
+  }
+
+  const rollback = result.rollback;
+  if (rollback && rollback.attempted) {
+    (rollback.actions || []).forEach(action => {
+      if (action.status === 'rolled_back') {
+        lines.push('巻き戻し済み: ' + action.target);
+      } else {
+        lines.push(
+          '巻き戻し失敗: ' + action.target
+          + (action.error ? '（' + action.error + '）' : '')
+        );
+      }
+    });
+    lines.push(rollback.complete
+      ? '作成途中の変更はすべて巻き戻しました。'
+      : '一部を自動で巻き戻せませんでした。上記の対象を確認してください。');
+  } else if (resources.length) {
+    lines.push('自動巻き戻しの対象はありませんでした。');
+  }
+  return lines.join('\n');
+}
+
 // ------------------------------------------------------------
 // リアルタイムプレビュー
 // ------------------------------------------------------------
@@ -350,6 +383,7 @@ function submitFormCreate() {
   const statusEl = document.getElementById('fc-status');
   statusEl.textContent = '';
   statusEl.className   = 'fc-status';
+  statusEl.style.whiteSpace = '';
 
   if (!title)         { statusEl.textContent = '大会名を入力してください'; statusEl.className = 'fc-status error'; return; }
   if (!grades)        { statusEl.textContent = '少なくとも1つの級を選択してください'; statusEl.className = 'fc-status error'; return; }
@@ -381,7 +415,8 @@ function submitFormCreate() {
         const r = JSON.parse(res);
         if (r.error) {
           fcHideProgressModal();
-          statusEl.textContent = 'エラー: ' + r.error;
+          statusEl.style.whiteSpace = 'pre-line';
+          statusEl.textContent = fcFormatCreateFailure(r);
           statusEl.className   = 'fc-status error';
           return;
         }
@@ -401,6 +436,7 @@ function submitFormCreate() {
       })
       .withFailureHandler(e => {
         fcHideProgressModal();
+        statusEl.style.whiteSpace = 'pre-line';
         statusEl.textContent = 'エラー: ' + e.message;
         statusEl.className   = 'fc-status error';
       })

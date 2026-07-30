@@ -210,13 +210,13 @@
     border-radius: 999px;
     background: #dfe7ed;
   }
-  #db-admin-sync-progress-bar {
+  .db-admin-sync-progress-bar {
     width: 0;
     height: 100%;
     background: #315b7d;
     transition: width 0.2s ease;
   }
-  #db-admin-sync-progress-text { color: #536474; font-size: 0.84rem; }
+  .db-admin-sync-progress-text { color: #536474; font-size: 0.84rem; }
   .db-admin-sync-errors {
     max-height: 260px;
     overflow: auto;
@@ -495,6 +495,11 @@
     cursor: pointer;
   }
   .panel-header-action:hover { background: rgba(255,255,255,0.3); }
+  .panel-header-action:disabled,
+  .page-guide-back-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
 
   /* 検索バー */
   .search-bar {
@@ -958,6 +963,18 @@
     flex-direction: column;
     gap: 6px;
   }
+  #detail-status-table {
+    width: 100%;
+  }
+  #detail-status-table td:first-child {
+    width: 1%;
+    white-space: nowrap;
+  }
+  #detail-status-table td:last-child {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
 
   /* 詳細ビュー：セクションヘッダー（タイトル＋ボタン） */
   .detail-section-header {
@@ -1217,6 +1234,25 @@
     max-width: none;
     white-space: nowrap;
   }
+  .entry-action-frame {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px;
+    border: 1px solid #d8e0e6;
+    border-radius: 5px;
+    background: #f8fafc;
+  }
+  .cancel-action-cell {
+    min-width: 190px;
+    overflow: visible;
+    white-space: nowrap;
+  }
+  .cancel-action-cell > div {
+    display: inline-flex;
+    gap: 3px;
+    margin-left: 5px;
+  }
   .pay-btn {
     padding: 2px 7px;
     background: #27ae60;
@@ -1238,6 +1274,39 @@
   .pay-btn-cancel-after:hover { background: #922b21; }
   .pay-btn-clear { background: #7f8c8d; }
   .pay-btn-clear:hover { background: #6c7a7d; }
+  .pay-btn-deposit { background: #8e44ad; }
+  .pay-btn-deposit:hover { background: #71368a; }
+  .pay-btn-detail { background: #2471a3; }
+  .pay-btn-detail:hover { background: #1a5276; }
+  .pay-btn.is-active {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor;
+  }
+  .entry-cancellation-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    padding: 10px;
+    border: 1px solid #d8e0e6;
+    border-radius: 5px;
+    background: #f8fafc;
+    cursor: pointer;
+  }
+  .entry-cancellation-note {
+    color: #667;
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+  .entry-payment-summary {
+    margin-bottom: 10px;
+    padding: 9px;
+    border-radius: 5px;
+    background: #f3f6f8;
+    font-weight: 600;
+  }
+  .entry-payment-table {
+    width: 100%;
+  }
   .cancellation-legend {
     display: flex;
     align-items: center;
@@ -1292,6 +1361,9 @@
     align-items: flex-start;
     gap: 10px;
     cursor: pointer;
+  }
+  .settings-feature-toggle + .settings-feature-toggle {
+    margin-top: 14px;
   }
   .settings-feature-toggle input { margin-top: 4px; }
   .settings-feature-toggle span {
@@ -1780,6 +1852,57 @@
   }
   .me-grade-btn:hover  { border-color: #3498db; color: #3498db; }
   .me-grade-btn.active { border-color: #3498db; background: #3498db; color: #fff; }
+  .me-grade-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+    border-color: #bdc3c7;
+    background: #fff;
+    color: #777;
+  }
+  .me-contact-note {
+    margin-top: 7px;
+    color: #667085;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+  .me-contact-selection-summary {
+    margin: 4px 0 8px;
+    color: #344054;
+    font-size: 0.86rem;
+    font-weight: 600;
+  }
+  .me-contact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .me-contact-table th,
+  .me-contact-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #e3e7eb;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .me-contact-table th {
+    background: #f3f5f7;
+    color: #475467;
+  }
+  .me-contact-toggle-btn {
+    padding: 4px 9px;
+    border: 1px solid #98a2b3;
+    border-radius: 4px;
+    background: #fff;
+    color: #344054;
+    cursor: pointer;
+  }
+  .me-contact-toggle-btn.is-selected {
+    border-color: #b42318;
+    color: #b42318;
+  }
+  .me-contact-toggle-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
   .me-select {
     flex: 1;
     padding: 7px 10px;
@@ -1982,6 +2105,69 @@
     gap: 8px;
     margin-bottom: 12px;
   }
+  .mm-guide-register-card {
+    margin: 0 0 18px;
+  }
+  .mm-maintenance-details {
+    margin-top: 24px;
+    border: 1px solid #d9dee3;
+    border-radius: 8px;
+    background: #f7f8f9;
+  }
+  .mm-maintenance-details > summary {
+    padding: 12px 16px;
+    color: #66727d;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+  }
+  .mm-maintenance-content {
+    padding: 0 12px 12px;
+  }
+  .mm-maintenance-content .panel:last-child {
+    margin-bottom: 0;
+  }
+  .mm-guide-register-btn {
+    width: 100%;
+    min-height: 76px;
+    padding: 14px 20px;
+    border: 2px solid #2471a3;
+    border-radius: 10px;
+    background: #eaf4fb;
+    color: #174b70;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .mm-guide-register-btn:hover {
+    background: #d6eaf8;
+    border-color: #1a5276;
+    transform: translateY(-1px);
+  }
+  .mm-guide-register-btn-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  .mm-guide-register-btn-note {
+    font-size: 0.84rem;
+    font-weight: 400;
+    color: #486b82;
+  }
+  .mm-add-modal-prompt {
+    margin: 0 0 4px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #eaf4fb;
+    color: #174b70;
+    font-size: 0.92rem;
+    line-height: 1.6;
+  }
   .mm-add-btn, .mm-reload-btn {
     padding: 6px 16px;
     border: 1px solid #ccc;
@@ -2044,6 +2230,16 @@
   }
   .mm-table tr:nth-child(even) td { background: #fafafa; }
   .mm-table tr:hover td { background: #eef5ff; }
+  .mm-previewable-row { cursor: pointer; }
+  .mm-previewable-row:focus {
+    outline: 2px solid #3498db;
+    outline-offset: -2px;
+  }
+  .mm-table-action-note {
+    margin: 0 0 8px;
+    color: #667;
+    font-size: 0.8rem;
+  }
   .mm-truncate { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
   .mm-datetime { font-size: 0.82rem; color: #555; }
   .mm-center { text-align: center; }

@@ -105,20 +105,57 @@ assert.strictEqual(
   sandbox.fiscalSyncOptionalDate_(new Date(2026, 6, 31)).value,
   '2026-07-31'
 );
+const fiscalStructure = {
+  version: 2,
+  grade_rows: { A: 1, B: 2, C: 3 },
+  management: {
+    schedules: {
+      A: { row: ['A', 2500, new Date(2026, 3, 1)] },
+      B: { row: ['B', 2500, new Date(2027, 2, 31)] },
+      C: { row: ['C', 2500, new Date(2027, 3, 1)] },
+    },
+  },
+};
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(sandbox.fiscalSyncCurrentGradesForSheet_(
+    '年度境界大会ABC級', fiscalStructure, 2026
+  ))),
+  ['A', 'B']
+);
 assert.strictEqual(
   sandbox.fiscalSyncOptionalDate_('2026/07/31').valid,
   false
+);
+assert.strictEqual(
+  sandbox.tournamentSheetPaymentTimingFromStructure_({
+    version: 2,
+    management: {
+      metadata: { '後納制': '後納', '本振込期限': '' },
+    },
+  }),
+  'after_tournament'
+);
+assert.strictEqual(
+  sandbox.tournamentSheetPaymentTimingFromStructure_({
+    version: 2,
+    management: {
+      metadata: { '後納制': '', '本振込期限': new Date(2026, 6, 31) },
+    },
+  }),
+  'before_tournament'
 );
 
 assert.match(fiscalSource, /internal_payment_deadline/);
 assert.match(fiscalSource, /payment_instructions/);
 assert.match(fiscalSource, /payment_method: isCarriedOver \? 'carried_over' : 'bank_transfer'/);
 assert.match(fiscalSource, /sync_payment: structure\.version !== 2/);
-assert.match(fiscalSource, /markFiscalTournamentSheetsV2SyncState_/);
-assert.match(fiscalSource, /'partial_gmail'/);
-assert.match(fiscalSource, /'pending_sheet'/);
+assert.match(fiscalSource, /if \(structure\.version === 2\)[\s\S]*schedule\.payment_instructions/);
+assert.match(fiscalSource, /else \{[\s\S]*schedule\.venue = null/);
+assert.doesNotMatch(fiscalSource, /refreshFiscalYearTournamentSheetsV2_/);
+assert.doesNotMatch(fiscalSource, /markFiscalTournamentSheetsV2SyncState_/);
 assert.match(taikaiSource, /internal_payment_deadline/);
 assert.match(taikaiSource, /payment_instructions/);
+assert.match(taikaiSource, /if \(structure\.version !== 2\) \{[\s\S]*body\.venue = null/);
 assert.match(databaseAdminSource, /internal_payment_deadline/);
 assert.match(databaseAdminSource, /payment_instructions/);
 

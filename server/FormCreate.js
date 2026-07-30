@@ -77,12 +77,196 @@ function findFromCalendar(calendarSheet, name) {
   return nextRow;
 }
 
+function formCreateRollbackAction_(result, target, action) {
+  try {
+    action();
+    result.actions.push({ target: target, status: 'rolled_back' });
+  } catch (error) {
+    result.complete = false;
+    result.actions.push({
+      target: target,
+      status: 'rollback_failed',
+      error: String(error && error.message || error).slice(0, 500),
+    });
+  }
+}
+
+function formCreateCreatedResources_(state) {
+  const resources = [];
+  if (state.dbTournamentCreated) {
+    resources.push('DB大会');
+  } else if (state.dbTournamentCreationUncertain) {
+    resources.push('DB大会（作成された可能性あり）');
+  }
+  if (state.formFileId) {
+    resources.push('Googleフォーム');
+  } else if (state.formCopyRequested) {
+    resources.push('Googleフォーム（作成された可能性あり）');
+  }
+  if (state.responseSheetId) {
+    resources.push('フォーム回答シート');
+  } else if (state.destinationRequested) {
+    resources.push('フォーム回答シート（作成された可能性あり）');
+  }
+  if (state.mailWritten) resources.push('メール管理行');
+  if (state.calendarWritten) resources.push('カレンダー行');
+  if (state.announceWritten) resources.push('案内メール作成設定');
+  return resources;
+}
+
+function formCreateRollback_(state) {
+  const result = {
+    attempted: false,
+    complete: true,
+    actions: [],
+    manual_action_required: false,
+    unreverted_resources: [],
+  };
+
+  if (state.announceWritten && state.announceSheet) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, '案内メール作成設定', () => {
+      state.announceSnapshots.forEach(snapshot => {
+        state.announceSheet.getRange(snapshot.a1).setValues(snapshot.values);
+      });
+    });
+  }
+
+  if (state.calendarWritten && state.calendarSheet && state.calendarMutation) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'カレンダー行', () => {
+      state.calendarMutation.snapshots.forEach(snapshot => {
+        state.calendarSheet.getRange(
+          state.calendarMutation.row, snapshot.column
+        ).setValue(snapshot.value);
+      });
+    });
+  }
+
+  if (state.mailWritten && state.mailSheet && state.mailMutation) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'メール管理行', () => {
+      state.mailSheet.getRange(
+        state.mailMutation.row, 1, 1, 6
+      ).setValues(state.mailMutation.previousValues);
+      state.mailSheet.getRange(2, 3).setValue(state.mailPointerBefore);
+    });
+  }
+
+  if (state.destinationRequested && state.formId) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'フォーム回答先の解除', () => {
+      FormApp.openById(state.formId).removeDestination();
+    });
+  }
+
+  if (state.destinationRequested && state.spreadsheet) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'フォーム回答シート', () => {
+      let candidates = [];
+      if (state.responseSheetId) {
+        const exact = state.spreadsheet.getSheetById(state.responseSheetId);
+        if (exact) candidates = [exact];
+      } else {
+        candidates = state.spreadsheet.getSheets().filter(sheet =>
+          !state.existingSheetIds[String(sheet.getSheetId())]
+        );
+      }
+      if (candidates.length === 0) return;
+      if (candidates.length !== 1) {
+        throw new Error(
+          '追加シートを一意に特定できません（候補'
+          + candidates.length + '件）。'
+        );
+      }
+      state.spreadsheet.deleteSheet(candidates[0]);
+    });
+  }
+
+  if (state.formFileId) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'Googleフォーム', () => {
+      const file = DriveApp.getFileById(state.formFileId);
+      if (!file.isTrashed()) file.setTrashed(true);
+    });
+  } else if (state.formCopyRequested) {
+    result.attempted = true;
+    result.complete = false;
+    result.actions.push({
+      target: 'Googleフォーム（作成確認）',
+      status: 'rollback_failed',
+      error: 'フォームIDを取得する前に失敗したため、自動確認・削除できません。',
+    });
+  }
+
+  if (state.dbTournamentCreated && state.dbTournamentId) {
+    result.attempted = true;
+    formCreateRollbackAction_(result, 'DB大会', () => {
+      taikaiApiRequest_(
+        'DELETE',
+        '/tournaments/' + encodeURIComponent(String(state.dbTournamentId))
+      );
+    });
+  } else if (state.dbTournamentCreated || state.dbTournamentCreationUncertain) {
+    result.attempted = true;
+    result.complete = false;
+    result.actions.push({
+      target: 'DB大会（作成確認）',
+      status: 'rollback_failed',
+      error: '大会IDを取得できなかったため、自動確認・削除できません。',
+    });
+  }
+
+  result.unreverted_resources = result.actions
+    .filter(action => action.status === 'rollback_failed')
+    .map(action => action.target);
+  result.manual_action_required = result.unreverted_resources.length > 0;
+  return result;
+}
+
 // Web App からフォームとシートを作成する
 function createFormFromWeb(paramsJson) {
+  const state = {
+    phase: '入力検証',
+    title: '',
+    grades: '',
+    sheetName: '',
+    spreadsheet: null,
+    calendarSheet: null,
+    calendarMutation: null,
+    calendarWritten: false,
+    mailSheet: null,
+    mailMutation: null,
+    mailPointerBefore: '',
+    mailWritten: false,
+    announceSheet: null,
+    announceSnapshots: [],
+    announceWritten: false,
+    dbTournamentCreated: false,
+    dbTournamentCreationUncertain: false,
+    dbTournamentId: '',
+    formCopyRequested: false,
+    formFileId: '',
+    formId: '',
+    formUrl: '',
+    existingSheetIds: {},
+    responseSheetId: '',
+    destinationRequested: false,
+  };
+  const operationLock = LockService.getScriptLock();
+  let lockAcquired = false;
   try {
+    lockAcquired = operationLock.tryLock(1000);
+    if (!lockAcquired) {
+      throw new Error(
+        '別のフォーム作成処理が実行中です。完了後に再実行してください。'
+      );
+    }
     const p = JSON.parse(paramsJson);
     const { title, grades, questionsData,
             moshikomiStartStr, moshiDeadStr, raffleStr, huriDeadStr, isKoen } = p;
+    state.title = String(title || '');
+    state.grades = String(grades || '');
     const hasEditionNumber = /第\s*[0-9０-９一二三四五六七八九十百千〇零]+\s*回/.test(String(title || ''));
     if (!hasEditionNumber && p.allowNonUniqueTitle !== true) {
       throw new Error(
@@ -95,39 +279,40 @@ function createFormFromWeb(paramsJson) {
     const raffle         = raffleStr   ? new Date(raffleStr)   : null;
     const huriDead       = huriDeadStr ? new Date(huriDeadStr) : null;
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    state.spreadsheet = ss;
     const calendarSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.CALENDAR);
+    state.calendarSheet = calendarSheet;
+    if (!calendarSheet) {
+      throw new Error(
+        'カレンダーシートが見つかりません: '
+        + CONFIG.SHEET_NAMES.CALENDAR
+      );
+    }
     const sheetName = title + grades;
+    state.sheetName = sheetName;
     if (ss.getSheetByName(sheetName)) {
       throw new Error('同名の大会フォームが既に存在します: ' + sheetName);
     }
-    tournamentSheetValidateGradeOwnership_(
-      ss.getSheets().map(sheet => sheet.getName()).concat([sheetName])
-    );
 
-    // フォーム作成だけは回答シートを作る必要があるが、大会本体は先に新DBへ登録する。
+    // 大会本体を先にDBへ登録する。ここで失敗した場合はGoogle側を作成しない。
     // 級別日程は開催日が確定するまで作成できないため、後のsaveTournamentDatesで登録する。
-    let dbSyncPending = false;
-    let dbSyncWarning = '';
-    let dbTournament = null;
-    try {
-      dbTournament = taikaiEnsureTournament_(title, {
-        operation: 'フォーム作成',
-        outcome: '一時障害の場合はフォーム作成を継続し、DB未同期として記録',
-      });
-    } catch (apiError) {
-      if (!taikaiIsTransientApiError_(apiError)) throw apiError;
-      dbSyncPending = true;
-      dbSyncWarning =
-        'taikai_manage APIの一時障害によりDB登録を保留しました。'
-        + ' API復旧後に「今年度のシート→DB完全同期」を実行してください。';
-    }
+    state.phase = 'DBへの大会登録';
+    const ensured = taikaiEnsureTournamentWithState_(title, {
+      operation: 'フォーム作成',
+      outcome: '失敗時はフォーム作成を中断',
+    });
+    state.dbTournamentCreated = ensured.created === true;
+    state.dbTournamentId = String(ensured.tournament.id || '');
 
     const formTitle     = title + grades + '\u3000参加表明フォーム';
 
     // フォームをテンプレートからコピー
+    state.phase = 'Googleフォームの作成';
     const originalFile = DriveApp.getFileById(CONFIG.FORM_TEMPLATE_ID);
     const folder       = DriveApp.getFolderById(CONFIG.FORM_FOLDER_TO);
+    state.formCopyRequested = true;
     const newFormFile  = originalFile.makeCopy(formTitle, folder);
+    state.formFileId = newFormFile.getId();
     const form         = FormApp.openById(newFormFile.getId());
 
     form.setDescription(
@@ -141,15 +326,19 @@ function createFormFromWeb(paramsJson) {
     form.setLimitOneResponsePerUser(false);
 
     const formId  = form.getId();
+    state.formId = formId;
     addQuestionsToForm(formId, questionsData, moshikomiStart, grades);
     const formUrl = form.getPublishedUrl();
+    state.formUrl = formUrl;
     const editUrl = form.getEditUrl();
 
     DriveApp.getFileById(formId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const existingSheetIds = {};
+    const existingSheetIds = state.existingSheetIds;
     ss.getSheets().forEach(sheet => {
       existingSheetIds[String(sheet.getSheetId())] = true;
     });
+    state.phase = 'フォーム回答シートの作成';
+    state.destinationRequested = true;
     form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
 
     // setDestination で追加されたシートだけを特定する。シート順には依存しない。
@@ -168,19 +357,29 @@ function createFormFromWeb(paramsJson) {
     if (!responseSheet) {
       throw new Error('新しく作成されたフォーム回答シートを特定できません。');
     }
+    state.responseSheetId = responseSheet.getSheetId();
     responseSheet.setName(sheetName);
     const responseColumnCount = responseSheet.getLastColumn();
 
     // メール管理シートへ書き込み
     const mailSheet = ss.getSheetByName(CONFIG.SHEET_NAMES.MAIL);
     if (mailSheet) {
+      state.phase = 'メール管理への登録';
+      state.mailSheet = mailSheet;
+      state.mailPointerBefore = mailSheet.getRange(2, 3).getValue();
       const nextRow = mailSheet.getLastRow() + 1;
+      state.mailMutation = {
+        row: nextRow,
+        previousValues: mailSheet.getRange(nextRow, 1, 1, 6).getValues(),
+      };
+      state.mailWritten = true;
       mailSheet.getRange(nextRow, 1, 1, 6).setValues(
         [[title, grades, '', 'リマインダー', sheetName + '\u3000案内', formUrl]]
       );
       mailSheet.getRange(2, 3).setValue(nextRow);
     }
 
+    state.phase = '大会シート管理領域の作成';
     if (responseColumnCount > 4) {
       responseSheet.hideColumns(4, responseColumnCount - 4);
     }
@@ -189,47 +388,39 @@ function createFormFromWeb(paramsJson) {
     const eFee = title.includes('鳳玉') ? 2500 : 1500;
     const initialFees = { A: 2500, B: 2500, C: cd, D: cd, E: eFee };
     const initialSnapshot = {
-      tournament_name: title,
-      tournament_id: dbTournament ? dbTournament.id : '',
       form_id: formId,
-      form_public_url: formUrl,
       form_edit_url: editUrl,
-      registration_completed: false,
-      payment_completed: false,
       is_sanctioned: !isKoen,
-      sync_status: dbSyncPending ? 'pending_api' : 'pending_schedule',
-      synced_at: dbSyncPending ? '' : new Date(),
-      sync_error: dbSyncWarning,
+      settings: {
+        '申込開始日': moshikomiStart,
+        'リマインダー': new Date(
+          moshiDead.getTime() - 6 * 24 * 60 * 60 * 1000
+        ),
+        '本申込期限': moshiDead,
+        '抽選日': raffle || '',
+        '本振込期限': huriDead || '',
+        '大会の日時': '',
+        'メモ': '',
+        '後納制': huriDead ? 'before_tournament' : '',
+        '振込先': '',
+      },
       schedules: grades2.map(grade => ({
         grade: grade,
         participation_fee_yen: initialFees[grade],
         held_on: '',
-        id: '',
-        application_deadline: moshiDead,
-        internal_payment_deadline: '',
-        payment_deadline: huriDead || '',
-        payment_timing: huriDead ? 'before_tournament' : '',
-        lottery_result_date: raffle || '',
-        venue: '',
-        reception_ends_at: '',
-        is_sanctioned: !isKoen,
-        payment_instructions: '',
-        sync_status: 'pending_schedule',
-        synced_at: '',
       })),
-      entries: [],
-      announcements: [],
-      email_jobs: [],
-      legacy_records: [],
     };
     tournamentSheetV2ValidateSnapshot_(initialSnapshot, false);
     const managementRows = tournamentSheetV2Rows_(initialSnapshot);
-    if (responseSheet.getMaxColumns() < TOURNAMENT_SHEET_V2_WIDTH_) {
+    const paymentStatusColumn = responseColumnCount + 1;
+    const requiredColumns = paymentStatusColumn + 3;
+    if (responseSheet.getMaxColumns() < requiredColumns) {
       responseSheet.insertColumnsAfter(
         responseSheet.getMaxColumns(),
-        TOURNAMENT_SHEET_V2_WIDTH_ - responseSheet.getMaxColumns()
+        requiredColumns - responseSheet.getMaxColumns()
       );
     }
+    responseSheet.getRange(1, paymentStatusColumn).setValue('振込み済みか');
     const managementStartRow = 3;
     const requiredRows = managementStartRow + managementRows.length - 1;
     if (responseSheet.getMaxRows() < requiredRows) {
@@ -246,7 +437,40 @@ function createFormFromWeb(paramsJson) {
     tournamentSheetStructure_(responseSheet, true);
 
     // カレンダーシートへの書き込み
-    const rowNum = findFromCalendar(calendarSheet, sheetName);
+    state.phase = 'カレンダーへの登録';
+    const calendarLastRowBefore = calendarSheet.getLastRow();
+    const calendarNamesBefore = calendarLastRowBefore > 0
+      ? calendarSheet.getRange(
+        1, 1, calendarLastRowBefore, 1
+      ).getValues()
+      : [];
+    const existingCalendarRows = [];
+    for (let index = 2; index < calendarNamesBefore.length; index++) {
+      if (String(calendarNamesBefore[index][0]) === sheetName) {
+        existingCalendarRows.push(index + 1);
+      }
+    }
+    if (existingCalendarRows.length > 1) {
+      throw new Error(
+        'カレンダーに同名の大会行が複数あります: ' + sheetName
+      );
+    }
+    const existingCalendarRow = existingCalendarRows[0] || 0;
+    const rowNum = existingCalendarRow || calendarLastRowBefore + 1;
+    const writtenColumns = existingCalendarRow
+      ? [3, 6, 8, 11]
+      : [1, 3, 6, 8, 11];
+    state.calendarMutation = {
+      row: rowNum,
+      snapshots: writtenColumns.map(column => ({
+        column: column,
+        value: calendarSheet.getRange(rowNum, column).getValue(),
+      })),
+    };
+    state.calendarWritten = true;
+    if (!existingCalendarRow) {
+      calendarSheet.getRange(rowNum, 1).setValue(sheetName);
+    }
     calendarSheet.getRange(rowNum, 3).setValue(Utilities.formatDate(moshikomiStart, 'JST', 'y/M/d'));
     calendarSheet.getRange(rowNum, 6).setValue(moshiDead);
     calendarSheet.getRange(rowNum, 8).setValue(raffle  || '未定');
@@ -255,6 +479,15 @@ function createFormFromWeb(paramsJson) {
     // 案内メール作成シートへの書き込み
     const announceSheet = ss.getSheetByName('案内メール作成');
     if (announceSheet) {
+      state.phase = '案内メール作成設定の更新';
+      state.announceSheet = announceSheet;
+      ['B3:B4', 'B17', 'B28:B30'].forEach(a1 => {
+        state.announceSnapshots.push({
+          a1: a1,
+          values: announceSheet.getRange(a1).getValues(),
+        });
+      });
+      state.announceWritten = true;
       announceSheet.getRange(3, 2, 2, 1).setValues([[title], [grades]]);
       const tournamentQuestion = questionsData.find(question =>
         question[0] === '出場大会を全てお書きください。（略称等で構いません）'
@@ -269,24 +502,29 @@ function createFormFromWeb(paramsJson) {
       announceSheet.getRange(17, 2).setValue(raffle || '');
     }
 
-    if (dbSyncPending) {
-      if (!taikaiMarkTournamentPending_(title, dbSyncWarning)) {
-        dbSyncWarning +=
-          ' なお、DB未同期状態の保存に失敗したため、この警告を控えておいてください。';
-      }
-    } else if (!taikaiClearPendingTournaments_([title])) {
-      dbSyncPending = true;
-      dbSyncWarning =
-        '大会はDBへ登録されましたが、DB未同期状態の解除に失敗しました。'
-        + '「今年度のシート→DB完全同期」を再実行してください。';
-    }
     return JSON.stringify({
       ok: true,
       formUrl: formUrl,
-      db_sync_pending: dbSyncPending,
-      warning: dbSyncWarning,
+      db_sync_pending: false,
+      warning: '',
     });
   } catch (err) {
-    return JSON.stringify({ error: err.message });
+    if (err && err.tournament_creation_uncertain === true) {
+      state.dbTournamentCreationUncertain = true;
+    }
+    const createdResources = formCreateCreatedResources_(state);
+    const rollback = formCreateRollback_(state);
+    return JSON.stringify({
+      error: String(err && err.message || err),
+      phase: state.phase,
+      created_resources: createdResources,
+      rollback: rollback,
+      google_form_creation_requested: Boolean(state.formCopyRequested),
+      google_form_created: Boolean(state.formFileId),
+      response_sheet_created: Boolean(state.responseSheetId),
+      response_sheet_creation_requested: Boolean(state.destinationRequested),
+    });
+  } finally {
+    if (lockAcquired && operationLock.hasLock()) operationLock.releaseLock();
   }
 }

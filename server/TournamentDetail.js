@@ -2,10 +2,128 @@
 // 大会詳細・操作パネル
 // ============================================================
 
-// 大会詳細取得（大会名と同名のシートを読む）
-//
-// 横方向は、行1のGoogleフォーム編集URLと左隣のフォームIDから特定する。
-// 下部固定領域は、A列の連続回答が終わった位置より下だけを検索する。
+// 大会詳細取得。V2では回答表とA:C管理ブロックを共通構造パーサーで分離し、
+// 大会・日程設定は管理ブロック、申込・支払情報はDBを正本として構成する。
+function tournamentDetailSnapshot_(sheetName) {
+  const tournament = taikaiFindTournament_(tournamentSheetBaseName_(sheetName));
+  const snapshot = taikaiApiRequest_(
+    'POST', '/admin/tournament-sheet-snapshot',
+    { tournament_id: String(tournament.id) }
+  );
+  if (!snapshot || !snapshot.tournament || !Array.isArray(snapshot.entries)) {
+    throw new Error('大会詳細用のDB応答が不完全です。');
+  }
+  return snapshot;
+}
+
+function tournamentDetailPseudonymMap_() {
+  const result = {};
+  emailMapRows_().forEach(row => {
+    const real = String(row[0] || '').trim().toLowerCase();
+    const pseudo = String(row[1] || '').trim().toLowerCase();
+    if (real && pseudo) result[real] = pseudo;
+  });
+  return result;
+}
+
+function tournamentDetailEntryForRecord_(snapshot, record, pseudonymMap) {
+  const map = pseudonymMap || tournamentDetailPseudonymMap_();
+  const realEmail = String(record.email || '').trim().toLowerCase();
+  const keyEmail = isPseudonymousEmail_(realEmail)
+    ? realEmail : String(map[realEmail] || '');
+  if (!keyEmail) return null;
+  const matches = (snapshot.entries || []).filter(entry =>
+    String(entry.player_email || '').toLowerCase() === keyEmail
+    && String(entry.grade || '').toUpperCase() === record.grade
+  );
+  if (!matches.length) return null;
+  const active = matches.filter(entry => !entry.canceled_at);
+  const candidates = active.length ? active : matches;
+  return candidates.reduce((latest, entry) =>
+    !latest || taikaiCompareIds_(entry.entry_id, latest.entry_id) > 0
+      ? entry : latest
+  , null);
+}
+
+function tournamentDetailEnrichRecords_(sheetName, records, snapshot) {
+  const currentSnapshot = snapshot || tournamentDetailSnapshot_(sheetName);
+  const pseudonymMap = tournamentDetailPseudonymMap_();
+  const schedules = {};
+  (currentSnapshot.schedules || []).forEach(schedule => {
+    schedules[String(schedule.id || '')] = schedule;
+  });
+  records.forEach(record => {
+    const entry = tournamentDetailEntryForRecord_(
+      currentSnapshot, record, pseudonymMap
+    );
+    if (!entry) return;
+    record.entry_id = String(entry.entry_id || '');
+    record.player_id = String(entry.player_id || '');
+    record.schedule_id = String(entry.schedule_id || '');
+    record.participation_fee_yen = entry.participation_fee_yen;
+    record.paid_yen = entry.paid_yen;
+    record.balance_yen = entry.balance_yen;
+    record.payment_status = String(entry.payment_status || '');
+    record.payment_methods = String(entry.payment_methods || '')
+      .split(',').filter(Boolean);
+    record.canceled_at = entry.canceled_at || null;
+    const schedule = schedules[record.schedule_id] || {};
+    record.lottery_result_date = schedule.lottery_result_date || null;
+    record.cancellation_timing = tournamentDetailCancellationTiming_(
+      record.canceled_at, record.lottery_result_date
+    );
+    record.is_paid = tournamentSheetPaymentIsPaid_(record);
+  });
+  return currentSnapshot;
+}
+
+function tournamentDetailCancellationTiming_(canceledAt, lotteryResultDate) {
+  if (!canceledAt) return '';
+  const canceledDate = String(canceledAt).slice(0, 10);
+  const lotteryDate = String(lotteryResultDate || '').slice(0, 10);
+  if (!lotteryDate) return 'canceled';
+  return canceledDate < lotteryDate ? 'before' : 'after';
+}
+
+// 公開前キャンセルは出場実績・級別人数に含めない。
+// 同日を含む公開後キャンセルは、連絡期限後のため出場扱いとする。
+function tournamentDetailCountsAsParticipant_(record) {
+  return String(record && record.cancellation_timing || '') !== 'before';
+}
+
+function tournamentDetailSelectionDisplay_(record) {
+  if (record.canceled_at) return 'キャンセル';
+  const value = String(record.selection_status || '').trim();
+  if (!value || ['済', '繰越', '繰り越し', 'くりこし'].includes(value)) {
+    return '出場可能';
+  }
+  return value;
+}
+
+function tournamentDetailPaymentDisplay_(record) {
+  if (record.cancellation_timing === 'before' && Number(record.paid_yen || 0) === 0) {
+    return '支払不要';
+  }
+  const status = tournamentSheetPaymentDisplayStatus_(record);
+  if (!record.is_paid) return status;
+  const methods = record.payment_methods || [];
+  if (methods.includes('deposit')) {
+    return methods.length === 1 ? '繰り越し' : status + '（デポジット併用）';
+  }
+  return status;
+}
+
+function tournamentDetailPaymentTimingLabel_(value) {
+  const labels = {
+    with_application: '申込時',
+    before_tournament: '大会前',
+    on_tournament_day: '大会当日',
+    after_tournament: '大会後',
+  };
+  const normalized = String(value || '').trim();
+  return labels[normalized] || normalized;
+}
+
 function getTournamentDetail(name) {
   try {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -19,9 +137,7 @@ function getTournamentDetail(name) {
     if (!rows.length) return JSON.stringify({ name, personHeaders: [], personRows: [], bottomLeft: [], bottomRight: [] });
 
     const headerRow = rows[0];
-    const rawColumnCount = structure.version === 2
-      ? structure.layout.raw_response_column_count
-      : structure.layout.payment_status_column - 1;
+    const rawColumnCount = tournamentSheetRawResponseColumnCount_(structure);
     const selectionStatusIndex = rawColumnCount;
     const paymentStatusIndex = rawColumnCount + 1;
     const personHeaders = headerRow.slice(0, rawColumnCount)
@@ -29,21 +145,36 @@ function getTournamentDetail(name) {
         ? ['選考状態', '支払状態']
         : ['選考状態（旧セル兼用）', '支払状態（旧セル推定）']);
     const responseRecords = tournamentSheetResponseRecords_(structure, false);
-    const personRecords = responseRecords.map(record => ({
-      source_row: record.source_row,
-      entry_id: record.entry_id,
-      player_id: record.player_id,
-      name: record.name,
-      selection_status: record.selection_status,
-      payment_status: record.payment_status,
-      paid_yen: record.paid_yen,
-      balance_yen: record.balance_yen,
-      payment_display_status: tournamentSheetPaymentDisplayStatus_(record),
-      values: record.raw_values.map(formatCell).concat([
-        record.selection_status,
-        tournamentSheetPaymentDisplayStatus_(record),
-      ]),
-    }));
+    let tournamentSnapshot = null;
+    if (structure.version === 2) {
+      tournamentSnapshot = tournamentDetailEnrichRecords_(
+        name, responseRecords
+      );
+    }
+    const personRecords = responseRecords.map(record => {
+      const selectionDisplay = tournamentDetailSelectionDisplay_(record);
+      const paymentDisplay = tournamentDetailPaymentDisplay_(record);
+      return {
+        source_row: record.source_row,
+        entry_id: record.entry_id,
+        player_id: record.player_id,
+        name: record.name,
+        selection_status: record.selection_status,
+        selection_display_status: selectionDisplay,
+        payment_status: record.payment_status,
+        payment_methods: record.payment_methods || [],
+        paid_yen: record.paid_yen,
+        balance_yen: record.balance_yen,
+        canceled_at: record.canceled_at || null,
+        lottery_result_date: record.lottery_result_date || null,
+        cancellation_timing: record.cancellation_timing || '',
+        payment_display_status: paymentDisplay,
+        values: record.raw_values.map(formatCell).concat([
+          selectionDisplay,
+          paymentDisplay,
+        ]),
+      };
+    });
     const personRows = personRecords.map(record => record.values);
     const formEndIdx = structure.response_end_index;
 
@@ -53,11 +184,26 @@ function getTournamentDetail(name) {
       bottomLeft = rows.slice(
         structure.management.start_index,
         structure.management.end_index + 1
-      ).map(row => row.slice(0, TOURNAMENT_SHEET_V2_WIDTH_));
-      bottomRight = Object.keys(structure.management.metadata).map(key => ({
-        key: key,
-        value: formatCell(structure.management.metadata[key]),
-      }));
+      ).map(row => row.slice(0, 3));
+      const detailSettings = [
+        ['公認', tournamentSheetIsSanctioned_(structure)
+          ? '公認大会' : '非公認大会'],
+        ['申込開始日', tournamentSheetManagementValue_(structure, '申込開始日')],
+        ['リマインダー', tournamentSheetManagementValue_(structure, 'リマインダー')],
+        ['本申込期限', tournamentSheetManagementValue_(structure, '本申込期限')],
+        ['抽選日', tournamentSheetManagementValue_(structure, '抽選日')],
+        ['本振込期限', tournamentSheetManagementValue_(structure, '本振込期限')],
+        ['大会の日時', tournamentSheetManagementValue_(structure, '大会の日時')],
+        ['メモ', tournamentSheetManagementValue_(structure, 'メモ')],
+        ['支払時期', tournamentDetailPaymentTimingLabel_(
+          tournamentSheetPaymentTimingFromStructure_(structure)
+        )],
+        ['振込先', tournamentSheetPaymentInstructionsFromStructure_(structure)],
+      ];
+      bottomRight = detailSettings
+        .filter(item => item[1] !== null
+          && item[1] !== undefined && String(item[1]).trim() !== '')
+        .map(item => ({ key: item[0], value: formatCell(item[1]) }));
     } else {
       const bottomRows = rows.slice(formEndIdx).filter(r => r[2] === '');
       bottomLeft = bottomRows.filter(r => r[0] !== '').map(r =>
@@ -72,8 +218,8 @@ function getTournamentDetail(name) {
 
     // 公認/非公認・登録済み判定
     let isOfficial = tournamentSheetIsSanctioned_(structure);
-    let isRegistered = structure.version === 2
-      ? Boolean(structure.management.metadata['申込処理完了'])
+    let isRegistered = structure.version === 2 && tournamentSnapshot
+      ? Boolean(Number(tournamentSnapshot.tournament.registration_completed))
       : false;
     if (structure.version === 1 && structure.register_database_row) {
       const registerIndex = structure.register_database_row - 1;
@@ -87,19 +233,18 @@ function getTournamentDetail(name) {
 
     // グレードサマリー（下部セクションの A〜E 行）
     const gradeSummary = [];
-    const gradePattern = /^[A-E]$/;
-    for (let i = formEndIdx; i < data.length; i++) {
-      const gradeKey = String(data[i][0] || '').trim();
-      if (!gradePattern.test(gradeKey)) continue;
-      const fee = data[i][1];
-      if (typeof fee !== 'number' || fee <= 0) continue;
+    const gradeKeys = Object.keys(structure.grade_rows);
+    gradeKeys.forEach(gradeKey => {
+      const fee = tournamentSheetGradeFee_(structure, gradeKey);
+      if (typeof fee !== 'number' || fee < 0) return;
       const date = formatCell(tournamentSheetGradeDate_(structure, gradeKey));
-      // 参加者数カウント（全登録者で grade が一致するもの）
+      // 公開前キャンセルを除き、公開後キャンセルは出場扱いで数える。
       const count = responseRecords.filter(record =>
         record.grade.split('').includes(gradeKey)
+        && tournamentDetailCountsAsParticipant_(record)
       ).length;
       gradeSummary.push({ grade: gradeKey, fee, count, total: fee * count, date });
-    }
+    });
 
     return JSON.stringify({
       name,
@@ -140,35 +285,11 @@ function toggleOfficialStatus(name) {
           name + ': 日程管理行がありません: ' + missingGrades.join(',')
         );
       }
-      const metadataRow = structure.management.metadata_rows['公認'];
-      sheet.getRange(metadataRow, 3).setValue(newIsOfficial);
-      declaredGrades.forEach(grade => {
-        sheet.getRange(structure.management.schedules[grade].row_number, 12)
-          .setValue(newIsOfficial);
-        sheet.getRange(structure.management.schedules[grade].row_number, 14)
-          .setValue('pending_api');
-      });
-      sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
-        .setValue('pending_api');
-      try {
-        taikaiSetTournamentSanctioned_(
-          tournamentSheetBaseName_(name), newIsOfficial, declaredGrades
-        );
-      } catch (syncError) {
-        sheet.getRange(structure.management.metadata_rows['同期エラー'], 3)
-          .setValue(String(syncError.message || syncError).slice(0, 5000));
-        throw syncError;
-      }
-      sheet.getRange(structure.management.metadata_rows['同期状態'], 3).setValue('synced');
-      sheet.getRange(structure.management.metadata_rows['最終同期日時'], 3)
-        .setValue(new Date());
-      sheet.getRange(structure.management.metadata_rows['同期エラー'], 3).setValue('');
-      declaredGrades.forEach(grade => {
-        sheet.getRange(structure.management.schedules[grade].row_number, 14)
-          .setValue('synced');
-        sheet.getRange(structure.management.schedules[grade].row_number, 15)
-          .setValue(new Date());
-      });
+      taikaiSetTournamentSanctioned_(
+        tournamentSheetBaseName_(name), newIsOfficial, declaredGrades
+      );
+      tournamentSheetManagementRange_(sheet, structure, '公認')
+        .setValue(newIsOfficial);
       return JSON.stringify({ ok: true, isOfficial: newIsOfficial });
     }
     const row = structure.register_database_row;
@@ -195,6 +316,10 @@ function setTournamentKeyValue(sheetName, key, newValue) {
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    if (structure.version === 2) {
+      tournamentSheetManagementRange_(sheet, structure, key).setValue(newValue);
+      return JSON.stringify({ ok: true });
+    }
     const row = tournamentSheetUniqueLabelRow_(
       structure.data, structure.response_end_index, key, true
     );
@@ -213,6 +338,12 @@ function getTournamentKeyValue(sheetName, key) {
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
 
     const structure = tournamentSheetStructure_(sheet, false);
+    if (structure.version === 2) {
+      return JSON.stringify({
+        ok: true,
+        value: formatCell(tournamentSheetManagementValue_(structure, key)),
+      });
+    }
     const row = tournamentSheetUniqueLabelRow_(
       structure.data, structure.response_end_index, key, true
     );
@@ -228,7 +359,8 @@ function getTournamentKeyValue(sheetName, key) {
 // 回答行・entry IDで対象を確定し、選考状態またはAPI支払い履歴を更新する。
 function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
   try {
-    const isPaid = value === '済' || value === '繰越' || value === 'くりこし';
+    const isPaid = value === '済' || value === '繰越'
+      || value === '繰り越し' || value === 'くりこし';
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
@@ -242,34 +374,144 @@ function setDetailPayStatus(sheetName, sourceRow, entryId, value, useDeposit) {
       );
     }
     if (isPaid && structure.version === 2) {
-      if (!record.entry_id) {
+      const expectedEntry = tournamentDetailEntryForRecord_(
+        tournamentDetailSnapshot_(sheetName), record
+      );
+      const resolvedEntryId = String(expectedEntry && expectedEntry.entry_id || '');
+      if (!resolvedEntryId) {
         throw new Error(
-          '申込IDがまだ同期されていません。先に完全同期を実行してください。'
+          '申込IDをDBから取得できません。大会詳細を再読み込みしてください。'
         );
       }
-      const management = structure.management.entries_by_source_row[record.source_row];
-      sheet.getRange(management.row_number, 15).setValue('pending_api');
-      try {
-        taikaiRecordFullPaymentByEntry_(record.entry_id, useDeposit === true);
-        refreshTournamentSheetV2FromApi_(sheet);
-      } catch (paymentError) {
-        markTournamentSheetV2SyncState_(
-          sheet, 'pending_api', paymentError.message || paymentError, record.entry_id
+      if (String(entryId || '') !== resolvedEntryId) {
+        throw new Error(
+          '画面表示後に申込情報が変わりました。大会詳細を再読み込みしてください。'
         );
-        throw paymentError;
       }
+      taikaiRecordFullPaymentByEntry_(resolvedEntryId, useDeposit === true);
       return JSON.stringify({ ok: true });
     }
     tournamentSheetSelectionStatusRange_(
       sheet, structure, record.source_row
-    ).setValue(isPaid && structure.version === 2 ? '' : value);
-    if (structure.version === 2) {
-      const management = structure.management.entries_by_source_row[record.source_row];
-      sheet.getRange(management.row_number, 15).setValue('pending_api');
-      sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
-        .setValue('pending_api');
-    }
+    ).setValue(value);
     return JSON.stringify({ ok: true });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function tournamentDetailCancellationAt_(timing, lotteryResultDate) {
+  const lotteryDate = String(lotteryResultDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lotteryDate)) {
+    throw new Error('抽選公開日が未設定のため、キャンセル区分を判定できません。');
+  }
+  if (timing === 'before') {
+    const date = new Date(
+      new Date(lotteryDate + 'T12:00:00+09:00').getTime() - 86400000
+    );
+    return Utilities.formatDate(
+      date, 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+    );
+  }
+  if (timing === 'after') {
+    const today = Utilities.formatDate(new Date(), 'JST', 'yyyy-MM-dd');
+    if (today < lotteryDate) {
+      throw new Error('抽選公開日前のため、公開後キャンセルにはできません。');
+    }
+    return Utilities.formatDate(
+      new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+    );
+  }
+  if (timing === 'clear') return null;
+  throw new Error('キャンセル区分が不正です。');
+}
+
+function setEntryCancellationStatus(
+  sheetName, sourceRow, entryId, timing, movePaymentsToDeposit
+) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
+    const structure = tournamentSheetStructure_(sheet, false);
+    if (structure.version !== 2) {
+      throw new Error('キャンセル管理は大会シートv2でのみ利用できます。');
+    }
+    const record = tournamentSheetResponseRecord_(
+      structure, sourceRow, entryId
+    );
+    const snapshot = tournamentDetailSnapshot_(sheetName);
+    const entry = tournamentDetailEntryForRecord_(snapshot, record);
+    const resolvedEntryId = String(entry && entry.entry_id || '');
+    if (!resolvedEntryId || resolvedEntryId !== String(entryId || '')) {
+      throw new Error(
+        '画面表示後に申込情報が変わりました。大会詳細を再読み込みしてください。'
+      );
+    }
+    const schedule = (snapshot.schedules || []).find(item =>
+      String(item.id || '') === String(entry.schedule_id || '')
+    );
+    if (!schedule) throw new Error('対象級の日程をDBから取得できません。');
+    const canceledAt = tournamentDetailCancellationAt_(
+      timing, schedule.lottery_result_date
+    );
+    const result = taikaiSetEntryCancellationStatus_(
+      resolvedEntryId, canceledAt, movePaymentsToDeposit === true
+    );
+    return JSON.stringify({ ok: true, result: result });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function getEntryPaymentDetail(entryId) {
+  try {
+    const normalizedEntryId = String(entryId || '');
+    if (!/^\d+$/.test(normalizedEntryId)) {
+      throw new Error('申込IDが不正です。');
+    }
+    return JSON.stringify({
+      ok: true,
+      payment: taikaiApiRequest_(
+        'GET',
+        '/entries/' + encodeURIComponent(normalizedEntryId)
+          + '/payment-summary'
+      ),
+    });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
+function reverseEntryPaymentFromDetail(entryId, paymentId) {
+  try {
+    const normalizedEntryId = String(entryId || '');
+    const normalizedPaymentId = String(paymentId || '');
+    if (!/^\d+$/.test(normalizedEntryId)
+        || !/^\d+$/.test(normalizedPaymentId)) {
+      throw new Error('申込IDまたは支払履歴IDが不正です。');
+    }
+    const summary = taikaiApiRequest_(
+      'GET',
+      '/entries/' + encodeURIComponent(normalizedEntryId) + '/payment-summary'
+    );
+    const payment = (summary.payments || []).find(item =>
+      String(item.id || '') === normalizedPaymentId
+      && String(item.entry_id || '') === normalizedEntryId
+    );
+    if (!payment) {
+      throw new Error('対象の支払履歴を申込から確認できません。');
+    }
+    const result = taikaiApiRequest_(
+      'POST',
+      '/entry-payments/' + encodeURIComponent(normalizedPaymentId) + '/reverse',
+      {
+        reversed_at: Utilities.formatDate(
+          new Date(), 'JST', "yyyy-MM-dd'T'HH:mm:ssXXX"
+        ),
+      }
+    );
+    return JSON.stringify({ ok: true, payment: result });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }
@@ -284,9 +526,14 @@ function getTournamentPaySummary(name) {
 
     const structure = tournamentSheetStructure_(sheet, false);
     const records = tournamentSheetResponseRecords_(structure, false);
-    const allData = structure.data;
-    const formEndIdx = structure.response_end_index;
-    const feeMap     = getSuitouFeeMap_(allData, formEndIdx);
+    if (structure.version === 2) {
+      tournamentDetailEnrichRecords_(name, records);
+    }
+    const feeMap = {};
+    Object.keys(structure.grade_rows).forEach(grade => {
+      const fee = tournamentSheetGradeFee_(structure, grade);
+      if (typeof fee === 'number' && fee > 0) feeMap[grade] = fee;
+    });
 
     let count = 0, total = 0;
     const gradeMap = {}; // grade -> { fee, names[] }
@@ -315,13 +562,13 @@ function setGradeFee(sheetName, grade, fee) {
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
     const structure = tournamentSheetStructure_(sheet, false);
-    const row = structure.grade_rows[String(grade).trim()];
-    if (!row) return JSON.stringify({ error: `グレード「${grade}」の行が見つかりません` });
-    sheet.getRange(row, 2).setValue(fee);
+    tournamentSheetGradeFeeRange_(sheet, structure, grade).setValue(fee);
     if (structure.version === 2) {
-      sheet.getRange(row, 14).setValue('pending_api');
-      sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
-        .setValue('pending_api');
+      const gradeDates = {};
+      tournamentSheetDeclaredGrades_(sheetName).forEach(item => {
+        gradeDates[item] = tournamentSheetGradeDate_(structure, item);
+      });
+      taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates);
     }
     return JSON.stringify({ ok: true });
   } catch (e) {
@@ -345,19 +592,10 @@ function saveTournamentDates(sheetName, gradeDatesJson) {
           .setValue(new Date(gradeDates[grade]));
       }
     });
-    if (structure.version === 2) {
-      sheet.getRange(structure.management.metadata_rows['同期状態'], 3)
-        .setValue('pending_api');
-    }
-
     // シートはフォーム・表示用に残すが、運用上の大会日程は新DBへ同期する。
     try {
       taikaiSyncTournamentSchedulesFromSheet_(sheetName, gradeDates);
     } catch (syncError) {
-      if (structure.version === 2) {
-        sheet.getRange(structure.management.metadata_rows['同期エラー'], 3)
-          .setValue(String(syncError.message || syncError).slice(0, 5000));
-      }
       throw syncError;
     }
     return JSON.stringify({ ok: true });
@@ -366,7 +604,7 @@ function saveTournamentDates(sheetName, gradeDatesJson) {
   }
 }
 
-// フォームURL取得（col N+4: フォームURL）
+// フォーム編集URL取得
 function getFormUrl(name) {
   try {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);

@@ -34,6 +34,46 @@ function escAttr(s) {
   return escHtml(s);
 }
 
+function csvDownloadCell(value) {
+  let text = value === undefined || value === null ? '' : String(value);
+  // Excelで開いた際に、外部由来の文字列を数式として実行させない。
+  if (typeof value === 'string' && /^[=+@]/.test(text)) text = "'" + text;
+  if (typeof value === 'string' && /^-(?!\d+(?:\.\d+)?$)/.test(text)) {
+    text = "'" + text;
+  }
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+function downloadCsvFile(filename, headers, rows) {
+  const matrix = [headers].concat(rows || []);
+  const csv = '\uFEFF' + matrix.map(row =>
+    (row || []).map(csvDownloadCell).join(',')
+  ).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = String(filename || 'download.csv')
+    .replace(/[\\/:*?"<>|]/g, '_');
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function csvDownloadDateStamp(value) {
+  const parts = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value || new Date());
+  const values = {};
+  parts.forEach(part => { values[part.type] = part.value; });
+  return values.year + '-' + values.month + '-' + values.day;
+}
+
 function isSafeHttpUrl(value) {
   const text = String(value || '').trim();
   if (!/^https?:\/\//i.test(text)) return false;
@@ -131,6 +171,11 @@ document.querySelectorAll('nav button').forEach(btn => {
       // 表示許可は一度タブを開いた時点で消費し、ナビゲーションを再び隠す。
       consumeSheetMigrationNavigationActivation();
     }
+    if (page === 'authentication') {
+      initAuthenticationPage();
+      // 表示許可は一度タブを開いた時点で消費し、ナビゲーションを再び隠す。
+      consumeAuthenticationNavigationActivation();
+    }
     if (page === 'settings') initSettingsPage();
   });
 });
@@ -159,6 +204,7 @@ function initApp() {
   document.getElementById('nav-settings-btn').style.display = 'inline-block';
   document.getElementById('nav-database-admin-btn').style.display = 'inline-block';
   applySheetMigrationNavigationVisibility();
+  applyAuthenticationNavigationVisibility();
   document.getElementById('nav-form-create-btn').style.display = 'inline-block';
   document.getElementById('nav-make-email-btn').style.display = 'inline-block';
   document.getElementById('nav-mail-management-btn').style.display = 'inline-block';

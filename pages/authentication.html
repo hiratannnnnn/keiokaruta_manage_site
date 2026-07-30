@@ -1,0 +1,32 @@
+<!-- ========== 認証 ========== -->
+<div id="page-authentication" class="page">
+  <div class="list-page">
+    <div class="page-title-row">
+      <div class="page-title">認証</div>
+      <button type="button" class="page-guide-back-btn"
+              onclick="loadAuthenticationDuplicates(true)">再読込</button>
+    </div>
+    <div class="panel">
+      <div class="panel-header">同姓同名・異メールアドレス</div>
+      <div class="panel-body">
+        <p style="font-size:0.85rem;color:#666;margin-top:0;margin-bottom:12px;">
+          DBメール対応表を直接確認し、同じ氏名に複数の実メールアドレスが登録されている人を表示します。
+          この画面ではデータを変更しません。
+        </p>
+        <div id="authentication-status" class="status">タブを開くと確認を開始します。</div>
+        <div id="authentication-results" style="display:none;overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>氏名</th>
+                <th>メールアドレス</th>
+                <th>該当行</th>
+              </tr>
+            </thead>
+            <tbody id="authentication-duplicates-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

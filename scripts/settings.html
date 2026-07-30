@@ -4,6 +4,7 @@
 // ------------------------------------------------------------
 let settingsPageLoaded = false;
 const SHEET_MIGRATION_NAV_KEY = 'karuta_show_sheet_migration';
+const AUTHENTICATION_NAV_KEY = 'karuta_show_authentication';
 
 function isSheetMigrationNavigationEnabled() {
   try {
@@ -37,9 +38,43 @@ function consumeSheetMigrationNavigationActivation() {
   applySheetMigrationNavigationVisibility();
 }
 
+function isAuthenticationNavigationEnabled() {
+  try {
+    return sessionStorage.getItem(AUTHENTICATION_NAV_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function applyAuthenticationNavigationVisibility() {
+  const visible = isAuthenticationNavigationEnabled();
+  document.getElementById('nav-authentication-btn').style.display =
+    visible ? 'inline-block' : 'none';
+}
+
+function toggleAuthenticationNavigation(enabled) {
+  try {
+    if (enabled) {
+      sessionStorage.setItem(AUTHENTICATION_NAV_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(AUTHENTICATION_NAV_KEY);
+    }
+  } catch (e) {}
+  applyAuthenticationNavigationVisibility();
+}
+
+function consumeAuthenticationNavigationActivation() {
+  try { sessionStorage.removeItem(AUTHENTICATION_NAV_KEY); } catch (e) {}
+  const checkbox = document.getElementById('settings-show-authentication');
+  if (checkbox) checkbox.checked = false;
+  applyAuthenticationNavigationVisibility();
+}
+
 function initSettingsPage() {
   document.getElementById('settings-show-sheet-migration').checked =
     isSheetMigrationNavigationEnabled();
+  document.getElementById('settings-show-authentication').checked =
+    isAuthenticationNavigationEnabled();
   if (settingsPageLoaded) return;
   settingsPageLoaded = true;
   loadEnvironmentConfigStatus();
