@@ -99,6 +99,24 @@ function participationMatrixInFiscalYear_(heldOn, fiscalYear) {
     && date <= (fiscalYear + 1) + '-03-31';
 }
 
+function participationMatrixScheduleIsPublished_(schedule, today) {
+  const lotteryDate = String(schedule && schedule.lottery_result_date || '')
+    .slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(lotteryDate) && lotteryDate <= today;
+}
+
+function participationMatrixPublishedSchedules_() {
+  const today = cancellationJapanDate_(new Date());
+  const result = {};
+  const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
+  (Array.isArray(schedules) ? schedules : []).forEach(schedule => {
+    if (participationMatrixScheduleIsPublished_(schedule, today)) {
+      result[String(schedule.id)] = schedule;
+    }
+  });
+  return result;
+}
+
 function participationMatrixAllTournaments_(sourceTournaments, fiscalYear) {
   const tournaments = taikaiApiRequest_('GET', '/tournaments', null, {}) || [];
   const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
@@ -141,8 +159,11 @@ function participationMatrixAllTournaments_(sourceTournaments, fiscalYear) {
 function participationMatrixCancellationStatuses_() {
   const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
   const scheduleById = {};
+  const today = cancellationJapanDate_(new Date());
   (Array.isArray(schedules) ? schedules : []).forEach(schedule => {
-    scheduleById[String(schedule.id)] = schedule;
+    if (participationMatrixScheduleIsPublished_(schedule, today)) {
+      scheduleById[String(schedule.id)] = schedule;
+    }
   });
   const latestEntries = {};
   participationMatrixAllDatabaseRows_('entries').forEach(entry => {
@@ -160,6 +181,7 @@ function participationMatrixCancellationStatuses_() {
   Object.keys(latestEntries).forEach(key => {
     const entry = latestEntries[key];
     const schedule = scheduleById[String(entry.schedule_id || '')] || {};
+    if (!schedule.id) return;
     const status = cancellationStatusFromRecord_(Object.assign({}, entry, {
       lottery_result_date: schedule.lottery_result_date,
     }));
@@ -221,23 +243,35 @@ function getParticipationMatrix(fiscalYearInput) {
       null,
       { fiscal_year: fiscalYear }
     ) || {};
+    const publishedSchedules = participationMatrixPublishedSchedules_();
     const cancellationInfo = participationMatrixCancellationStatuses_();
     const participations = (source.participations || []).map(item => {
       const playerId = String(item.player_id);
       const tournamentId = String(item.tournament_id);
+      const scheduleIds = (item.schedule_ids || []).map(String)
+        .filter(id => publishedSchedules[id]);
+      if (!scheduleIds.length) return null;
+      const sanctionedScheduleIds = scheduleIds.filter(id =>
+        publishedSchedules[id].is_sanctioned === true
+      );
+      const unsanctionedScheduleIds = scheduleIds.filter(id =>
+        publishedSchedules[id].is_sanctioned !== true
+      );
+      const mark = sanctionedScheduleIds.length && unsanctionedScheduleIds.length
+        ? 'mixed' : sanctionedScheduleIds.length ? 'sanctioned' : 'unsanctioned';
       return {
         player_id: playerId,
         tournament_id: tournamentId,
-        mark: String(item.mark || ''),
+        mark: mark,
         cancellation_status: cancellationNormalizeExplicitStatus_(
           item.cancellation_status || item.cancellation_timing
         ) || cancellationInfo.statuses[playerId + ':' + tournamentId]
           || CANCELLATION_STATUS.NONE,
-        schedule_ids: (item.schedule_ids || []).map(String),
-        sanctioned_schedule_ids: (item.sanctioned_schedule_ids || []).map(String),
-        unsanctioned_schedule_ids: (item.unsanctioned_schedule_ids || []).map(String),
+        schedule_ids: scheduleIds,
+        sanctioned_schedule_ids: sanctionedScheduleIds,
+        unsanctioned_schedule_ids: unsanctionedScheduleIds,
       };
-    });
+    }).filter(Boolean);
     const participationKeys = {};
     participations.forEach(item => {
       participationKeys[item.player_id + ':' + item.tournament_id] = true;

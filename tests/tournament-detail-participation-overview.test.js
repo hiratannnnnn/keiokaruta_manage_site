@@ -119,9 +119,23 @@ const matrixSandbox = {
     }
     if (apiPath === '/schedules') {
       return [
-        { id: 11, tournament_id: 1, grade: 'A', held_on: '2026-06-01' },
+        {
+          id: 11,
+          tournament_id: 1,
+          grade: 'A',
+          held_on: '2026-06-01',
+          lottery_result_date: null,
+          is_sanctioned: true,
+        },
         // 集約APIにない、出場者ゼロの級も表示対象。
-        { id: 12, tournament_id: 1, grade: 'C', held_on: '2026-06-01' },
+        {
+          id: 12,
+          tournament_id: 1,
+          grade: 'C',
+          held_on: '2026-06-01',
+          lottery_result_date: '2999-01-01',
+          is_sanctioned: true,
+        },
         {
           id: 21,
           tournament_id: 2,
@@ -140,7 +154,12 @@ const matrixSandbox = {
           { id: 2, family_name: '先', given_name: '選手' },
         ],
         // 集約APIから欠落していても、公開後キャンセルは出場として補完する。
-        participations: [],
+        participations: [{
+          player_id: 1,
+          tournament_id: 1,
+          mark: 'sanctioned',
+          schedule_ids: [11, 12],
+        }],
         tournaments: [
           {
             id: 1,
@@ -173,6 +192,7 @@ assert.strictEqual(matrixResult.participations[0].cancellation_status, 'after');
 assert.strictEqual(matrixResult.participations[0].mark, 'sanctioned');
 assert.strictEqual(matrixResult.players[0].sanctionedCount, 1);
 assert.strictEqual(matrixResult.players[0].totalCount, 1);
+assert.strictEqual(matrixResult.players[1].totalCount, 0);
 assert.match(matrixScript, /participation-cancel-after/);
 assert.match(style, /tr:nth-child\(even\) td\.participation-cancel-after/);
 assert.match(style, /td\.participation-sanctioned[\s\S]*?background: #d4edda !important/);
