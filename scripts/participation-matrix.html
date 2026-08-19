@@ -19,7 +19,12 @@ function participationMatrixFormatDate(value) {
 }
 
 function participationMatrixFormatGrades(grades) {
-  return (grades || []).map(grade => String(grade) + '級').join('・');
+  const normalized = (grades || [])
+    .map(grade => String(grade || '').trim().toUpperCase())
+    .filter(Boolean)
+    .filter((grade, index, values) => values.indexOf(grade) === index)
+    .sort((left, right) => left.localeCompare(right, 'en'));
+  return normalized.length ? normalized.join('') + '級' : '';
 }
 
 function loadParticipationMatrix(force) {

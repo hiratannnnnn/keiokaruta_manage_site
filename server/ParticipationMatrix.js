@@ -265,7 +265,10 @@ function getParticipationMatrix(fiscalYearInput) {
       return {
         id: String(tournament.id),
         name: name,
-        grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
+        grades: (tournament.grades || [])
+          .map(grade => String(grade).toUpperCase())
+          .filter((grade, index, values) => values.indexOf(grade) === index)
+          .sort(),
         heldOn: (tournament.held_on || []).map(String).sort(),
       };
     }).sort((left, right) =>

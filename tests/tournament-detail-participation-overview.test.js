@@ -67,6 +67,8 @@ assert.match(matrixServer, /player\.sort_order/);
 assert.doesNotMatch(matrixScript, /tournament\.sort_order/);
 assert.doesNotMatch(matrixScript, /tournament\.shortName/);
 assert.match(matrixScript, /participationMatrixFormatGrades/);
+assert.match(matrixScript, /normalized\.join\(''\) \+ '級'/);
+assert.match(matrixScript, /localeCompare\(right, 'en'\)/);
 assert.match(matrixScript, /sanctionedCount[\s\S]*?unsanctionedCount/);
 assert.match(matrixServer, /_sortOrder/);
 assert.match(matrixServer, /participationMatrixAllTournaments_/);
