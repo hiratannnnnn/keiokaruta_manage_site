@@ -231,6 +231,59 @@ function participationMatrixCancellationStatuses_() {
   return { statuses: statuses, participations: participations };
 }
 
+function participationMatrixMergeSameName_(players, participations) {
+  const playerByName = {};
+  const canonicalIdByPlayerId = {};
+  const mergedPlayers = [];
+  players.forEach(player => {
+    const normalizedName = String(player.name || '').replace(/[ 　]+/g, '').trim();
+    const nameKey = normalizedName || '__player_id__' + String(player.id);
+    let canonical = playerByName[nameKey];
+    if (!canonical) {
+      canonical = player;
+      playerByName[nameKey] = canonical;
+      mergedPlayers.push(canonical);
+    } else if (!canonical.ruby && player.ruby) {
+      canonical.ruby = player.ruby;
+    }
+    canonicalIdByPlayerId[String(player.id)] = String(canonical.id);
+  });
+
+  const participationByKey = {};
+  participations.forEach(item => {
+    const playerId = canonicalIdByPlayerId[String(item.player_id)]
+      || String(item.player_id);
+    const key = playerId + ':' + String(item.tournament_id);
+    if (!participationByKey[key]) {
+      participationByKey[key] = Object.assign({}, item, {
+        player_id: playerId,
+        schedule_ids: [],
+        sanctioned_schedule_ids: [],
+        unsanctioned_schedule_ids: [],
+      });
+    }
+    const merged = participationByKey[key];
+    ['schedule_ids', 'sanctioned_schedule_ids', 'unsanctioned_schedule_ids']
+      .forEach(field => {
+        (item[field] || []).forEach(id => {
+          const value = String(id);
+          if (!merged[field].includes(value)) merged[field].push(value);
+        });
+      });
+    const hasSanctioned = merged.sanctioned_schedule_ids.length > 0;
+    const hasUnsanctioned = merged.unsanctioned_schedule_ids.length > 0;
+    merged.mark = hasSanctioned && hasUnsanctioned
+      ? 'mixed' : hasSanctioned ? 'sanctioned' : 'unsanctioned';
+    if (item.cancellation_status !== CANCELLATION_STATUS.AFTER) {
+      merged.cancellation_status = CANCELLATION_STATUS.NONE;
+    }
+  });
+  return {
+    players: mergedPlayers,
+    participations: Object.keys(participationByKey).map(key => participationByKey[key]),
+  };
+}
+
 function getParticipationMatrix(fiscalYearInput) {
   try {
     const requestedFiscalYear = Number(fiscalYearInput);
@@ -245,7 +298,7 @@ function getParticipationMatrix(fiscalYearInput) {
     ) || {};
     const publishedSchedules = participationMatrixPublishedSchedules_();
     const cancellationInfo = participationMatrixCancellationStatuses_();
-    const participations = (source.participations || []).map(item => {
+    let participations = (source.participations || []).map(item => {
       const playerId = String(item.player_id);
       const tournamentId = String(item.tournament_id);
       const scheduleIds = (item.schedule_ids || []).map(String)
@@ -284,31 +337,13 @@ function getParticipationMatrix(fiscalYearInput) {
       }
     });
 
-    const countsByPlayer = {};
-    participations.forEach(item => {
-      if (!countsByPlayer[item.player_id]) {
-        countsByPlayer[item.player_id] = {
-          sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0,
-        };
-      }
-      const counts = countsByPlayer[item.player_id];
-      counts.all++;
-      if (item.mark === 'sanctioned' || item.mark === 'mixed') counts.sanctioned++;
-      if (item.mark === 'unsanctioned' || item.mark === 'mixed') counts.unsanctioned++;
-      if (item.mark === 'mixed') counts.mixed++;
-    });
-
     const databasePlayers = participationMatrixAllDatabaseRows_('players');
     const playerSortOrders = {};
     databasePlayers.forEach(player => {
       playerSortOrders[String(player.id)] = player.sort_order;
     });
-    const players = (source.players || []).map((player, sourceIndex) => {
+    let players = (source.players || []).map((player, sourceIndex) => {
       const id = String(player.id);
-      const counts = countsByPlayer[id]
-        || { sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0 };
-      const sanctionedCount = counts.sanctioned;
-      const unsanctionedCount = counts.unsanctioned;
       const rawSortOrder = player.sort_order !== undefined
         ? player.sort_order : playerSortOrders[id];
       const sortOrder = rawSortOrder === null || rawSortOrder === ''
@@ -317,11 +352,11 @@ function getParticipationMatrix(fiscalYearInput) {
         id: id,
         name: [player.family_name, player.given_name].filter(Boolean).join(' '),
         ruby: String(player.ruby || ''),
-        totalCount: sanctionedCount,
-        sanctionedCount: sanctionedCount,
-        unsanctionedCount: unsanctionedCount,
-        mixedCount: counts.mixed,
-        allTournamentCount: counts.all,
+        totalCount: 0,
+        sanctionedCount: 0,
+        unsanctionedCount: 0,
+        mixedCount: 0,
+        allTournamentCount: 0,
         sort_order: rawSortOrder === undefined ? null : rawSortOrder,
         _sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
         _sourceIndex: sourceIndex,
@@ -337,6 +372,31 @@ function getParticipationMatrix(fiscalYearInput) {
       delete player._sortOrder;
       delete player._sourceIndex;
       return player;
+    });
+    const merged = participationMatrixMergeSameName_(players, participations);
+    players = merged.players;
+    participations = merged.participations;
+    const countsByPlayer = {};
+    participations.forEach(item => {
+      if (!countsByPlayer[item.player_id]) {
+        countsByPlayer[item.player_id] = {
+          sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0,
+        };
+      }
+      const counts = countsByPlayer[item.player_id];
+      counts.all++;
+      if (item.mark === 'sanctioned' || item.mark === 'mixed') counts.sanctioned++;
+      if (item.mark === 'unsanctioned' || item.mark === 'mixed') counts.unsanctioned++;
+      if (item.mark === 'mixed') counts.mixed++;
+    });
+    players.forEach(player => {
+      const counts = countsByPlayer[player.id]
+        || { sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0 };
+      player.totalCount = counts.sanctioned;
+      player.sanctionedCount = counts.sanctioned;
+      player.unsanctionedCount = counts.unsanctioned;
+      player.mixedCount = counts.mixed;
+      player.allTournamentCount = counts.all;
     });
 
     const tournaments = participationMatrixAllTournaments_(

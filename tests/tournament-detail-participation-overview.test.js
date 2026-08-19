@@ -95,10 +95,11 @@ const matrixSandbox = {
   taikaiApiRequest_: (method, apiPath) => {
     if (apiPath === '/admin/database/players') {
       return {
-        total: 2,
+        total: 3,
         rows: [
           { id: 1, sort_order: 20 },
           { id: 2, sort_order: 10 },
+          { id: 3, sort_order: 30 },
         ],
       };
     }
@@ -155,6 +156,7 @@ const matrixSandbox = {
         players: [
           { id: 1, family_name: '後', given_name: '選手' },
           { id: 2, family_name: '先', given_name: '選手' },
+          { id: 3, family_name: '後', given_name: '選手' },
         ],
         // 集約APIから欠落していても、公開後キャンセルは出場として補完する。
         participations: [{
@@ -162,6 +164,11 @@ const matrixSandbox = {
           tournament_id: 1,
           mark: 'sanctioned',
           schedule_ids: [11, 12],
+        }, {
+          player_id: 3,
+          tournament_id: 2,
+          mark: 'sanctioned',
+          schedule_ids: [21],
         }],
         tournaments: [
           {
@@ -191,11 +198,16 @@ assert.deepStrictEqual(
   ['2', '1']
 );
 assert.deepStrictEqual(matrixResult.tournaments[1].grades, ['A', 'C']);
-assert.strictEqual(matrixResult.participations[0].cancellation_status, 'after');
-assert.strictEqual(matrixResult.participations[0].mark, 'sanctioned');
+const canceledParticipation = matrixResult.participations.find(
+  item => item.player_id === '2' && item.tournament_id === '2'
+);
+assert.strictEqual(canceledParticipation.cancellation_status, 'after');
+assert.strictEqual(canceledParticipation.mark, 'sanctioned');
 assert.strictEqual(matrixResult.players[0].sanctionedCount, 1);
 assert.strictEqual(matrixResult.players[0].totalCount, 1);
-assert.strictEqual(matrixResult.players[1].totalCount, 0);
+assert.strictEqual(matrixResult.players.length, 2);
+assert.ok(!matrixResult.players.some(player => player.id === '3'));
+assert.strictEqual(matrixResult.players[1].totalCount, 1);
 assert.match(matrixScript, /participation-cancel-after/);
 assert.match(style, /tr:nth-child\(even\) td\.participation-cancel-after/);
 assert.match(style, /td\.participation-sanctioned[\s\S]*?background: #d4edda !important/);
