@@ -128,6 +128,7 @@ const matrixSandbox = {
           grade: 'B',
           held_on: '2026-05-01',
           lottery_result_date: '2026-04-15',
+          is_sanctioned: true,
         },
         { id: 31, tournament_id: 3, grade: 'C', held_on: '2026-03-01' },
       ];
@@ -138,7 +139,8 @@ const matrixSandbox = {
           { id: 1, family_name: '後', given_name: '選手' },
           { id: 2, family_name: '先', given_name: '選手' },
         ],
-        participations: [{ player_id: 2, tournament_id: 2, mark: 'sanctioned' }],
+        // 集約APIから欠落していても、公開後キャンセルは出場として補完する。
+        participations: [],
         tournaments: [
           {
             id: 1,
@@ -168,6 +170,9 @@ assert.deepStrictEqual(
 );
 assert.deepStrictEqual(matrixResult.tournaments[1].grades, ['A', 'C']);
 assert.strictEqual(matrixResult.participations[0].cancellation_status, 'after');
+assert.strictEqual(matrixResult.participations[0].mark, 'sanctioned');
+assert.strictEqual(matrixResult.players[0].sanctionedCount, 1);
+assert.strictEqual(matrixResult.players[0].totalCount, 1);
 assert.match(matrixScript, /participation-cancel-after/);
 assert.match(style, /tr:nth-child\(even\) td\.participation-cancel-after/);
 assert.match(style, /td\.participation-sanctioned[\s\S]*?background: #d4edda !important/);

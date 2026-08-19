@@ -167,16 +167,46 @@ function participationMatrixCancellationStatuses_() {
         && status !== CANCELLATION_STATUS.AFTER) return;
     const participationKey = String(entry.player_id || '') + ':'
       + String(schedule.tournament_id || '');
-    if (!states[participationKey]) states[participationKey] = [];
-    states[participationKey].push(status);
+    if (!states[participationKey]) {
+      states[participationKey] = {
+        statuses: [],
+        schedule_ids: [],
+        sanctioned_schedule_ids: [],
+        unsanctioned_schedule_ids: [],
+      };
+    }
+    const state = states[participationKey];
+    state.statuses.push(status);
+    const scheduleId = String(entry.schedule_id || '');
+    state.schedule_ids.push(scheduleId);
+    (schedule.is_sanctioned === true
+      ? state.sanctioned_schedule_ids : state.unsanctioned_schedule_ids
+    ).push(scheduleId);
   });
 
-  const result = {};
+  const statuses = {};
+  const participations = [];
   Object.keys(states).forEach(key => {
-    result[key] = states[key].includes(CANCELLATION_STATUS.NONE)
+    const state = states[key];
+    const status = state.statuses.includes(CANCELLATION_STATUS.NONE)
       ? CANCELLATION_STATUS.NONE : CANCELLATION_STATUS.AFTER;
+    statuses[key] = status;
+    if (status !== CANCELLATION_STATUS.AFTER) return;
+    const ids = key.split(':');
+    const hasSanctioned = state.sanctioned_schedule_ids.length > 0;
+    const hasUnsanctioned = state.unsanctioned_schedule_ids.length > 0;
+    participations.push({
+      player_id: ids[0],
+      tournament_id: ids[1],
+      cancellation_status: CANCELLATION_STATUS.AFTER,
+      mark: hasSanctioned && hasUnsanctioned
+        ? 'mixed' : hasSanctioned ? 'sanctioned' : 'unsanctioned',
+      schedule_ids: state.schedule_ids,
+      sanctioned_schedule_ids: state.sanctioned_schedule_ids,
+      unsanctioned_schedule_ids: state.unsanctioned_schedule_ids,
+    });
   });
-  return result;
+  return { statuses: statuses, participations: participations };
 }
 
 function getParticipationMatrix(fiscalYearInput) {
@@ -191,7 +221,7 @@ function getParticipationMatrix(fiscalYearInput) {
       null,
       { fiscal_year: fiscalYear }
     ) || {};
-    const cancellationStatuses = participationMatrixCancellationStatuses_();
+    const cancellationInfo = participationMatrixCancellationStatuses_();
     const participations = (source.participations || []).map(item => {
       const playerId = String(item.player_id);
       const tournamentId = String(item.tournament_id);
@@ -201,21 +231,37 @@ function getParticipationMatrix(fiscalYearInput) {
         mark: String(item.mark || ''),
         cancellation_status: cancellationNormalizeExplicitStatus_(
           item.cancellation_status || item.cancellation_timing
-        ) || cancellationStatuses[playerId + ':' + tournamentId]
+        ) || cancellationInfo.statuses[playerId + ':' + tournamentId]
           || CANCELLATION_STATUS.NONE,
         schedule_ids: (item.schedule_ids || []).map(String),
         sanctioned_schedule_ids: (item.sanctioned_schedule_ids || []).map(String),
         unsanctioned_schedule_ids: (item.unsanctioned_schedule_ids || []).map(String),
       };
     });
+    const participationKeys = {};
+    participations.forEach(item => {
+      participationKeys[item.player_id + ':' + item.tournament_id] = true;
+    });
+    cancellationInfo.participations.forEach(item => {
+      const key = item.player_id + ':' + item.tournament_id;
+      if (!participationKeys[key]) {
+        participations.push(item);
+        participationKeys[key] = true;
+      }
+    });
 
     const countsByPlayer = {};
     participations.forEach(item => {
       if (!countsByPlayer[item.player_id]) {
-        countsByPlayer[item.player_id] = { mixed: 0, all: 0 };
+        countsByPlayer[item.player_id] = {
+          sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0,
+        };
       }
-      countsByPlayer[item.player_id].all++;
-      if (item.mark === 'mixed') countsByPlayer[item.player_id].mixed++;
+      const counts = countsByPlayer[item.player_id];
+      counts.all++;
+      if (item.mark === 'sanctioned' || item.mark === 'mixed') counts.sanctioned++;
+      if (item.mark === 'unsanctioned' || item.mark === 'mixed') counts.unsanctioned++;
+      if (item.mark === 'mixed') counts.mixed++;
     });
 
     const databasePlayers = participationMatrixAllDatabaseRows_('players');
@@ -225,9 +271,10 @@ function getParticipationMatrix(fiscalYearInput) {
     });
     const players = (source.players || []).map((player, sourceIndex) => {
       const id = String(player.id);
-      const counts = countsByPlayer[id] || { mixed: 0, all: 0 };
-      const sanctionedCount = Number(player.sanctioned_count || 0);
-      const unsanctionedCount = Number(player.unsanctioned_count || 0);
+      const counts = countsByPlayer[id]
+        || { sanctioned: 0, unsanctioned: 0, mixed: 0, all: 0 };
+      const sanctionedCount = counts.sanctioned;
+      const unsanctionedCount = counts.unsanctioned;
       const rawSortOrder = player.sort_order !== undefined
         ? player.sort_order : playerSortOrders[id];
       const sortOrder = rawSortOrder === null || rawSortOrder === ''
