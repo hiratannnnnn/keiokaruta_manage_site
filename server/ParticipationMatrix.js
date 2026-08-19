@@ -133,15 +133,17 @@ function getParticipationMatrix(fiscalYearInput) {
 
     const tournaments = (source.tournaments || []).map((tournament, index) => {
       const name = String(tournament.name || '');
-      const sortOrder = Number(tournament.sort_order);
+      const rawSortOrder = tournament.sort_order !== undefined
+        ? tournament.sort_order : tournament.sortOrder;
+      const sortOrder = rawSortOrder === null || rawSortOrder === ''
+        ? NaN : Number(rawSortOrder);
       return {
         id: String(tournament.id),
         name: name,
         shortName: participationMatrixShortName_(name),
         grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
         heldOn: (tournament.held_on || []).map(String).sort(),
-        sort_order: tournament.sort_order === undefined
-          ? null : tournament.sort_order,
+        sort_order: rawSortOrder === undefined ? null : rawSortOrder,
         _sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
         _sourceIndex: index,
       };

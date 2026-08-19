@@ -706,7 +706,10 @@ function onDetailLoaded(json) {
     personRecords.map(record => {
       const row = record.values || [];
       const name = String(record.name || row[detailNameColumnIndex] || '');
-      return '<tr>' + row.map((cell, i) => {
+      const cancellationRowClass = record.cancellation_status === 'before'
+        ? 'cancel-row-before'
+        : record.cancellation_status === 'after' ? 'cancel-row-after' : '';
+      return `<tr class="${cancellationRowClass}">` + row.map((cell, i) => {
         if (i === detailNameColumnIndex) {
           return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
         }

@@ -62,6 +62,8 @@ assert.match(script, /APIの取得上限に達したため/);
 assert.match(server, /grade: record\.grade/);
 assert.match(matrixServer, /function getParticipationMatrix\(fiscalYearInput\)/);
 assert.match(matrixServer, /sort_order/);
+assert.match(matrixServer, /tournament\.sortOrder/);
+assert.match(matrixScript, /left\.tournament\.sort_order/);
 assert.match(matrixServer, /_sortOrder/);
 assert.match(style, /\.detail-participation-table-wrap[\s\S]*?overflow: auto/);
 assert.match(style, /\.detail-participation-history-cell[\s\S]*?overflow: auto/);

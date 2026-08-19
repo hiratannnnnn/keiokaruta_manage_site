@@ -77,6 +77,7 @@ const detail = fs.readFileSync(
 const calendar = fs.readFileSync(
   path.join(root, 'scripts', 'calendar.html'), 'utf8'
 );
+const style = fs.readFileSync(path.join(root, 'style.html'), 'utf8');
 const results = fs.readFileSync(
   path.join(root, 'scripts', 'results.html'), 'utf8'
 );
@@ -86,6 +87,9 @@ const playerPage = fs.readFileSync(
 assert.match(detail, /function tournamentDetailCountsAsParticipant_\(record\)/);
 assert.match(detail, /return cancellationCountsAsParticipant_\(record\)/);
 assert.match(calendar, /record\.cancellation_status === 'before'/);
+assert.match(calendar, /cancel-row-before/);
+assert.match(calendar, /cancel-row-after/);
+assert.match(style, /tr\.cancel-row-after > td/);
 assert.match(calendar, /record\.cancellation_label/);
 assert.match(
   calendar,
