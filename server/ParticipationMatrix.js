@@ -9,14 +9,6 @@ function participationMatrixFiscalYear_() {
   return month < 4 ? year - 1 : year;
 }
 
-function participationMatrixShortName_(name) {
-  const fullName = String(name || '');
-  return fullName
-    .replace(/^第\s*[0-9０-９一二三四五六七八九十百千〇零]+\s*回\s*/, '')
-    .replace(/大会$/, '')
-    .trim() || fullName;
-}
-
 function participationMatrixNotes_(ss) {
   const sheet = ss.getSheetByName(CONFIG.SHEET_NAMES.PLAYER_NOTES);
   if (!sheet || sheet.getLastRow() < 2) return {};
@@ -130,11 +122,17 @@ function participationMatrixAllTournaments_(sourceTournaments, fiscalYear) {
       );
     if (!id || !belongsToFiscalYear) return;
     const current = byId[id] || {};
+    const grades = (current.grades || [])
+      .concat(tournamentSchedules.map(schedule => schedule.grade))
+      .filter(Boolean)
+      .filter((grade, index, values) => values.indexOf(grade) === index);
+    const heldOn = (current.held_on || [])
+      .concat(tournamentSchedules.map(schedule => schedule.held_on))
+      .filter(Boolean)
+      .filter((date, index, values) => values.indexOf(date) === index);
     byId[id] = Object.assign({}, tournament, current, {
-      grades: (current.grades || tournamentSchedules.map(schedule => schedule.grade))
-        .filter(Boolean),
-      held_on: (current.held_on || tournamentSchedules.map(schedule => schedule.held_on))
-        .filter(Boolean),
+      grades: grades,
+      held_on: heldOn,
     });
   });
   return Object.keys(byId).map(id => byId[id]);
@@ -217,7 +215,6 @@ function getParticipationMatrix(fiscalYearInput) {
       return {
         id: String(tournament.id),
         name: name,
-        shortName: participationMatrixShortName_(name),
         grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
         heldOn: (tournament.held_on || []).map(String).sort(),
       };

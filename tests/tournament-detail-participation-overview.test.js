@@ -64,6 +64,9 @@ assert.match(matrixServer, /function getParticipationMatrix\(fiscalYearInput\)/)
 assert.match(matrixServer, /sort_order/);
 assert.match(matrixServer, /player\.sort_order/);
 assert.doesNotMatch(matrixScript, /tournament\.sort_order/);
+assert.doesNotMatch(matrixScript, /tournament\.shortName/);
+assert.match(matrixScript, /participationMatrixFormatGrades/);
+assert.match(matrixScript, /sanctionedCount[\s\S]*?unsanctionedCount/);
 assert.match(matrixServer, /_sortOrder/);
 assert.match(matrixServer, /participationMatrixAllTournaments_/);
 assert.match(style, /\.detail-participation-table-wrap[\s\S]*?overflow: auto/);
@@ -101,6 +104,8 @@ const matrixSandbox = {
     if (apiPath === '/schedules') {
       return [
         { id: 11, tournament_id: 1, grade: 'A', held_on: '2026-06-01' },
+        // 集約APIにない、出場者ゼロの級も表示対象。
+        { id: 12, tournament_id: 1, grade: 'C', held_on: '2026-06-01' },
         { id: 21, tournament_id: 2, grade: 'B', held_on: '2026-05-01' },
         { id: 31, tournament_id: 3, grade: 'C', held_on: '2026-03-01' },
       ];
@@ -139,5 +144,6 @@ assert.deepStrictEqual(
   matrixResult.tournaments.map(tournament => tournament.id),
   ['2', '1']
 );
+assert.deepStrictEqual(matrixResult.tournaments[1].grades, ['A', 'C']);
 
 console.log('Tournament detail participation overview checks passed.');

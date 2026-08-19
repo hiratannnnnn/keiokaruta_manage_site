@@ -18,6 +18,10 @@ function participationMatrixFormatDate(value) {
   return match ? match[1] + '/' + match[2] + '/' + match[3] : String(value || '');
 }
 
+function participationMatrixFormatGrades(grades) {
+  return (grades || []).map(grade => String(grade) + '級').join('・');
+}
+
 function loadParticipationMatrix(force) {
   if (participationMatrixData && !force) {
     filterParticipationMatrix();
@@ -65,8 +69,7 @@ function filterParticipationMatrix() {
   const tournaments = participationMatrixData.tournaments.filter(tournament =>
     !tournamentQuery || [
       tournament.name,
-      tournament.shortName,
-      (tournament.grades || []).join('') + '級',
+      participationMatrixFormatGrades(tournament.grades),
     ].join(' ').toLowerCase().includes(tournamentQuery)
   );
   renderParticipationMatrix(players, tournaments);
@@ -103,10 +106,10 @@ function renderParticipationMatrix(players, tournaments) {
     tournaments.map(tournament =>
       '<th class="participation-tournament-column" title="'
         + participationMatrixEscAttr(tournament.name) + '">' +
-        '<span>' + escHtml(tournament.shortName || tournament.name) + '</span>' +
+        '<span>' + escHtml(tournament.name) + '</span>' +
         ((tournament.grades || []).length
           ? '<small class="participation-grades">'
-            + escHtml(tournament.grades.join('') + '級') + '</small>'
+            + escHtml(participationMatrixFormatGrades(tournament.grades)) + '</small>'
           : '') +
         ((tournament.heldOn || []).length
           ? '<small>' + (tournament.heldOn || []).map(participationMatrixFormatDate)
@@ -130,7 +133,8 @@ function renderParticipationMatrix(players, tournaments) {
         + Number(player.unsanctionedCount || 0) + '／混在'
         + Number(player.mixedCount || 0) + '／全大会'
         + Number(player.allTournamentCount || 0) + '">'
-        + Number(player.totalCount || 0) + '</td>' +
+        + Number(player.sanctionedCount || 0) + '（'
+        + Number(player.unsanctionedCount || 0) + '）</td>' +
       tournaments.map(tournament => {
         const item = participationMap[String(player.id) + ':' + String(tournament.id)];
         const mark = item ? item.mark : '';
@@ -178,7 +182,7 @@ function downloadParticipationMatrixCsv() {
   const headers = ['選手', '合計'].concat(
     participationMatrixVisibleTournaments.map(tournament => {
       const grades = (tournament.grades || []).length
-        ? ' ' + tournament.grades.join('') + '級' : '';
+        ? ' ' + participationMatrixFormatGrades(tournament.grades) : '';
       const dates = (tournament.heldOn || []).length
         ? ' ' + tournament.heldOn.join('/') : '';
       return tournament.name + grades + dates;
@@ -186,7 +190,8 @@ function downloadParticipationMatrixCsv() {
   );
   const rows = participationMatrixVisiblePlayers.map(player => [
     player.name || '',
-    Number(player.totalCount || 0),
+    Number(player.sanctionedCount || 0) + '（'
+      + Number(player.unsanctionedCount || 0) + '）',
   ].concat(participationMatrixVisibleTournaments.map(tournament => {
     const item = participationMap[
       String(player.id) + ':' + String(tournament.id)
