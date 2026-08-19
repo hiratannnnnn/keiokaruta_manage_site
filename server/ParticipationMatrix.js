@@ -84,6 +84,62 @@ function saveParticipationPlayerNote(playerId, memo) {
   }
 }
 
+function participationMatrixAllDatabaseRows_(resource) {
+  const rows = [];
+  let offset = 0;
+  let total = 0;
+  do {
+    const page = taikaiApiRequest_(
+      'GET', '/admin/database/' + resource, null, { limit: 100, offset: offset }
+    ) || {};
+    const pageRows = Array.isArray(page.rows) ? page.rows : [];
+    total = Number(page.total || 0);
+    rows.push.apply(rows, pageRows);
+    offset += pageRows.length;
+    if (!pageRows.length) break;
+  } while (offset < total);
+  return rows;
+}
+
+function participationMatrixInFiscalYear_(heldOn, fiscalYear) {
+  const date = String(heldOn || '').slice(0, 10);
+  return date >= fiscalYear + '-04-01'
+    && date <= (fiscalYear + 1) + '-03-31';
+}
+
+function participationMatrixAllTournaments_(sourceTournaments, fiscalYear) {
+  const tournaments = taikaiApiRequest_('GET', '/tournaments', null, {}) || [];
+  const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
+  const schedulesByTournament = {};
+  (Array.isArray(schedules) ? schedules : []).forEach(schedule => {
+    const id = String(schedule.tournament_id || '');
+    if (!schedulesByTournament[id]) schedulesByTournament[id] = [];
+    schedulesByTournament[id].push(schedule);
+  });
+
+  const byId = {};
+  (sourceTournaments || []).forEach(tournament => {
+    byId[String(tournament.id)] = Object.assign({}, tournament);
+  });
+  (Array.isArray(tournaments) ? tournaments : []).forEach(tournament => {
+    const id = String(tournament.id || '');
+    const tournamentSchedules = schedulesByTournament[id] || [];
+    const belongsToFiscalYear = Number(tournament.fiscal_year) === fiscalYear
+      || tournamentSchedules.some(schedule =>
+        participationMatrixInFiscalYear_(schedule.held_on, fiscalYear)
+      );
+    if (!id || !belongsToFiscalYear) return;
+    const current = byId[id] || {};
+    byId[id] = Object.assign({}, tournament, current, {
+      grades: (current.grades || tournamentSchedules.map(schedule => schedule.grade))
+        .filter(Boolean),
+      held_on: (current.held_on || tournamentSchedules.map(schedule => schedule.held_on))
+        .filter(Boolean),
+    });
+  });
+  return Object.keys(byId).map(id => byId[id]);
+}
+
 function getParticipationMatrix(fiscalYearInput) {
   try {
     const requestedFiscalYear = Number(fiscalYearInput);
@@ -114,11 +170,20 @@ function getParticipationMatrix(fiscalYearInput) {
       if (item.mark === 'mixed') countsByPlayer[item.player_id].mixed++;
     });
 
-    const players = (source.players || []).map(player => {
+    const databasePlayers = participationMatrixAllDatabaseRows_('players');
+    const playerSortOrders = {};
+    databasePlayers.forEach(player => {
+      playerSortOrders[String(player.id)] = player.sort_order;
+    });
+    const players = (source.players || []).map((player, sourceIndex) => {
       const id = String(player.id);
       const counts = countsByPlayer[id] || { mixed: 0, all: 0 };
       const sanctionedCount = Number(player.sanctioned_count || 0);
       const unsanctionedCount = Number(player.unsanctioned_count || 0);
+      const rawSortOrder = player.sort_order !== undefined
+        ? player.sort_order : playerSortOrders[id];
+      const sortOrder = rawSortOrder === null || rawSortOrder === ''
+        ? NaN : Number(rawSortOrder);
       return {
         id: id,
         name: [player.family_name, player.given_name].filter(Boolean).join(' '),
@@ -128,24 +193,9 @@ function getParticipationMatrix(fiscalYearInput) {
         unsanctionedCount: unsanctionedCount,
         mixedCount: counts.mixed,
         allTournamentCount: counts.all,
-      };
-    }).sort((left, right) => left.name.localeCompare(right.name, 'ja'));
-
-    const tournaments = (source.tournaments || []).map((tournament, index) => {
-      const name = String(tournament.name || '');
-      const rawSortOrder = tournament.sort_order !== undefined
-        ? tournament.sort_order : tournament.sortOrder;
-      const sortOrder = rawSortOrder === null || rawSortOrder === ''
-        ? NaN : Number(rawSortOrder);
-      return {
-        id: String(tournament.id),
-        name: name,
-        shortName: participationMatrixShortName_(name),
-        grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
-        heldOn: (tournament.held_on || []).map(String).sort(),
         sort_order: rawSortOrder === undefined ? null : rawSortOrder,
         _sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
-        _sourceIndex: index,
+        _sourceIndex: sourceIndex,
       };
     }).sort((left, right) =>
       left._sortOrder !== null && right._sortOrder !== null
@@ -154,14 +204,28 @@ function getParticipationMatrix(fiscalYearInput) {
         : left._sortOrder !== null ? -1
           : right._sortOrder !== null ? 1
             : left._sourceIndex - right._sourceIndex
-    ).map(tournament => ({
-      id: tournament.id,
-      name: tournament.name,
-      shortName: tournament.shortName,
-      grades: tournament.grades,
-      heldOn: tournament.heldOn,
-      sort_order: tournament.sort_order,
-    }));
+    ).map(player => {
+      delete player._sortOrder;
+      delete player._sourceIndex;
+      return player;
+    });
+
+    const tournaments = participationMatrixAllTournaments_(
+      source.tournaments || [], fiscalYear
+    ).map(tournament => {
+      const name = String(tournament.name || '');
+      return {
+        id: String(tournament.id),
+        name: name,
+        shortName: participationMatrixShortName_(name),
+        grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
+        heldOn: (tournament.held_on || []).map(String).sort(),
+      };
+    }).sort((left, right) =>
+      String(left.heldOn[0] || '9999-99-99').localeCompare(
+        String(right.heldOn[0] || '9999-99-99')
+      ) || left.name.localeCompare(right.name, 'ja')
+    );
 
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const notes = participationMatrixNotes_(ss);

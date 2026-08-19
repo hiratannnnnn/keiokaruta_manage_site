@@ -62,9 +62,10 @@ assert.match(script, /APIの取得上限に達したため/);
 assert.match(server, /grade: record\.grade/);
 assert.match(matrixServer, /function getParticipationMatrix\(fiscalYearInput\)/);
 assert.match(matrixServer, /sort_order/);
-assert.match(matrixServer, /tournament\.sortOrder/);
-assert.match(matrixScript, /left\.tournament\.sort_order/);
+assert.match(matrixServer, /player\.sort_order/);
+assert.doesNotMatch(matrixScript, /tournament\.sort_order/);
 assert.match(matrixServer, /_sortOrder/);
+assert.match(matrixServer, /participationMatrixAllTournaments_/);
 assert.match(style, /\.detail-participation-table-wrap[\s\S]*?overflow: auto/);
 assert.match(style, /\.detail-participation-history-cell[\s\S]*?overflow: auto/);
 assert.match(style, /\.detail-section-header[\s\S]*?flex-wrap: wrap/);
@@ -80,37 +81,63 @@ const matrixSandbox = {
   SpreadsheetApp: {
     openById: () => ({ getSheetByName: () => null }),
   },
-  taikaiApiRequest_: () => ({
-    fiscal_year: 2026,
-    players: [],
-    participations: [],
-    tournaments: [
-      {
-        id: 1,
-        name: '開催日は早いがsort_orderは後',
-        sort_order: 20,
-        held_on: ['2025-01-01'],
-      },
-      {
-        id: 2,
-        name: '開催日は遅いがsort_orderは先',
-        sort_order: 10,
-        held_on: ['2026-01-01'],
-      },
-    ],
-  }),
+  taikaiApiRequest_: (method, apiPath) => {
+    if (apiPath === '/admin/database/players') {
+      return {
+        total: 2,
+        rows: [
+          { id: 1, sort_order: 20 },
+          { id: 2, sort_order: 10 },
+        ],
+      };
+    }
+    if (apiPath === '/tournaments') {
+      return [
+        { id: 1, name: '参加者あり大会' },
+        { id: 2, name: '参加者なし・抽選前大会' },
+        { id: 3, name: '前年度大会' },
+      ];
+    }
+    if (apiPath === '/schedules') {
+      return [
+        { id: 11, tournament_id: 1, grade: 'A', held_on: '2026-06-01' },
+        { id: 21, tournament_id: 2, grade: 'B', held_on: '2026-05-01' },
+        { id: 31, tournament_id: 3, grade: 'C', held_on: '2026-03-01' },
+      ];
+    }
+    return {
+        fiscal_year: 2026,
+        players: [
+          { id: 1, family_name: '後', given_name: '選手' },
+          { id: 2, family_name: '先', given_name: '選手' },
+        ],
+        participations: [],
+        tournaments: [
+          {
+            id: 1,
+            name: '参加者あり大会',
+            grades: ['A'],
+            held_on: ['2026-06-01'],
+          },
+        ],
+      };
+  },
 };
 vm.runInNewContext(matrixServer, matrixSandbox);
 const matrixResult = JSON.parse(
   matrixSandbox.getParticipationMatrix(2026)
 );
 assert.deepStrictEqual(
-  matrixResult.tournaments.map(tournament => tournament.id),
+  matrixResult.players.map(player => player.id),
   ['2', '1']
 );
 assert.deepStrictEqual(
-  matrixResult.tournaments.map(tournament => tournament.sort_order),
+  matrixResult.players.map(player => player.sort_order),
   [10, 20]
+);
+assert.deepStrictEqual(
+  matrixResult.tournaments.map(tournament => tournament.id),
+  ['2', '1']
 );
 
 console.log('Tournament detail participation overview checks passed.');

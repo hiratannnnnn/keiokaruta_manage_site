@@ -62,29 +62,13 @@ function filterParticipationMatrix() {
   const players = participationMatrixData.players.filter(player =>
     !playerQuery || (player.name + ' ' + player.ruby).toLowerCase().includes(playerQuery)
   );
-  const tournaments = participationMatrixData.tournaments
-    .map((tournament, sourceIndex) => ({ tournament, sourceIndex }))
-    .filter(item => !tournamentQuery || [
-      item.tournament.name,
-      item.tournament.shortName,
-      (item.tournament.grades || []).join('') + '級',
-    ].join(' ').toLowerCase().includes(tournamentQuery))
-    .sort((left, right) => {
-      const leftRaw = left.tournament.sort_order !== undefined
-        ? left.tournament.sort_order : left.tournament.sortOrder;
-      const rightRaw = right.tournament.sort_order !== undefined
-        ? right.tournament.sort_order : right.tournament.sortOrder;
-      const leftOrder = leftRaw === null || leftRaw === '' ? NaN : Number(leftRaw);
-      const rightOrder = rightRaw === null || rightRaw === '' ? NaN : Number(rightRaw);
-      const leftHasOrder = Number.isFinite(leftOrder);
-      const rightHasOrder = Number.isFinite(rightOrder);
-      if (leftHasOrder && rightHasOrder && leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-      if (leftHasOrder !== rightHasOrder) return leftHasOrder ? -1 : 1;
-      return left.sourceIndex - right.sourceIndex;
-    })
-    .map(item => item.tournament);
+  const tournaments = participationMatrixData.tournaments.filter(tournament =>
+    !tournamentQuery || [
+      tournament.name,
+      tournament.shortName,
+      (tournament.grades || []).join('') + '級',
+    ].join(' ').toLowerCase().includes(tournamentQuery)
+  );
   renderParticipationMatrix(players, tournaments);
 }
 
