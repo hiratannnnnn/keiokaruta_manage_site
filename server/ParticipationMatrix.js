@@ -84,9 +84,12 @@ function saveParticipationPlayerNote(playerId, memo) {
   }
 }
 
-function getParticipationMatrix() {
+function getParticipationMatrix(fiscalYearInput) {
   try {
-    const fiscalYear = participationMatrixFiscalYear_();
+    const requestedFiscalYear = Number(fiscalYearInput);
+    const fiscalYear = Number.isInteger(requestedFiscalYear)
+      && requestedFiscalYear >= 2000 && requestedFiscalYear <= 2200
+      ? requestedFiscalYear : participationMatrixFiscalYear_();
     const source = taikaiApiRequest_(
       'GET',
       '/admin/participation-matrix',
@@ -128,20 +131,35 @@ function getParticipationMatrix() {
       };
     }).sort((left, right) => left.name.localeCompare(right.name, 'ja'));
 
-    const tournaments = (source.tournaments || []).map(tournament => {
+    const tournaments = (source.tournaments || []).map((tournament, index) => {
       const name = String(tournament.name || '');
+      const sortOrder = Number(tournament.sort_order);
       return {
         id: String(tournament.id),
         name: name,
         shortName: participationMatrixShortName_(name),
         grades: (tournament.grades || []).map(grade => String(grade).toUpperCase()),
         heldOn: (tournament.held_on || []).map(String).sort(),
+        sort_order: tournament.sort_order === undefined
+          ? null : tournament.sort_order,
+        _sortOrder: Number.isFinite(sortOrder) ? sortOrder : null,
+        _sourceIndex: index,
       };
     }).sort((left, right) =>
-      String(left.heldOn[0] || '9999-99-99').localeCompare(
-        String(right.heldOn[0] || '9999-99-99')
-      ) || left.name.localeCompare(right.name, 'ja')
-    );
+      left._sortOrder !== null && right._sortOrder !== null
+        ? left._sortOrder - right._sortOrder
+          || left._sourceIndex - right._sourceIndex
+        : left._sortOrder !== null ? -1
+          : right._sortOrder !== null ? 1
+            : left._sourceIndex - right._sourceIndex
+    ).map(tournament => ({
+      id: tournament.id,
+      name: tournament.name,
+      shortName: tournament.shortName,
+      grades: tournament.grades,
+      heldOn: tournament.heldOn,
+      sort_order: tournament.sort_order,
+    }));
 
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const notes = participationMatrixNotes_(ss);

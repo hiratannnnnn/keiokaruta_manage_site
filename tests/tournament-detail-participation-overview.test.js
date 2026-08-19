@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -60,8 +61,54 @@ assert.match(script, /matrix\.truncated === true/);
 assert.match(script, /APIの取得上限に達したため/);
 assert.match(server, /grade: record\.grade/);
 assert.match(matrixServer, /function getParticipationMatrix\(fiscalYearInput\)/);
+assert.match(matrixServer, /sort_order/);
+assert.match(matrixServer, /_sortOrder/);
 assert.match(style, /\.detail-participation-table-wrap[\s\S]*?overflow: auto/);
 assert.match(style, /\.detail-participation-history-cell[\s\S]*?overflow: auto/);
 assert.match(style, /\.detail-section-header[\s\S]*?flex-wrap: wrap/);
+
+const matrixSandbox = {
+  Date,
+  JSON,
+  Number,
+  String,
+  Object,
+  Array,
+  CONFIG: { SHEET_NAMES: { PLAYER_NOTES: '選手管理メモ' } },
+  SpreadsheetApp: {
+    openById: () => ({ getSheetByName: () => null }),
+  },
+  taikaiApiRequest_: () => ({
+    fiscal_year: 2026,
+    players: [],
+    participations: [],
+    tournaments: [
+      {
+        id: 1,
+        name: '開催日は早いがsort_orderは後',
+        sort_order: 20,
+        held_on: ['2025-01-01'],
+      },
+      {
+        id: 2,
+        name: '開催日は遅いがsort_orderは先',
+        sort_order: 10,
+        held_on: ['2026-01-01'],
+      },
+    ],
+  }),
+};
+vm.runInNewContext(matrixServer, matrixSandbox);
+const matrixResult = JSON.parse(
+  matrixSandbox.getParticipationMatrix(2026)
+);
+assert.deepStrictEqual(
+  matrixResult.tournaments.map(tournament => tournament.id),
+  ['2', '1']
+);
+assert.deepStrictEqual(
+  matrixResult.tournaments.map(tournament => tournament.sort_order),
+  [10, 20]
+);
 
 console.log('Tournament detail participation overview checks passed.');
