@@ -11,6 +11,7 @@ const matrixScript = read('scripts/participation-matrix.html');
 const style = read('style.html');
 const server = read('server/TournamentDetail.js');
 const matrixServer = read('server/ParticipationMatrix.js');
+const cancellationServer = read('server/Cancellation.js');
 
 [
   'detail-participation-btn',
@@ -80,6 +81,8 @@ const matrixSandbox = {
   String,
   Object,
   Array,
+  isNaN,
+  taikaiCompareIds_: (left, right) => Number(left || 0) - Number(right || 0),
   CONFIG: { SHEET_NAMES: { PLAYER_NOTES: '選手管理メモ' } },
   SpreadsheetApp: {
     openById: () => ({ getSheetByName: () => null }),
@@ -94,6 +97,17 @@ const matrixSandbox = {
         ],
       };
     }
+    if (apiPath === '/admin/database/entries') {
+      return {
+        total: 1,
+        rows: [{
+          id: 100,
+          player_id: 2,
+          schedule_id: 21,
+          canceled_at: '2026-04-20T12:00:00+09:00',
+        }],
+      };
+    }
     if (apiPath === '/tournaments') {
       return [
         { id: 1, name: '参加者あり大会' },
@@ -106,7 +120,13 @@ const matrixSandbox = {
         { id: 11, tournament_id: 1, grade: 'A', held_on: '2026-06-01' },
         // 集約APIにない、出場者ゼロの級も表示対象。
         { id: 12, tournament_id: 1, grade: 'C', held_on: '2026-06-01' },
-        { id: 21, tournament_id: 2, grade: 'B', held_on: '2026-05-01' },
+        {
+          id: 21,
+          tournament_id: 2,
+          grade: 'B',
+          held_on: '2026-05-01',
+          lottery_result_date: '2026-04-15',
+        },
         { id: 31, tournament_id: 3, grade: 'C', held_on: '2026-03-01' },
       ];
     }
@@ -116,7 +136,7 @@ const matrixSandbox = {
           { id: 1, family_name: '後', given_name: '選手' },
           { id: 2, family_name: '先', given_name: '選手' },
         ],
-        participations: [],
+        participations: [{ player_id: 2, tournament_id: 2, mark: 'sanctioned' }],
         tournaments: [
           {
             id: 1,
@@ -128,7 +148,7 @@ const matrixSandbox = {
       };
   },
 };
-vm.runInNewContext(matrixServer, matrixSandbox);
+vm.runInNewContext(cancellationServer + '\n' + matrixServer, matrixSandbox);
 const matrixResult = JSON.parse(
   matrixSandbox.getParticipationMatrix(2026)
 );
@@ -145,5 +165,8 @@ assert.deepStrictEqual(
   ['2', '1']
 );
 assert.deepStrictEqual(matrixResult.tournaments[1].grades, ['A', 'C']);
+assert.strictEqual(matrixResult.participations[0].cancellation_status, 'after');
+assert.match(matrixScript, /participation-cancel-after/);
+assert.match(style, /tr:nth-child\(even\) td\.participation-cancel-after/);
 
 console.log('Tournament detail participation overview checks passed.');

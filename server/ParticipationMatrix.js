@@ -138,6 +138,47 @@ function participationMatrixAllTournaments_(sourceTournaments, fiscalYear) {
   return Object.keys(byId).map(id => byId[id]);
 }
 
+function participationMatrixCancellationStatuses_() {
+  const schedules = taikaiApiRequest_('GET', '/schedules', null, {}) || [];
+  const scheduleById = {};
+  (Array.isArray(schedules) ? schedules : []).forEach(schedule => {
+    scheduleById[String(schedule.id)] = schedule;
+  });
+  const latestEntries = {};
+  participationMatrixAllDatabaseRows_('entries').forEach(entry => {
+    const scheduleId = String(entry.schedule_id || '');
+    const key = String(entry.player_id || '') + ':' + scheduleId;
+    const current = latestEntries[key];
+    const entryId = entry.entry_id || entry.id;
+    const currentId = current && (current.entry_id || current.id);
+    if (!current || taikaiCompareIds_(entryId, currentId) > 0) {
+      latestEntries[key] = entry;
+    }
+  });
+
+  const states = {};
+  Object.keys(latestEntries).forEach(key => {
+    const entry = latestEntries[key];
+    const schedule = scheduleById[String(entry.schedule_id || '')] || {};
+    const status = cancellationStatusFromRecord_(Object.assign({}, entry, {
+      lottery_result_date: schedule.lottery_result_date,
+    }));
+    if (status !== CANCELLATION_STATUS.NONE
+        && status !== CANCELLATION_STATUS.AFTER) return;
+    const participationKey = String(entry.player_id || '') + ':'
+      + String(schedule.tournament_id || '');
+    if (!states[participationKey]) states[participationKey] = [];
+    states[participationKey].push(status);
+  });
+
+  const result = {};
+  Object.keys(states).forEach(key => {
+    result[key] = states[key].includes(CANCELLATION_STATUS.NONE)
+      ? CANCELLATION_STATUS.NONE : CANCELLATION_STATUS.AFTER;
+  });
+  return result;
+}
+
 function getParticipationMatrix(fiscalYearInput) {
   try {
     const requestedFiscalYear = Number(fiscalYearInput);
@@ -150,14 +191,23 @@ function getParticipationMatrix(fiscalYearInput) {
       null,
       { fiscal_year: fiscalYear }
     ) || {};
-    const participations = (source.participations || []).map(item => ({
-      player_id: String(item.player_id),
-      tournament_id: String(item.tournament_id),
-      mark: String(item.mark || ''),
-      schedule_ids: (item.schedule_ids || []).map(String),
-      sanctioned_schedule_ids: (item.sanctioned_schedule_ids || []).map(String),
-      unsanctioned_schedule_ids: (item.unsanctioned_schedule_ids || []).map(String),
-    }));
+    const cancellationStatuses = participationMatrixCancellationStatuses_();
+    const participations = (source.participations || []).map(item => {
+      const playerId = String(item.player_id);
+      const tournamentId = String(item.tournament_id);
+      return {
+        player_id: playerId,
+        tournament_id: tournamentId,
+        mark: String(item.mark || ''),
+        cancellation_status: cancellationNormalizeExplicitStatus_(
+          item.cancellation_status || item.cancellation_timing
+        ) || cancellationStatuses[playerId + ':' + tournamentId]
+          || CANCELLATION_STATUS.NONE,
+        schedule_ids: (item.schedule_ids || []).map(String),
+        sanctioned_schedule_ids: (item.sanctioned_schedule_ids || []).map(String),
+        unsanctioned_schedule_ids: (item.unsanctioned_schedule_ids || []).map(String),
+      };
+    });
 
     const countsByPlayer = {};
     participations.forEach(item => {

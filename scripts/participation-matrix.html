@@ -143,8 +143,13 @@ function renderParticipationMatrix(players, tournaments) {
         const title = mark === 'sanctioned' ? '公認大会'
           : (mark === 'unsanctioned' ? '非公認大会'
             : (mark === 'mixed' ? '公認・非公認の両方' : ''));
-        return '<td class="' + (mark ? 'participation-' + mark : '') + '"'
-          + (title ? ' title="' + title + '"' : '') + '>' +
+        const canceledAfter = item && item.cancellation_status === 'after';
+        const cellClasses = [mark ? 'participation-' + mark : '',
+          canceledAfter ? 'participation-cancel-after' : ''].filter(Boolean).join(' ');
+        const cellTitle = canceledAfter
+          ? (title ? title + '・公開後キャンセル' : '公開後キャンセル') : title;
+        return '<td class="' + cellClasses + '"'
+          + (cellTitle ? ' title="' + cellTitle + '"' : '') + '>' +
           symbol +
         '</td>';
       }).join('') + '</tr>';
