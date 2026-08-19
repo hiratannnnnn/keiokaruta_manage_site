@@ -170,5 +170,8 @@ assert.deepStrictEqual(matrixResult.tournaments[1].grades, ['A', 'C']);
 assert.strictEqual(matrixResult.participations[0].cancellation_status, 'after');
 assert.match(matrixScript, /participation-cancel-after/);
 assert.match(style, /tr:nth-child\(even\) td\.participation-cancel-after/);
+assert.match(style, /td\.participation-sanctioned[\s\S]*?background: #d4edda !important/);
+assert.match(style, /td\.participation-unsanctioned[\s\S]*?background: #fff3cd !important/);
+assert.match(style, /td\.participation-mixed[\s\S]*?background: #e2d9f3 !important/);
 
 console.log('Tournament detail participation overview checks passed.');
