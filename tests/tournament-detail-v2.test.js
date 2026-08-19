@@ -105,6 +105,7 @@ const sandbox = {
   taikaiCompareIds_: (left, right) => Number(left) - Number(right),
 };
 vm.createContext(sandbox);
+vm.runInContext(read('server/Cancellation.js'), sandbox);
 vm.runInContext(read('server/TournamentSheetV2.js'), sandbox);
 vm.runInContext(read('server/TournamentSheetStructure.js'), sandbox);
 vm.runInContext(read('server/TournamentDetail.js'), sandbox);
@@ -147,10 +148,79 @@ const actualAceDetail = JSON.parse(
 assert.strictEqual(actualAceDetail.error, undefined);
 assert.strictEqual(actualAceDetail.sheetVersion, 2);
 assert.strictEqual(actualAceDetail.personRows.length, 0);
+assert.strictEqual(actualAceDetail.personHeaders[2], '氏名');
 assert.deepStrictEqual(
   actualAceDetail.gradeSummary.map(item => item.grade),
   ['A', 'C', 'E']
 );
+
+// 旧レイアウトの右側セル（旧「一致」等の書込み先）は、APIで再計算せず
+// スプレッドシートの入力値をそのまま大会詳細へ引き継ぐ。
+const legacyRows = [
+  [
+    'タイムスタンプ', 'メールアドレス', '氏名（名字と名前の間に空白を含めてください。）',
+    '級', '振込み済みか', 'legacy-form',
+    'https://docs.google.com/forms/d/legacy-form/edit',
+  ],
+  [
+    new Date('2026-07-01'), 'legacy@example.com', '佐藤 花子', 'B級', '',
+    '（入力：1）2', '一致',
+  ],
+  ['', '', '', '', '', '', ''],
+];
+const legacySheet = {
+  getName: () => '旧レイアウト大会B級',
+  getLastColumn: () => 7,
+  getRange: () => ({ getValues: () => [legacyRows[0]] }),
+  getDataRange: () => ({ getValues: () => legacyRows }),
+};
+sandbox.SpreadsheetApp.openById = () => ({
+  getSheetByName: name => name === '旧レイアウト大会B級' ? legacySheet : null,
+});
+const legacyDetail = JSON.parse(
+  sandbox.getTournamentDetail('旧レイアウト大会B級')
+);
+assert.strictEqual(legacyDetail.error, undefined);
+assert.strictEqual(legacyDetail.personHeaders[2], '氏名');
+assert.strictEqual(legacyDetail.selectionStatusIndex, -1);
+assert.strictEqual(legacyDetail.paymentStatusIndex, 4);
+assert.strictEqual(legacyDetail.personHeaders.length, 7);
+assert.strictEqual(legacyDetail.personRows[0].length, 7);
+assert.deepStrictEqual(legacyDetail.personHeaders.slice(-2), [
+  'legacy-form', 'https://docs.google.com/forms/d/legacy-form/edit',
+]);
+assert.deepStrictEqual(legacyDetail.personRows[0].slice(-2), [
+  '（入力：1）2', '一致',
+]);
+
+// V2へ移行済みでも、シート右側に残る旧操作列を捨てない。
+const v2LegacyTailRows = actualAceRows.map(row => row.slice());
+v2LegacyTailRows[0].push(
+  'legacy-form-v2', 'https://docs.google.com/forms/d/legacy-form-v2/edit'
+);
+v2LegacyTailRows[1] = [
+  new Date('2026-07-02'), 'legacy-v2@example.com', '鈴木 一郎',
+  '', 'A級', '', '', '', '', '', '（入力：1）2', '一致',
+];
+const v2LegacyTailSheet = {
+  getName: () => 'V2旧列残存大会A級',
+  getDataRange: () => ({ getValues: () => v2LegacyTailRows }),
+};
+sandbox.SpreadsheetApp.openById = () => ({
+  getSheetByName: name => name === 'V2旧列残存大会A級'
+    ? v2LegacyTailSheet : null,
+});
+const v2LegacyTailDetail = JSON.parse(
+  sandbox.getTournamentDetail('V2旧列残存大会A級')
+);
+assert.strictEqual(v2LegacyTailDetail.error, undefined);
+assert.deepStrictEqual(v2LegacyTailDetail.personHeaders.slice(-2), [
+  'legacy-form-v2', 'https://docs.google.com/forms/d/legacy-form-v2/edit',
+]);
+assert.deepStrictEqual(v2LegacyTailDetail.personRows[0].slice(-2), [
+  '（入力：1）2', '一致',
+]);
+
 assert.strictEqual(
   sandbox.tournamentDetailCancellationTiming_(
     '2026-09-24 23:59:59', '2026-09-25'
@@ -165,12 +235,16 @@ assert.strictEqual(
 );
 assert.strictEqual(
   sandbox.tournamentDetailCountsAsParticipant_({
+    canceled_at: '2026-09-24',
+    lottery_result_date: '2026-09-25',
     cancellation_timing: 'before',
   }),
   false
 );
 assert.strictEqual(
   sandbox.tournamentDetailCountsAsParticipant_({
+    canceled_at: '2026-09-25',
+    lottery_result_date: '2026-09-25',
     cancellation_timing: 'after',
   }),
   true
@@ -179,5 +253,44 @@ assert.strictEqual(
   sandbox.tournamentDetailCancellationAt_('before', '2026-09-25'),
   '2026-09-24T12:00:00+09:00'
 );
+
+// 公開前キャンセル済みの支払は、大会主催者への振込集計から除外する。
+const paidCancellationRows = rows.map(row => row.slice());
+paidCancellationRows[1][4] = '済';
+const paySheet = {
+  getName: () => '第9回大阪なにはえ大会B級',
+  getDataRange: () => ({ getValues: () => paidCancellationRows }),
+};
+sandbox.SpreadsheetApp.openById = () => ({
+  getSheetByName: name => name === '第9回大阪なにはえ大会B級' ? paySheet : null,
+});
+sandbox.taikaiFindTournament_ = () => ({ id: 9 });
+sandbox.emailMapRows_ = () => [['a@example.com', 'a@example.com']];
+sandbox.calcFeeFromGrade_ = (gradeStr, feeMap) =>
+  String(gradeStr).replace(/級/g, '').split('').reduce(
+    (total, grade) => total + Number(feeMap[grade] || 0), 0
+  );
+let payCancellationAt = '2026-09-24 12:00:00';
+sandbox.taikaiApiRequest_ = () => ({
+  tournament: { registration_completed: 1 },
+  schedules: [{ id: '90', grade: 'B', lottery_result_date: '2026-09-25' }],
+  entries: [{
+    entry_id: '90', player_id: '1', player_email: 'a@example.com',
+    grade: 'B', schedule_id: '90', canceled_at: payCancellationAt,
+    participation_fee_yen: 2500, paid_yen: 2500, balance_yen: 0,
+    payment_status: 'paid', payment_methods: 'bank_transfer',
+  }],
+});
+const beforePaySummary = JSON.parse(
+  sandbox.getTournamentPaySummary('第9回大阪なにはえ大会B級')
+);
+assert.strictEqual(beforePaySummary.count, 0);
+assert.strictEqual(beforePaySummary.total, 0);
+payCancellationAt = '2026-09-25 12:00:00';
+const afterPaySummary = JSON.parse(
+  sandbox.getTournamentPaySummary('第9回大阪なにはえ大会B級')
+);
+assert.strictEqual(afterPaySummary.count, 1);
+assert.strictEqual(afterPaySummary.total, 2500);
 
 console.log('Tournament detail V2 regression checks passed.');

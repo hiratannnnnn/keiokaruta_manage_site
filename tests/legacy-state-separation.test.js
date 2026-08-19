@@ -32,7 +32,8 @@ assert.strictEqual(selectionWrites, 0);
 
 const serverSource = read('server/TournamentDetail.js');
 const uiSource = read('scripts/calendar.html');
-assert.match(serverSource, /支払状態（旧セル推定）/);
+assert.match(serverSource, /const isLegacySheet = structure\.version === 1/);
+assert.match(serverSource, /slice\(0, legacyDisplayColumnCount\)/);
 assert.match(uiSource, /v2移行後に利用できます/);
 assert.match(uiSource, /detailSheetVersion !== 2/);
 

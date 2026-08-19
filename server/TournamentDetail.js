@@ -69,8 +69,10 @@ function tournamentDetailEnrichRecords_(sheetName, records, snapshot) {
     record.canceled_at = entry.canceled_at || null;
     const schedule = schedules[record.schedule_id] || {};
     record.lottery_result_date = schedule.lottery_result_date || null;
-    record.cancellation_timing = tournamentDetailCancellationTiming_(
-      record.canceled_at, record.lottery_result_date
+    record.cancellation_status = cancellationStatusFromRecord_(record);
+    record.cancellation_timing = record.cancellation_status;
+    record.cancellation_label = cancellationLabelFromStatus_(
+      record.cancellation_status
     );
     record.is_paid = tournamentSheetPaymentIsPaid_(record);
   });
@@ -78,33 +80,45 @@ function tournamentDetailEnrichRecords_(sheetName, records, snapshot) {
 }
 
 function tournamentDetailCancellationTiming_(canceledAt, lotteryResultDate) {
-  if (!canceledAt) return '';
-  const canceledDate = String(canceledAt).slice(0, 10);
-  const lotteryDate = String(lotteryResultDate || '').slice(0, 10);
-  if (!lotteryDate) return 'canceled';
-  return canceledDate < lotteryDate ? 'before' : 'after';
+  return cancellationStatusFromRecord_({
+    canceled_at: canceledAt,
+    lottery_result_date: lotteryResultDate,
+  });
 }
 
 // 公開前キャンセルは出場実績・級別人数に含めない。
 // 同日を含む公開後キャンセルは、連絡期限後のため出場扱いとする。
 function tournamentDetailCountsAsParticipant_(record) {
-  return String(record && record.cancellation_timing || '') !== 'before';
+  return cancellationCountsAsParticipant_(record);
 }
 
 function tournamentDetailSelectionDisplay_(record) {
-  if (record.canceled_at) return 'キャンセル';
+  const cancellationStatus = cancellationStatusFromRecord_(record);
+  if (cancellationStatus !== CANCELLATION_STATUS.NONE) {
+    return cancellationLabelFromStatus_(cancellationStatus);
+  }
   const value = String(record.selection_status || '').trim();
   if (!value || ['済', '繰越', '繰り越し', 'くりこし'].includes(value)) {
     return '出場可能';
+  }
+  if (['キャンセル', '公開前キャンセル', '公開後キャンセル',
+    '判定不能なキャンセル'].includes(value)) {
+    return '選考状態未確定';
   }
   return value;
 }
 
 function tournamentDetailPaymentDisplay_(record) {
-  if (record.cancellation_timing === 'before' && Number(record.paid_yen || 0) === 0) {
+  const cancellationStatus = cancellationStatusFromRecord_(record);
+  if (cancellationStatus === CANCELLATION_STATUS.BEFORE
+      && Number(record.paid_yen || 0) === 0) {
     return '支払不要';
   }
   const status = tournamentSheetPaymentDisplayStatus_(record);
+  if (cancellationStatus === CANCELLATION_STATUS.UNKNOWN) {
+    return cancellationLabelFromStatus_(cancellationStatus)
+      + (status ? '（' + status + '）' : '');
+  }
   if (!record.is_paid) return status;
   const methods = record.payment_methods || [];
   if (methods.includes('deposit')) {
@@ -124,6 +138,36 @@ function tournamentDetailPaymentTimingLabel_(value) {
   return labels[normalized] || normalized;
 }
 
+function tournamentDetailDisplayHeader_(value) {
+  const text = String(value || '');
+  if (!/^氏名[（(]/.test(text)) return text;
+  return text.replace(/[（(][^）)]*[）)]/g, '').trim();
+}
+
+// V2移行後もシート右側に残っている旧操作列は、編集URL列まで表示する。
+// 旧列をAPIで再計算せず、シート上の値をそのまま引き継ぐための境界判定。
+function tournamentDetailLegacyTailEnd_(structure, headerRow) {
+  if (structure.version === 1) return structure.layout.edit_url_column;
+  const rawColumnCount = tournamentSheetRawResponseColumnCount_(structure);
+  let tailEnd = rawColumnCount + 1;
+  for (let index = rawColumnCount + 1; index < headerRow.length; index++) {
+    const formId = tournamentSheetGoogleFormIdFromEditUrl_(headerRow[index]);
+    if (formId && String(headerRow[index - 1] || '').trim() === formId) {
+      tailEnd = Math.max(tailEnd, index + 1);
+    }
+  }
+  // 見出しが欠けていても、回答行に既存値があれば表示対象に含める。
+  for (let rowIndex = 1; rowIndex < structure.response_end_index; rowIndex++) {
+    const row = structure.data[rowIndex] || [];
+    for (let index = rawColumnCount + 1; index < row.length; index++) {
+      if (String(row[index] || '').trim() !== '') {
+        tailEnd = Math.max(tailEnd, index + 1);
+      }
+    }
+  }
+  return tailEnd;
+}
+
 function getTournamentDetail(name) {
   try {
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
@@ -138,12 +182,22 @@ function getTournamentDetail(name) {
 
     const headerRow = rows[0];
     const rawColumnCount = tournamentSheetRawResponseColumnCount_(structure);
-    const selectionStatusIndex = rawColumnCount;
-    const paymentStatusIndex = rawColumnCount + 1;
-    const personHeaders = headerRow.slice(0, rawColumnCount)
-      .concat(structure.version === 2
-        ? ['選考状態', '支払状態']
-        : ['選考状態（旧セル兼用）', '支払状態（旧セル推定）']);
+    const isLegacySheet = structure.version === 1;
+    const selectionStatusIndex = isLegacySheet ? -1 : rawColumnCount;
+    const paymentStatusIndex = isLegacySheet
+      ? structure.layout.payment_status_column - 1 : rawColumnCount + 1;
+    const legacyDisplayColumnCount = tournamentDetailLegacyTailEnd_(
+      structure, headerRow
+    );
+    const legacyTailStart = isLegacySheet
+      ? rawColumnCount : rawColumnCount + 1;
+    const personHeaders = isLegacySheet
+      ? headerRow.slice(0, legacyDisplayColumnCount)
+        .map(tournamentDetailDisplayHeader_)
+      : headerRow.slice(0, rawColumnCount)
+        .map(tournamentDetailDisplayHeader_)
+        .concat(['選考状態', '支払状態'])
+        .concat(headerRow.slice(legacyTailStart, legacyDisplayColumnCount));
     const responseRecords = tournamentSheetResponseRecords_(structure, false);
     let tournamentSnapshot = null;
     if (structure.version === 2) {
@@ -159,6 +213,7 @@ function getTournamentDetail(name) {
         entry_id: record.entry_id,
         player_id: record.player_id,
         name: record.name,
+        grade: record.grade,
         selection_status: record.selection_status,
         selection_display_status: selectionDisplay,
         payment_status: record.payment_status,
@@ -167,12 +222,23 @@ function getTournamentDetail(name) {
         balance_yen: record.balance_yen,
         canceled_at: record.canceled_at || null,
         lottery_result_date: record.lottery_result_date || null,
-        cancellation_timing: record.cancellation_timing || '',
+        cancellation_status: record.cancellation_status
+          || cancellationStatusFromRecord_(record),
+        cancellation_timing: record.cancellation_status
+          || record.cancellation_timing || CANCELLATION_STATUS.NONE,
+        cancellation_label: record.cancellation_label
+          || cancellationLabelFromRecord_(record),
         payment_display_status: paymentDisplay,
-        values: record.raw_values.map(formatCell).concat([
-          selectionDisplay,
-          paymentDisplay,
-        ]),
+        values: isLegacySheet
+          ? (rows[record.source_row - 1] || [])
+            .slice(0, legacyDisplayColumnCount)
+          : record.raw_values.map(formatCell).concat([
+            selectionDisplay,
+            paymentDisplay,
+          ]).concat(
+            (rows[record.source_row - 1] || [])
+              .slice(legacyTailStart, legacyDisplayColumnCount)
+          ),
       };
     });
     const personRows = personRecords.map(record => record.values);
@@ -538,6 +604,13 @@ function getTournamentPaySummary(name) {
     let count = 0, total = 0;
     const gradeMap = {}; // grade -> { fee, names[] }
     records.forEach(record => {
+      // V2ではDBのentryとキャンセル区分を正本にする。公開前・判定不能
+      // キャンセルは大会主催者への振込対象から除外し、DB未登録の回答行も
+      // シート上の旧「済」表示だけで集計しない。
+      if (structure.version === 2
+          && (!record.entry_id || !tournamentDetailCountsAsParticipant_(record))) {
+        return;
+      }
       if (!record.is_paid) return;
       const gradeStr = record.grade;
       const fee      = calcFeeFromGrade_(gradeStr, feeMap);
@@ -576,11 +649,93 @@ function setGradeFee(sheetName, grade, fee) {
   }
 }
 
-// 大会シートのグレード行（A〜E）に大会日を書き込む
-// gradeDatesJson: JSON文字列 { A: "2026-05-01", B: "2026-05-01", ... }
+// 大会日時の表示文字列を作る。複数の異なる日時がある場合は、最も早い
+// 日時に「など」を付ける。同じ日時の級が複数あっても重複表示しない。
+function tournamentCalendarDateText_(gradeDates) {
+  const values = [];
+  Object.keys(gradeDates || {}).forEach(grade => {
+    if (!/^[A-E]$/.test(String(grade || ''))) return;
+    const raw = gradeDates[grade];
+    const dateValue = raw && typeof raw === 'object' ? raw.date : raw;
+    const timeValue = raw && typeof raw === 'object' ? raw.time : '';
+    const dateMatch = String(dateValue || '').trim().replace(/\//g, '-').match(
+      /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+    );
+    if (!dateMatch) return;
+    const year = dateMatch[1];
+    const month = String(Number(dateMatch[2])).padStart(2, '0');
+    const day = String(Number(dateMatch[3])).padStart(2, '0');
+    const timeMatch = String(timeValue || '').trim().match(
+      /^([01]\d|2[0-3]):([0-5]\d)$/
+    );
+    const time = timeMatch ? timeMatch[0] : '';
+    values.push({
+      sortKey: year + '-' + month + '-' + day + 'T' + (time || '00:00'),
+      label: year + '/' + month + '/' + day + (time ? ' ' + time : ''),
+    });
+  });
+  if (!values.length) return '';
+  values.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  const unique = [];
+  const seen = {};
+  values.forEach(value => {
+    if (seen[value.sortKey]) return;
+    seen[value.sortKey] = true;
+    unique.push(value);
+  });
+  return unique[0].label + (unique.length > 1 ? ' など' : '');
+}
+
+function tournamentSaveCalendarDate_(spreadsheet, sheetName, dateText) {
+  if (!dateText) return 0;
+  const calendarName = CONFIG.SHEET_NAMES.CALENDAR;
+  const calendarSheet = spreadsheet.getSheetByName(calendarName);
+  if (!calendarSheet) return 0;
+  const lastRow = calendarSheet.getLastRow();
+  if (lastRow < 3) return 0;
+  const names = calendarSheet.getRange(1, 1, lastRow, 1).getValues();
+  const exactRows = [];
+  const baseName = tournamentSheetBaseName_(sheetName);
+  const siblingRows = [];
+  for (let index = 2; index < names.length; index++) {
+    const rowName = String(names[index][0] || '');
+    if (rowName === sheetName) exactRows.push(index + 1);
+    if (rowName && tournamentSheetBaseName_(rowName) === baseName) {
+      siblingRows.push(index + 1);
+    }
+  }
+  const targetRows = exactRows.length ? exactRows : siblingRows;
+  targetRows.forEach(rowNumber => {
+    calendarSheet.getRange(rowNumber, 15).setValue(dateText);
+  });
+  return targetRows.length;
+}
+
+// 大会シートのグレード行（A〜E）に大会日を書き込む。
+// gradeDatesJson: JSON文字列 { A: "2026-05-01", ... } または
+// { A: { date: "2026-05-01", time: "09:00" }, ... }
 function saveTournamentDates(sheetName, gradeDatesJson) {
   try {
-    const gradeDates = JSON.parse(gradeDatesJson);
+    const inputDates = JSON.parse(gradeDatesJson);
+    const gradeDates = {};
+    const displayDates = {};
+    Object.keys(inputDates || {}).forEach(grade => {
+      if (!/^[A-E]$/.test(String(grade || ''))) return;
+      const raw = inputDates[grade];
+      const dateValue = raw && typeof raw === 'object' ? raw.date : raw;
+      const date = String(dateValue || '').trim().replace(/\//g, '-');
+      if (!/^\d{4}-\d{1,2}-\d{1,2}$/.test(date)) return;
+      const normalizedDate = date.split('-').map((part, index) =>
+        index === 0 ? part : String(Number(part)).padStart(2, '0')
+      ).join('-');
+      const parsedDate = new Date(normalizedDate + 'T00:00:00+09:00');
+      if (isNaN(parsedDate.getTime())) return;
+      gradeDates[grade] = normalizedDate;
+      displayDates[grade] = {
+        date: normalizedDate,
+        time: raw && typeof raw === 'object' ? raw.time : '',
+      };
+    });
     const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const sheet = ss.getSheetByName(sheetName);
     if (!sheet) throw new Error(`「${sheetName}」シートが見つかりません`);
@@ -589,7 +744,7 @@ function saveTournamentDates(sheetName, gradeDatesJson) {
     Object.keys(gradeDates).forEach(grade => {
       if (/^[A-E]$/.test(grade) && gradeDates[grade]) {
         tournamentSheetGradeDateRange_(sheet, structure, grade)
-          .setValue(new Date(gradeDates[grade]));
+          .setValue(new Date(gradeDates[grade] + 'T00:00:00+09:00'));
       }
     });
     // シートはフォーム・表示用に残すが、運用上の大会日程は新DBへ同期する。
@@ -598,7 +753,19 @@ function saveTournamentDates(sheetName, gradeDatesJson) {
     } catch (syncError) {
       throw syncError;
     }
-    return JSON.stringify({ ok: true });
+    const calendarDate = tournamentCalendarDateText_(displayDates);
+    if (calendarDate && structure.version === 2) {
+      tournamentSheetManagementRange_(sheet, structure, '大会の日時')
+        .setValue(calendarDate);
+    }
+    const calendarUpdated = tournamentSaveCalendarDate_(
+      ss, sheetName, calendarDate
+    );
+    return JSON.stringify({
+      ok: true,
+      calendarDate: calendarDate,
+      calendarUpdated: calendarUpdated > 0,
+    });
   } catch (e) {
     return JSON.stringify({ error: e.message });
   }

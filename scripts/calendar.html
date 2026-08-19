@@ -464,6 +464,80 @@ let detailPaymentStatusIndex = 8;
 let detailNameColumnIndex = 2;
 let detailPendingNotice = null;
 let detailRequestSequence = 0;
+let detailParticipationOverview = null;
+
+function detailParticipationNormalizeName(name) {
+  return String(name || '').replace(/[ 　]+/g, '').trim().toLowerCase();
+}
+
+function detailParticipationCurrentState(name, requestId) {
+  return detailParticipationOverview
+    && detailParticipationOverview.tournamentName === name
+    && detailParticipationOverview.requestId === requestId;
+}
+
+function detailParticipationFiscalYear(tournament) {
+  const match = String(tournament && tournament.date || '')
+    .match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return Number(match[2]) < 4 ? year - 1 : year;
+}
+
+function prefetchDetailParticipationOverview(name, requestId, fiscalYear) {
+  detailParticipationOverview = {
+    tournamentName: name,
+    requestId,
+    fiscalYear,
+    applicants: [],
+    matrix: null,
+    loading: true,
+    error: '',
+  };
+  const button = document.getElementById('detail-participation-btn');
+  button.disabled = true;
+
+  const cached = participationMatrixGetCachedData(fiscalYear);
+  if (cached) {
+    detailParticipationOverview.matrix = cached;
+    detailParticipationOverview.loading = false;
+    renderDetailParticipationOverview();
+    return;
+  }
+  const cacheGeneration = participationMatrixCacheGeneration;
+
+  google.script.run
+    .withSuccessHandler(json => {
+      if (cacheGeneration !== participationMatrixCacheGeneration) return;
+      if (!detailParticipationCurrentState(name, requestId)) return;
+      let data;
+      try {
+        data = JSON.parse(json);
+      } catch (e) {
+        detailParticipationOverview.loading = false;
+        detailParticipationOverview.error =
+          '出場大会データの応答を解析できませんでした。';
+        renderDetailParticipationOverview();
+        return;
+      }
+      detailParticipationOverview.loading = false;
+      if (data.error) {
+        detailParticipationOverview.error = data.error;
+      } else {
+        participationMatrixCacheData(data);
+        detailParticipationOverview.matrix = data;
+      }
+      renderDetailParticipationOverview();
+    })
+    .withFailureHandler(error => {
+      if (cacheGeneration !== participationMatrixCacheGeneration) return;
+      if (!detailParticipationCurrentState(name, requestId)) return;
+      detailParticipationOverview.loading = false;
+      detailParticipationOverview.error = error.message;
+      renderDetailParticipationOverview();
+    })
+    .getParticipationMatrix(fiscalYear);
+}
 
 function setDetailOperationState(button, status, state, message, buttonText) {
   if (!button.dataset.defaultText) button.dataset.defaultText = button.textContent;
@@ -495,10 +569,14 @@ function updateDetailCompletionAvailability(tournament) {
 
 function openTournamentDetail(name) {
   const requestId = ++detailRequestSequence;
+  const t = allTournaments.find(x => x.name === name);
   document.getElementById('calendar-list-view').style.display = 'none';
   document.getElementById('calendar-detail-view').classList.add('active');
   document.getElementById('detail-title').textContent = name;
   document.getElementById('detail-title-badges').innerHTML = '';
+  prefetchDetailParticipationOverview(
+    name, requestId, detailParticipationFiscalYear(t)
+  );
 
   // 左側リセット
   document.getElementById('detail-grade-section').style.display = 'none';
@@ -512,7 +590,6 @@ function openTournamentDetail(name) {
   document.getElementById('detail-ops-section').style.display = 'none';
 
   // 右側：一覧から取得済みのデータを即時表示
-  const t = allTournaments.find(x => x.name === name);
   if (t) {
     currentTournamentApplyStart = t.applyStart || '';
     renderStatusTable([
@@ -613,9 +690,18 @@ function onDetailLoaded(json) {
         selection_status: String(values[selectionColIdx] || ''),
         selection_display_status: String(values[selectionColIdx] || ''),
         payment_display_status: String(values[payColIdx] || ''),
-        cancellation_timing: '',
+        cancellation_status: 'none',
+        cancellation_label: 'キャンセルなし',
         values,
       }));
+  if (detailParticipationOverview
+      && detailParticipationOverview.tournamentName
+        === document.getElementById('detail-title').textContent) {
+    detailParticipationOverview.applicants = personRecords.slice();
+    document.getElementById('detail-participation-btn').disabled =
+      personRecords.length === 0;
+    renderDetailParticipationOverview();
+  }
   document.getElementById('detail-person-tbody').innerHTML =
     personRecords.map(record => {
       const row = record.values || [];
@@ -625,9 +711,9 @@ function onDetailLoaded(json) {
           return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
         }
         if (i === selectionColIdx) {
-          const cancellationClass = record.cancellation_timing === 'before'
+          const cancellationClass = record.cancellation_status === 'before'
             ? 'cancel-status-cell cancel-status-before'
-            : record.cancellation_timing === 'after'
+            : record.cancellation_status === 'after'
               ? 'cancel-status-cell cancel-status-after' : '';
           return `<td class="${cancellationClass}">${escHtml(String(cell))}</td>`;
         }
@@ -653,8 +739,6 @@ function onDetailLoaded(json) {
 
   document.getElementById('detail-ops-section').style.display = 'grid';
   [
-    'register-status',
-    'count-status',
     'toggle-official-status',
     'delete-status',
     'pay-done-status',
@@ -669,8 +753,6 @@ function onDetailLoaded(json) {
   document.getElementById('detail-complete-section').style.display = 'block';
   [
     ['btn-toggle-official', '公認状態を切替'],
-    ['btn-register', '回答をDBへ同期'],
-    ['btn-count', '出場履歴を更新'],
     ['btn-complete-detail', '大会を完了とする'],
     ['btn-delete', '大会データ・シート・フォームを削除'],
   ].forEach(([id, label]) => {
@@ -680,16 +762,6 @@ function onDetailLoaded(json) {
     button.dataset.defaultText = label;
     button.classList.remove('op-btn-done');
   });
-  const usesLegacySheetOperations = Number(res.sheetVersion || 1) === 1;
-  document.getElementById('btn-register').style.display =
-    usesLegacySheetOperations ? '' : 'none';
-  document.getElementById('btn-count').style.display =
-    usesLegacySheetOperations ? '' : 'none';
-
-  // 登録済みならボタンを緑に
-  const registerButton = document.getElementById('btn-register');
-  registerButton.classList.toggle('op-btn-done', !!res.isRegistered);
-  registerButton.textContent = res.isRegistered ? 'DB同期済み ✓' : '回答をDBへ同期';
   const tournament = allTournaments.find(item =>
     item.name === document.getElementById('detail-title').textContent
   );
@@ -748,6 +820,183 @@ function toggleDetailColumns() {
     detailColsHidden ? '詳細列を表示' : '詳細列を非表示';
 }
 
+function openDetailParticipationModal() {
+  const state = detailParticipationOverview;
+  if (!state || !state.applicants.length) return;
+  document.getElementById('detail-participation-title').textContent =
+    state.tournamentName + '：申込者の出場大会';
+  document.getElementById('detail-participation-modal').style.display = 'flex';
+  renderDetailParticipationOverview();
+}
+
+function closeDetailParticipationModal(event) {
+  if (event && event.target !==
+      document.getElementById('detail-participation-modal')) return;
+  document.getElementById('detail-participation-modal').style.display = 'none';
+}
+
+function detailParticipationPlayerMaps(matrix) {
+  const byId = {};
+  const byName = {};
+  (matrix.players || []).forEach(player => {
+    byId[String(player.id)] = player;
+    const key = detailParticipationNormalizeName(player.name);
+    if (!byName[key]) byName[key] = [];
+    byName[key].push(player);
+  });
+  return { byId, byName };
+}
+
+function detailParticipationResolvePlayer(applicant, maps) {
+  const playerId = String(applicant.player_id || '');
+  if (playerId) {
+    return maps.byId[playerId] || {
+      id: playerId,
+      sanctionedCount: null,
+    };
+  }
+  const matches = maps.byName[
+    detailParticipationNormalizeName(applicant.name)
+  ] || [];
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function detailParticipationTournamentLabel(tournament, participation) {
+  const name = String(tournament && tournament.name || '不明な大会');
+  if (participation.mark === 'unsanctioned') return '（' + name + '）';
+  if (participation.mark === 'mixed') return name + '（非公認を含む）';
+  return name;
+}
+
+function detailParticipationSanctionedCount(player, items) {
+  if (player.sanctionedCount !== null
+      && player.sanctionedCount !== undefined) {
+    return Number(player.sanctionedCount || 0);
+  }
+  return items.reduce((count, item) => {
+    const scheduleIds = Array.isArray(item.sanctioned_schedule_ids)
+      ? item.sanctioned_schedule_ids : [];
+    if (scheduleIds.length) return count + scheduleIds.length;
+    return count + (item.mark === 'sanctioned' ? 1 : 0);
+  }, 0);
+}
+
+function detailParticipationTournamentDate(tournament) {
+  const heldOn = tournament && Array.isArray(tournament.heldOn)
+    ? tournament.heldOn : [];
+  return heldOn.map(String).filter(Boolean).sort()[0] || '9999-99-99';
+}
+
+function detailParticipationCompareChronologically(
+  left, right, tournamentsById
+) {
+  const leftTournament = tournamentsById[String(left.tournament_id)] || {};
+  const rightTournament = tournamentsById[String(right.tournament_id)] || {};
+  return detailParticipationTournamentDate(leftTournament).localeCompare(
+    detailParticipationTournamentDate(rightTournament)
+  ) || String(leftTournament.name || '').localeCompare(
+    String(rightTournament.name || ''), 'ja'
+  ) || String(left.tournament_id).localeCompare(String(right.tournament_id));
+}
+
+function renderDetailParticipationOverview() {
+  const state = detailParticipationOverview;
+  if (!state) return;
+  const status = document.getElementById('detail-participation-status');
+  const tbody = document.getElementById('detail-participation-tbody');
+  tbody.replaceChildren();
+
+  if (!state.applicants.length) {
+    status.className = 'status';
+    status.textContent = '参加者データを読み込み中...';
+    return;
+  }
+
+  const matrix = state.matrix;
+  const maps = matrix ? detailParticipationPlayerMaps(matrix) : null;
+  const tournamentsById = {};
+  const participationsByPlayer = {};
+  if (matrix) {
+    (matrix.tournaments || []).forEach(tournament => {
+      tournamentsById[String(tournament.id)] = tournament;
+    });
+    (matrix.participations || []).forEach(participation => {
+      const playerId = String(participation.player_id);
+      if (!participationsByPlayer[playerId]) {
+        participationsByPlayer[playerId] = [];
+      }
+      participationsByPlayer[playerId].push(participation);
+    });
+  }
+
+  state.applicants.forEach(applicant => {
+    const row = document.createElement('tr');
+    const player = maps
+      ? detailParticipationResolvePlayer(applicant, maps) : null;
+    const baseValues = [
+      applicant.name || '（氏名なし）',
+      applicant.grade ? applicant.grade + '級' : '',
+      applicant.selection_display_status || '',
+    ];
+    baseValues.forEach(value => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+
+    const countCell = document.createElement('td');
+    const tournamentsCell = document.createElement('td');
+    if (state.loading) {
+      countCell.textContent = '取得中...';
+      tournamentsCell.textContent = '取得中...';
+    } else if (state.error) {
+      countCell.textContent = '—';
+      tournamentsCell.textContent = '取得エラー';
+    } else if (!player) {
+      countCell.textContent = '—';
+      tournamentsCell.textContent = '選手を特定できません';
+    } else {
+      const items = (participationsByPlayer[String(player.id)] || [])
+        .slice().sort((left, right) =>
+          detailParticipationCompareChronologically(
+            left, right, tournamentsById
+          )
+        );
+      countCell.textContent = String(
+        detailParticipationSanctionedCount(player, items)
+      );
+      const history = document.createElement('div');
+      history.className = 'detail-participation-history-cell';
+      history.textContent = items.length
+        ? items.map(item => detailParticipationTournamentLabel(
+            tournamentsById[String(item.tournament_id)], item
+          )).join('、')
+        : 'なし';
+      tournamentsCell.appendChild(history);
+    }
+    row.appendChild(countCell);
+    row.appendChild(tournamentsCell);
+    tbody.appendChild(row);
+  });
+
+  if (state.loading) {
+    status.className = 'status';
+    status.innerHTML = '<span class="spinner"></span> 出場大会を先読み中...';
+  } else if (state.error) {
+    status.className = 'status error';
+    status.textContent = 'エラー: ' + state.error;
+  } else {
+    const truncated = matrix.truncated === true;
+    status.className = 'detail-participation-note'
+      + (truncated ? ' detail-participation-warning' : '');
+    status.textContent = Number(matrix.fiscalYear)
+      + '年度の公認大会出場回数です。非公認大会は（ ）で表示しています。'
+      + (truncated
+        ? ' APIの取得上限に達したため、一部の回数・大会が不足している可能性があります。'
+        : '');
+  }
+}
+
 // ------------------------------------------------------------
 // 公認/非公認トグル
 // ------------------------------------------------------------
@@ -779,71 +1028,6 @@ function triggerToggleOfficial() {
 }
 
 // ------------------------------------------------------------
-// 大会登録（TAIKAI_MANAGEMENT.registerDatabase ライブラリ呼び出し）
-// ------------------------------------------------------------
-function triggerRegisterDatabase() {
-  const name   = document.getElementById('detail-title').textContent;
-  const btn    = document.getElementById('btn-register');
-  const status = document.getElementById('register-status');
-  setDetailOperationState(btn, status, 'running', '回答をDBへ同期しています…', '同期中…');
-  google.script.run
-    .withSuccessHandler(res => {
-      const r = JSON.parse(res);
-      if (!isCurrentTournamentDetail(name)) return;
-      if (r.already) {
-        setDetailOperationState(btn, status, 'success', r.message, 'DB同期済み ✓');
-      } else if (r.error) {
-        const details = (r.failed || []).map(item => item.name + '：' + item.error).join(' / ');
-        setDetailOperationState(btn, status, 'error',
-          '同期に失敗しました。再試行できます：' + r.error + (details ? ' ' + details : ''));
-      } else {
-        setDetailOperationState(btn, status, 'success',
-          'DB同期済み（' + (r.registered || []).length + '件）✓', 'DB同期済み ✓');
-      }
-    })
-    .withFailureHandler(e => {
-      if (!isCurrentTournamentDetail(name)) return;
-      setDetailOperationState(btn, status, 'error',
-        '同期に失敗しました。再試行できます：' + e.message);
-    })
-    .runRegisterDatabase(name, currentTournamentIsOfficial);
-}
-
-// ------------------------------------------------------------
-// 出場履歴更新（runCountMatches を直接呼び出し、完了後に再読込）
-// ------------------------------------------------------------
-function triggerCountMatches() {
-  const name   = document.getElementById('detail-title').textContent;
-  const btn    = document.getElementById('btn-count');
-  const status = document.getElementById('count-status');
-  setDetailOperationState(btn, status, 'running',
-    '出場履歴を更新しています。選手数によっては時間がかかります…', '更新中…');
-
-  google.script.run
-    .withSuccessHandler(res => {
-      const r = JSON.parse(res);
-      if (!isCurrentTournamentDetail(name)) return;
-      if (r.error) {
-        setDetailOperationState(btn, status, 'error',
-          '更新に失敗しました。再試行できます：' + r.error);
-        return;
-      }
-      detailPendingNotice = {
-        tournamentName: name,
-        statusId: 'count-status',
-        message: '出場履歴を更新しました ✓',
-      };
-      openTournamentDetail(name);
-    })
-    .withFailureHandler(e => {
-      if (!isCurrentTournamentDetail(name)) return;
-      setDetailOperationState(btn, status, 'error',
-        '更新に失敗しました。再試行できます：' + e.message);
-    })
-    .runCountMatches(name);
-}
-
-// ------------------------------------------------------------
 // シートとフォームを削除（deleteSheet の模倣）
 // ------------------------------------------------------------
 function triggerDeleteTournament() {
@@ -860,10 +1044,16 @@ function triggerDeleteTournament() {
         .withSuccessHandler(res => {
           const r = JSON.parse(res);
           if (r.error) {
+            if (r.partial) {
+              participationMatrixInvalidateCache();
+              detailParticipationOverview = null;
+            }
             setDetailOperationState(btn, statusEl, 'error',
               '削除に失敗しました。再試行できます：' + r.error);
             return;
           }
+          participationMatrixInvalidateCache();
+          detailParticipationOverview = null;
           allTournaments = allTournaments.filter(t => t.name !== name);
           showCalendarList();
           renderCalendar(allTournaments);
@@ -888,7 +1078,7 @@ function triggerDeleteTournament() {
 // ------------------------------------------------------------
 function renderPayButtonsHtml(
   selectionValue, paymentValue, playerName, sourceRow, entryId, playerId,
-  canceled
+  cancellationStatus
 ) {
   const identity = `data-player-name="${escAttr(playerName)}" data-source-row="${escAttr(sourceRow)}" data-entry-id="${escAttr(entryId)}" data-player-id="${escAttr(playerId)}"`;
   const isZumi = paymentValue.includes('済') || paymentValue.includes('過払い');
@@ -902,46 +1092,45 @@ function renderPayButtonsHtml(
   const selectionAction = isWaitlisted
     ? `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'')">出場可能</button>`
     : `<button class="pay-btn pay-btn-cancel" ${identity} onclick="event.stopPropagation();setPayStatusCancelFromButton(this)">キャンセル待ち</button>`;
-  const paymentDetailAction =
-    `<button class="pay-btn pay-btn-detail" ${identity} onclick="event.stopPropagation();openEntryPaymentDetail(this)">支払詳細・訂正</button>`;
-  if (canceled) {
-    return paymentDetailAction
-      + '<span class="pay-recorded-note">右欄からキャンセルを解除してください</span>';
+  // 公開前・区分不明のキャンセルは支払い操作を抑止する。
+  // 公開後キャンセルは参加費を徴収する場合があるため、支払い操作を許可する。
+  if (cancellationStatus !== 'none' && cancellationStatus !== 'after') {
+    return '';
   }
-  const hasPayment = ![
-    '', '未払い', '参加費未設定', '支払不要',
-  ].includes(paymentValue);
   const paymentAction = isZumi || paymentValue.includes('繰り越し')
-    ? paymentDetailAction
+    ? ''
     : `<button class="pay-btn" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'済')">振込済み</button>`
-      + `<button class="pay-btn pay-btn-deposit" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'繰り越し')">繰り越し</button>`
-      + (hasPayment ? paymentDetailAction : '');
-  return `<div class="entry-action-frame">${selectionAction}${paymentAction}</div>`;
+      + `<button class="pay-btn pay-btn-deposit" ${identity} onclick="event.stopPropagation();setPayStatusFromButton(this,'繰り越し')">繰り越し</button>`;
+  const actionHtml = cancellationStatus === 'after'
+    ? paymentAction
+    : selectionAction + paymentAction;
+  return `<div class="entry-action-frame">${actionHtml}</div>`;
 }
 
 function renderEntryActionCells(record, playerName) {
   const selectionValue = String(record.selection_status || '');
   const paymentValue = String(record.payment_display_status || '');
-  const timing = String(record.cancellation_timing || '');
-  const canceled = Boolean(record.canceled_at);
+  const cancellationStatus = String(record.cancellation_status || 'none');
+  const cancellationLabel = String(
+    record.cancellation_label || 'キャンセルなし'
+  );
+  const canceled = cancellationStatus !== 'none';
   const identity = `data-player-name="${escAttr(playerName)}" data-source-row="${escAttr(record.source_row)}" data-entry-id="${escAttr(record.entry_id)}" data-player-id="${escAttr(record.player_id)}" data-paid-yen="${escAttr(record.paid_yen || 0)}"`;
   const actions = renderPayButtonsHtml(
     selectionValue, paymentValue, playerName, record.source_row,
-    record.entry_id, record.player_id, canceled
+    record.entry_id, record.player_id, cancellationStatus
   );
   if (!record.entry_id || detailSheetVersion !== 2) {
     return `<td class="pay-cell">${actions}</td><td class="cancel-action-cell">—</td>`;
   }
-  const status = timing === 'before'
-    ? '<span class="cancel-status cancel-status-before">現在：公開前</span>'
-    : timing === 'after'
-      ? '<span class="cancel-status cancel-status-after">現在：公開後</span>'
-      : timing === 'canceled'
-        ? '<span class="cancel-status badge-muted">区分不明</span>'
-        : '';
+  const statusClass = cancellationStatus === 'before'
+    ? 'cancel-status-before'
+    : cancellationStatus === 'after'
+      ? 'cancel-status-after' : 'badge-muted';
+  const status = `<span class="cancel-status ${statusClass}">現在：${escHtml(cancellationLabel)}</span>`;
   const cancelButtons =
-      `<button class="pay-btn pay-btn-cancel-before ${timing === 'before' ? 'is-active' : ''}" ${identity} onclick="event.stopPropagation();openEntryCancellationModal(this,'before')">公開前へ</button>`
-    + `<button class="pay-btn pay-btn-cancel-after ${timing === 'after' ? 'is-active' : ''}" ${identity} onclick="event.stopPropagation();openEntryCancellationModal(this,'after')">公開後へ</button>`
+      `<button class="pay-btn pay-btn-cancel-before ${cancellationStatus === 'before' ? 'is-active' : ''}" ${identity} onclick="event.stopPropagation();openEntryCancellationModal(this,'before')">公開前</button>`
+    + `<button class="pay-btn pay-btn-cancel-after ${cancellationStatus === 'after' ? 'is-active' : ''}" ${identity} onclick="event.stopPropagation();openEntryCancellationModal(this,'after')">公開後</button>`
     + (canceled
       ? `<button class="pay-btn pay-btn-clear" ${identity} onclick="event.stopPropagation();openEntryCancellationModal(this,'clear')">解除</button>`
       : '');
@@ -1415,6 +1604,7 @@ function commitGradeFeeEdit(idx, input) {
 function showCalendarList() {
   // 詳細画面を閉じた後に古いAPI応答が到着しても、画面を更新させない。
   detailRequestSequence++;
+  closeDetailParticipationModal();
   document.getElementById('calendar-detail-view').classList.remove('active');
   document.getElementById('calendar-list-view').style.display = '';
 }

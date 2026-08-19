@@ -15,8 +15,6 @@ const mailServer = fs.readFileSync(
 [
   'detail-ops-section',
   'btn-toggle-official',
-  'btn-register',
-  'btn-count',
   'btn-pay-done',
   'btn-complete-detail',
   'btn-delete',
@@ -49,8 +47,10 @@ assert.doesNotMatch(script, /String\(row\[2\] \|\| ''\)/);
 assert.doesNotMatch(script, /入金取消は出納管理から/);
 assert.doesNotMatch(script, /DB申込が未同期です/);
 assert.match(script, /DB未登録/);
-assert.match(script, />公開前へ</);
-assert.match(script, />公開後へ</);
+assert.match(script, />公開前</);
+assert.match(script, />公開後</);
+assert.doesNotMatch(script, /支払詳細・訂正/);
+assert.doesNotMatch(script, /右欄からキャンセルを解除してください/);
 assert.match(script, />繰り越し</);
 assert.match(script, /\.getPlayerDeposit\(identity\.playerId, playerName\)/);
 assert.match(page, /id="entry-cancellation-modal"/);
