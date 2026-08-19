@@ -708,8 +708,7 @@ function onDetailLoaded(json) {
       const name = String(record.name || row[detailNameColumnIndex] || '');
       const cancellationRowClass = record.cancellation_status === 'before'
         ? 'cancel-row-before detail-cancel-before'
-        : record.cancellation_status === 'after'
-          ? 'cancel-row-after detail-cancel-after' : '';
+        : '';
       return `<tr class="${cancellationRowClass}">` + row.map((cell, i) => {
         if (i === detailNameColumnIndex) {
           return `<td class="name-link" title="選手大会照会で検索" data-player-name="${escAttr(name)}" onclick="goToPlayerSearch(this.dataset.playerName)">${escHtml(cell)}</td>`;
@@ -717,8 +716,7 @@ function onDetailLoaded(json) {
         if (i === selectionColIdx) {
           const cancellationClass = record.cancellation_status === 'before'
             ? 'cancel-status-cell cancel-status-before'
-            : record.cancellation_status === 'after'
-              ? 'cancel-status-cell cancel-status-after' : '';
+            : '';
           return `<td class="${cancellationClass}">${escHtml(String(cell))}</td>`;
         }
         if (i === payColIdx) {
