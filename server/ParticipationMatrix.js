@@ -369,6 +369,7 @@ function getParticipationMatrix(fiscalYearInput) {
 
     return JSON.stringify({
       fiscalYear: Number(source.fiscal_year || fiscalYear),
+      participationCutoffDate: cancellationJapanDate_(new Date()),
       players: players,
       tournaments: tournaments,
       participations: participations,

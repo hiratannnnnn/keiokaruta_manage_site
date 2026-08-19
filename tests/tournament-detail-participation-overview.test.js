@@ -20,6 +20,7 @@ const cancellationServer = read('server/Cancellation.js');
   'detail-participation-table',
   'detail-participation-tbody',
 ].forEach(id => assert.match(page, new RegExp('id="' + id + '"')));
+assert.match(read('pages/participation-matrix.html'), /id="participation-matrix-cutoff"/);
 
 assert.ok(
   page.indexOf('id="toggle-cols-btn"')
@@ -62,6 +63,8 @@ assert.match(script, /matrix\.truncated === true/);
 assert.match(script, /APIの取得上限に達したため/);
 assert.match(server, /grade: record\.grade/);
 assert.match(matrixServer, /function getParticipationMatrix\(fiscalYearInput\)/);
+assert.match(matrixServer, /participationCutoffDate/);
+assert.match(matrixScript, /日以前の日程を集計しています/);
 assert.match(matrixServer, /sort_order/);
 assert.match(matrixServer, /player\.sort_order/);
 assert.doesNotMatch(matrixScript, /tournament\.sort_order/);

@@ -85,6 +85,12 @@ function renderParticipationMatrix(players, tournaments) {
   const wrap = document.getElementById('participation-matrix-wrap');
   const badge = document.getElementById('participation-matrix-count');
   const participationMap = {};
+  const cutoff = String(participationMatrixData.participationCutoffDate || '');
+  const cutoffMatch = cutoff.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  document.getElementById('participation-matrix-cutoff').textContent = cutoffMatch
+    ? '抽選公開日が' + Number(cutoffMatch[1]) + '月'
+      + Number(cutoffMatch[2]) + '日以前の日程を集計しています。'
+    : '抽選公開済みの日程を集計しています。';
   participationMatrixVisiblePlayers = players.slice();
   participationMatrixVisibleTournaments = tournaments.slice();
   (participationMatrixData.participations || []).forEach(item => {
