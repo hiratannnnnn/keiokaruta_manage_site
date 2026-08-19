@@ -90,6 +90,11 @@ assert.match(calendar, /record\.cancellation_status === 'before'/);
 assert.match(calendar, /cancel-row-before/);
 assert.match(calendar, /cancel-row-after/);
 assert.match(style, /tr\.cancel-row-after > td/);
+assert.match(calendar, /detail-cancel-after/);
+assert.match(
+  style,
+  /#detail-person-table > tbody > tr\.detail-cancel-after:nth-child\(even\) > td/
+);
 assert.match(calendar, /record\.cancellation_label/);
 assert.match(
   calendar,
